@@ -66,6 +66,19 @@ export function HomePage() {
     navigate(`/search?${params.toString()}`);
   }
 
+  function openPlanner() {
+    const params = new URLSearchParams({
+      from: from.code,
+      to: to.code,
+      date,
+      fromName: from.cityName,
+      toName: to.cityName,
+      destination: to.cityName,
+    });
+
+    navigate(`/planner?${params.toString()}`);
+  }
+
   return (
     <div className="min-h-screen bg-white">
       <Navbar transparent />
@@ -254,7 +267,11 @@ export function HomePage() {
               Tell SkyNode where you're going, your vibe and your budget. Get a beautiful, editable day-by-day plan in seconds — with maps, weather, costs and bookable activities.
             </p>
             <div className="flex gap-3">
-              <button className="px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-semibold text-sm shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200">
+              <button
+                type="button"
+                onClick={openPlanner}
+                className="px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-semibold text-sm shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+              >
                 Try the planner →
               </button>
               <button className="px-6 py-3 rounded-full border border-slate-200 text-slate-700 font-semibold text-sm hover:bg-slate-100 transition-colors">
@@ -351,7 +368,11 @@ export function HomePage() {
             </h2>
             <p className="text-slate-400 mb-8">Free to start. No card, no commitment. Just smarter travel.</p>
             <div className="flex justify-center gap-3 flex-wrap">
-              <button className="px-6 py-3 rounded-full bg-white text-slate-900 font-semibold text-sm hover:bg-slate-100 transition-colors">
+              <button
+                type="button"
+                onClick={openPlanner}
+                className="px-6 py-3 rounded-full bg-white text-slate-900 font-semibold text-sm hover:bg-slate-100 transition-colors"
+              >
                 Create my trip
               </button>
               <button className="px-6 py-3 rounded-full border border-white/20 text-white font-semibold text-sm hover:bg-white/10 transition-colors">

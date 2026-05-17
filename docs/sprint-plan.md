@@ -18,11 +18,20 @@ Expected result: the user searches for flights and sees normalized results.
 
 Expected result: the user generates a daily itinerary from a selected destination/flight context.
 
-- Geoapify Places integration.
-- LLM prompt builder.
+- Status: Sprint 2 MVP implemented.
+- Geoapify Places integration for destination attractions.
+- Mock LLM-style itinerary generator for stable Sprint 2 demos.
 - Structured JSON itinerary response.
-- Itinerary display UI.
-- Save trip draft to PostgreSQL.
+- Planner UI with day-by-day itinerary display.
+- Save trip draft to Supabase PostgreSQL.
+- Database schema auto-created for saved trips, attractions, itinerary days, and itinerary items.
+
+Remaining hardening:
+
+- Add saved trip read endpoint.
+- Improve generated itinerary quality with a real LLM adapter.
+- Add unit/integration tests for attractions, itinerary generation, and trip saving.
+- Add more polished error states for failed database saves.
 
 ## Sprint 3: Editing + Chat + Sharing
 

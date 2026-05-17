@@ -53,9 +53,12 @@ export function Navbar({ transparent = false }: Props) {
         <button className={`text-sm font-medium transition-colors ${transparent ? "text-white/80 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}>
           Sign in
         </button>
-        <button className="text-sm font-semibold px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200">
+        <Link
+          to="/planner"
+          className="text-sm font-semibold px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200 no-underline"
+        >
           Get started
-        </button>
+        </Link>
       </div>
     </nav>
   );

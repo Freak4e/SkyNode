@@ -4,7 +4,6 @@ import {
   ArrowRight,
   ChevronDown,
   Clock,
-  ExternalLink,
   MapPin,
   Plane,
   Search,
@@ -384,6 +383,20 @@ export function SearchResultsPage() {
     doSearch(from.code, to.code, date, tripType, returnDate);
   }
 
+  function openPlanner(pair: FlightPair) {
+    const plannerParams = new URLSearchParams({
+      from: from.code,
+      to: to.code,
+      date,
+      fromName: from.cityName || from.name,
+      toName: to.cityName || to.name,
+      destination: to.cityName || to.name,
+    });
+
+    sessionStorage.setItem("skynode:selectedFlight", JSON.stringify(pair.outbound));
+    navigate(`/planner?${plannerParams.toString()}`);
+  }
+
   function toggleStopsFilter(filter: StopsFilter) {
     setStopsFilters((current) => {
       if (filter === "any") return ["any"];
@@ -683,8 +696,6 @@ export function SearchResultsPage() {
                 const displayPrice = totalPrice >= 9999
                   ? pair.outbound.priceText || pair.inbound?.priceText || "--"
                   : `$${totalPrice.toLocaleString()}`;
-                const bookingLink = pair.outbound.bookingLink || pair.inbound?.bookingLink;
-
                 return (
                   <div
                     key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
@@ -707,21 +718,13 @@ export function SearchResultsPage() {
                         {tripType === "return" ? "Return total estimate" : "One-way estimate"}
                       </p>
 
-                      {bookingLink ? (
-                        <a
-                          href={bookingLink}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-8 flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white no-underline transition-colors hover:bg-blue-700"
-                        >
-                          Select
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      ) : (
-                        <button className="mt-8 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white">
-                          Select
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openPlanner(pair)}
+                        className="mt-8 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+                      >
+                        Select and plan trip
+                      </button>
                     </div>
                   </div>
                 );

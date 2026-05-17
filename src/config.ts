@@ -6,6 +6,14 @@ const apiKey = process.env.SCRAPINGBEE_API_KEY || process.env.API_KEY;
 
 export const config = {
   port: Number(process.env.PORT || 3000),
+  database: {
+    url: process.env.DATABASE_URL,
+  },
+  geoapify: {
+    apiUrl: "https://api.geoapify.com/v2/places",
+    apiKey: process.env.GEOAPIFY_API_KEY,
+    timeoutMs: Number(process.env.GEOAPIFY_TIMEOUT_MS || 12000),
+  },
   travelpayouts: {
     apiUrl: "https://api.travelpayouts.com",
     accessToken: process.env.TRAVELPAYOUTS_ACCESS_TOKEN,
@@ -20,6 +28,22 @@ export const config = {
     timeoutMs: Number(process.env.SCRAPINGBEE_TIMEOUT_MS || 30000),
   },
 };
+
+export function requireDatabaseUrl(): string {
+  if (!config.database.url) {
+    throw new Error("Missing DATABASE_URL. Add your Supabase PostgreSQL connection string to .env.");
+  }
+
+  return config.database.url;
+}
+
+export function requireGeoapifyApiKey(): string {
+  if (!config.geoapify.apiKey) {
+    throw new Error("Missing GEOAPIFY_API_KEY. Add it to .env.");
+  }
+
+  return config.geoapify.apiKey;
+}
 
 export function requireTravelpayoutsAccessToken(): string {
   if (!config.travelpayouts.accessToken) {

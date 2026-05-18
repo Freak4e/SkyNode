@@ -4,9 +4,13 @@ import type { Place } from "./shared/types.js";
 type TravelpayoutsPlace = {
   code?: string;
   name?: string;
+  city_code?: string;
   city_name?: string;
+  country_code?: string;
   country_name?: string;
+  main_airport_name?: string;
   type?: string;
+  coordinates?: { lat?: number; lon?: number };
 };
 
 const fallbackPlaces: Place[] = [
@@ -49,7 +53,7 @@ export async function searchPlaces(term: string): Promise<Place[]> {
     const places = response.data
       .map(normalizePlace)
       .filter((place): place is Place => Boolean(place))
-      .slice(0, 10);
+      .slice(0, 24);
 
     return places.length > 0 ? places : searchFallbackPlaces(normalizedTerm);
   } catch {
@@ -62,12 +66,21 @@ function normalizePlace(place: TravelpayoutsPlace): Place | null {
     return null;
   }
 
+  const coordinates =
+    place.coordinates && typeof place.coordinates.lat === "number" && typeof place.coordinates.lon === "number"
+      ? { lat: place.coordinates.lat, lon: place.coordinates.lon }
+      : undefined;
+
   return {
     code: place.code.toUpperCase(),
     name: place.name,
     cityName: place.city_name || place.name,
     countryName: place.country_name || "",
     type: place.type || "place",
+    cityCode: place.city_code ? place.city_code.toUpperCase() : undefined,
+    countryCode: place.country_code ? place.country_code.toUpperCase() : undefined,
+    mainAirportName: place.main_airport_name || undefined,
+    coordinates,
   };
 }
 

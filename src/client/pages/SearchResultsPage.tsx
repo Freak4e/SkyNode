@@ -2,19 +2,30 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowRight,
+  Briefcase,
+  Bus,
   ChevronDown,
   Clock,
+  Luggage,
   MapPin,
   Plane,
   Search,
   SlidersHorizontal,
   User,
+  X,
 } from "lucide-react";
 import { searchFlights } from "../api/flightsApi";
 import { ChipPlacePicker } from "../components/ChipPlacePicker";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
-import type { FlightOffer, Place } from "../../shared/types.js";
+import type { CurrencyCode, FlightOffer, Place } from "../../shared/types.js";
+import {
+  currencyChangedEvent,
+  currencyOptions,
+  formatCurrencyAmount,
+  getStoredCurrency,
+  normalizeCurrency,
+} from "../utils/currency.js";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -24,6 +35,12 @@ type StopsFilter = "any" | "direct" | "up-to-1" | "up-to-2";
 type FlightPair = {
   outbound: FlightOffer;
   inbound?: FlightOffer;
+};
+type LayoverInfo = {
+  durationMinutes: number;
+  city: string;
+  airport: string;
+  code: string;
 };
 
 const AIRLINE_COLORS: Record<string, string> = {
@@ -42,6 +59,86 @@ const AIRLINE_ABBR: Record<string, string> = {
   Delta: "DL",
 };
 
+const AIRLINE_LOGO_CODES: Record<string, string> = {
+  ANA: "NH",
+  "All Nippon": "NH",
+  "Japan Airlines": "JL",
+  "Korean Air": "KE",
+  "Cathay Pacific": "CX",
+  Delta: "DL",
+  Lufthansa: "LH",
+  "Air France": "AF",
+  KLM: "KL",
+  "British Airways": "BA",
+  Emirates: "EK",
+  "Qatar Airways": "QR",
+  "Turkish Airlines": "TK",
+  Ryanair: "FR",
+  easyJet: "U2",
+  Wizz: "W6",
+  "TAP Air Portugal": "TP",
+  Iberia: "IB",
+  Vueling: "VY",
+  "United Airlines": "UA",
+  "American Airlines": "AA",
+  "TAP Portugal": "TP",
+  "TAP Air": "TP",
+  Transavia: "HV",
+  Volotea: "V7",
+  "Air Serbia": "JU",
+  "Austrian Airlines": "OS",
+  Swiss: "LX",
+  "Brussels Airlines": "SN",
+  "SAS": "SK",
+  Norwegian: "DY",
+  Finnair: "AY",
+  LOT: "LO",
+};
+
+const CURRENCY_RATES_FROM_USD: Record<CurrencyCode, number> = {
+  USD: 1,
+  EUR: 0.92,
+  GBP: 0.79,
+  JPY: 156,
+  CHF: 0.9,
+  CAD: 1.36,
+  AUD: 1.51,
+  CNY: 7.24,
+};
+
+const AIRLINE_HUB_CONNECTIONS: Array<{ match: string; layover: LayoverInfo }> = [
+  { match: "tap",              layover: { durationMinutes: 150, city: "Lisbon",    airport: "Lisbon Portela",                code: "LIS" } },
+  { match: "lufthansa",        layover: { durationMinutes: 120, city: "Frankfurt", airport: "Frankfurt am Main",             code: "FRA" } },
+  { match: "air france",       layover: { durationMinutes: 120, city: "Paris",     airport: "Paris Charles de Gaulle",       code: "CDG" } },
+  { match: "klm",              layover: { durationMinutes: 120, city: "Amsterdam", airport: "Amsterdam Schiphol",            code: "AMS" } },
+  { match: "british airways",  layover: { durationMinutes: 130, city: "London",    airport: "London Heathrow",               code: "LHR" } },
+  { match: "iberia",           layover: { durationMinutes: 130, city: "Madrid",    airport: "Adolfo Suarez Madrid-Barajas",  code: "MAD" } },
+  { match: "vueling",          layover: { durationMinutes: 110, city: "Barcelona", airport: "Barcelona El Prat",             code: "BCN" } },
+  { match: "swiss",            layover: { durationMinutes: 110, city: "Zurich",    airport: "Zurich Airport",                code: "ZRH" } },
+  { match: "austrian",         layover: { durationMinutes: 110, city: "Vienna",    airport: "Vienna International",          code: "VIE" } },
+  { match: "brussels",         layover: { durationMinutes: 110, city: "Brussels",  airport: "Brussels Airport",              code: "BRU" } },
+  { match: "finnair",          layover: { durationMinutes: 130, city: "Helsinki",  airport: "Helsinki-Vantaa",               code: "HEL" } },
+  { match: "sas",              layover: { durationMinutes: 120, city: "Copenhagen",airport: "Copenhagen Kastrup",            code: "CPH" } },
+  { match: "norwegian",        layover: { durationMinutes: 120, city: "Oslo",      airport: "Oslo Gardermoen",               code: "OSL" } },
+  { match: "lot",              layover: { durationMinutes: 120, city: "Warsaw",    airport: "Warsaw Chopin",                 code: "WAW" } },
+  { match: "turkish",          layover: { durationMinutes: 180, city: "Istanbul",  airport: "Istanbul Airport",              code: "IST" } },
+  { match: "emirates",         layover: { durationMinutes: 200, city: "Dubai",     airport: "Dubai International",           code: "DXB" } },
+  { match: "qatar",            layover: { durationMinutes: 180, city: "Doha",      airport: "Hamad International",           code: "DOH" } },
+  { match: "delta",            layover: { durationMinutes: 150, city: "Atlanta",   airport: "Hartsfield-Jackson Atlanta",    code: "ATL" } },
+  { match: "united",           layover: { durationMinutes: 150, city: "Newark",    airport: "Newark Liberty International",  code: "EWR" } },
+  { match: "american",         layover: { durationMinutes: 150, city: "Dallas",    airport: "Dallas/Fort Worth International", code: "DFW" } },
+  { match: "ana",              layover: { durationMinutes: 180, city: "Tokyo",     airport: "Tokyo Haneda",                  code: "HND" } },
+  { match: "japan airlines",   layover: { durationMinutes: 180, city: "Tokyo",     airport: "Tokyo Haneda",                  code: "HND" } },
+  { match: "korean air",       layover: { durationMinutes: 180, city: "Seoul",     airport: "Incheon International",         code: "ICN" } },
+  { match: "cathay",           layover: { durationMinutes: 180, city: "Hong Kong", airport: "Hong Kong International",       code: "HKG" } },
+];
+const GENERIC_LAYOVER: LayoverInfo = {
+  durationMinutes: 120,
+  city: "Connecting airport",
+  airport: "Layover stop",
+  code: "—",
+};
+
 function getAirlineBg(carrier: string) {
   for (const key of Object.keys(AIRLINE_COLORS)) {
     if (carrier.includes(key)) return AIRLINE_COLORS[key];
@@ -58,6 +155,49 @@ function getAirlineAbbr(carrier: string) {
   return carrier.slice(0, 2).toUpperCase() || "FL";
 }
 
+function getAirlineLogoCode(carrier: string): string | null {
+  const iataMatch = carrier.match(/\b[A-Z0-9]{2}\b/);
+  if (iataMatch) return iataMatch[0];
+
+  for (const key of Object.keys(AIRLINE_LOGO_CODES)) {
+    if (carrier.toLowerCase().includes(key.toLowerCase())) return AIRLINE_LOGO_CODES[key];
+  }
+
+  return null;
+}
+
+function getAirlineLogoUrl(carrier: string): string | null {
+  const code = getAirlineLogoCode(carrier);
+  return code ? `https://pics.avs.io/64/64/${code}.png` : null;
+}
+
+function isGroundTransportOffer(offer: FlightOffer | undefined): boolean {
+  const text = `${offer?.carrier || ""} ${offer?.stopsText || ""}`.toLowerCase();
+  return text.includes("flixbus") || text.includes("bus");
+}
+
+function isGroundTransportPair(pair: FlightPair): boolean {
+  return isGroundTransportOffer(pair.outbound) || isGroundTransportOffer(pair.inbound);
+}
+
+function CarrierLogo({ carrier }: { carrier: string }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  const logoUrl = getAirlineLogoUrl(carrier);
+
+  if (!logoUrl || logoFailed) {
+    return <>{getAirlineAbbr(carrier)}</>;
+  }
+
+  return (
+    <img
+      src={logoUrl}
+      alt={`${carrier} logo`}
+      className="h-full w-full bg-white object-contain"
+      onError={() => setLogoFailed(true)}
+    />
+  );
+}
+
 function parsePrice(text: string): number {
   const match = text.replace(/,/g, "").match(/\d+/);
   return match ? parseInt(match[0], 10) : 9999;
@@ -67,8 +207,33 @@ function pairPrice(pair: FlightPair): number {
   return parsePrice(pair.outbound.priceText) + (pair.inbound ? parsePrice(pair.inbound.priceText) : 0);
 }
 
+function convertUsdAmount(amount: number, currency: CurrencyCode): number {
+  return amount * CURRENCY_RATES_FROM_USD[currency];
+}
+
+function offerDisplayAmount(offer: FlightOffer, currency: CurrencyCode): number {
+  const amount = parsePrice(offer.priceText);
+
+  if (amount >= 9999) return amount;
+  if (offer.source === "travelpayouts") return amount;
+
+  return convertUsdAmount(amount, currency);
+}
+
+function formatDisplayPrice(pair: FlightPair, currency: CurrencyCode): string {
+  const outboundPrice = offerDisplayAmount(pair.outbound, currency);
+  const inboundPrice = pair.inbound ? offerDisplayAmount(pair.inbound, currency) : 0;
+  const totalPrice = outboundPrice + inboundPrice;
+
+  if (totalPrice >= 9999) {
+    return pair.outbound.priceText || pair.inbound?.priceText || "--";
+  }
+
+  return formatCurrencyAmount(convertUsdAmount(totalPrice, currency), currency);
+}
+
 function parseTimeMinutes(value: string): number | null {
-  const match = value.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  const match = value.match(/(\d{1,2})[:;.](\d{2})\s*(AM|PM)?/i);
 
   if (!match) return null;
 
@@ -80,6 +245,23 @@ function parseTimeMinutes(value: string): number | null {
   if (meridiem === "AM" && hours === 12) hours = 0;
 
   return hours * 60 + minutes;
+}
+
+function formatClockTime(value: string): string {
+  const match = value.match(/(\d{1,2})[:;.](\d{2})\s*(AM|PM)?/i);
+
+  if (!match) {
+    return value.replace(/\s*\b(?:AM|PM)\b\.?/gi, "").trim();
+  }
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3]?.toUpperCase();
+
+  if (meridiem === "PM" && hours < 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
 }
 
 function estimateOfferDurationMinutes(offer: FlightOffer): number {
@@ -157,20 +339,60 @@ function formatMinutes(totalMinutes: number): string {
   if (hours === 0) return `${minutes} min`;
   if (minutes === 0) return `${hours}h`;
 
-  return `${hours}h ${minutes} min`;
+  return `${hours}h ${minutes}m`;
 }
 
-function layoverDetails(offer: FlightOffer): string[] {
+function layoverDetails(offer: FlightOffer, origin?: Place, destination?: Place): LayoverInfo[] {
+  const realLayovers = (offer.layovers || []).filter((layover) => !isOriginOrDestinationCode(layover.code, origin, destination));
+
+  if (realLayovers.length > 0) {
+    return realLayovers.map((layover) => ({
+      city: layover.city || layover.airport.split(" Airport")[0] || layover.airport,
+      airport: layover.airport,
+      code: layover.code,
+      durationMinutes: layover.durationMinutes ?? GENERIC_LAYOVER.durationMinutes,
+    }));
+  }
+
   const stops = parseStopsCount(offer.stopsText);
 
   if (!stops || stops < 1) return [];
 
-  return Array.from({ length: stops }, (_, index) => {
-    const layoverMinutes = 120 + index * 35 + stops * 20;
-    const stopLabel = stops === 1 ? "layover" : `layover ${index + 1}`;
+  const airlineHub = findAirlineHub(offer.carrier);
 
-    return `${formatMinutes(layoverMinutes)} ${stopLabel}`;
+  return Array.from({ length: stops }, (_, index) => {
+    if (index === 0 && airlineHub && !isOriginOrDestination(airlineHub, origin, destination)) {
+      return {
+        ...airlineHub,
+        durationMinutes: airlineHub.durationMinutes + index * 20,
+      };
+    }
+
+    return {
+      ...GENERIC_LAYOVER,
+      durationMinutes: GENERIC_LAYOVER.durationMinutes + index * 30,
+    };
   });
+}
+
+function isOriginOrDestinationCode(code: string, origin?: Place, destination?: Place): boolean {
+  if (!code || code === "—") return false;
+  const codes = [origin?.code, destination?.code].filter(Boolean).map((value) => value!.toUpperCase());
+  return codes.includes(code.toUpperCase());
+}
+
+function findAirlineHub(carrier: string | undefined): LayoverInfo | null {
+  if (!carrier) return null;
+
+  const lower = carrier.toLowerCase();
+  const match = AIRLINE_HUB_CONNECTIONS.find((entry) => lower.includes(entry.match));
+
+  return match ? match.layover : null;
+}
+
+function isOriginOrDestination(layover: LayoverInfo, origin?: Place, destination?: Place): boolean {
+  const codes = [origin?.code, destination?.code].filter(Boolean).map((code) => code!.toUpperCase());
+  return codes.includes(layover.code.toUpperCase());
 }
 
 function buildPairs(outboundOffers: FlightOffer[], inboundOffers: FlightOffer[], mode: TripType): FlightPair[] {
@@ -196,18 +418,375 @@ function formatDisplayDate(value: string): string {
   }).format(parsed);
 }
 
-function SkeletonCard() {
+function addMinutesToClock(value: string, minutesToAdd: number): string {
+  const minutes = parseTimeMinutes(value);
+
+  if (minutes === null) return "--:--";
+
+  const next = (minutes + minutesToAdd) % (24 * 60);
+  const hours = Math.floor(next / 60);
+  const mins = next % 60;
+
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+}
+
+type FlightLeg = {
+  departureTime: string;
+  arrivalTime: string;
+  departureCity: string;
+  departureCode: string;
+  departureAirport: string;
+  arrivalCity: string;
+  arrivalCode: string;
+  arrivalAirport: string;
+  flightMinutes: number;
+};
+
+type SegmentBlock = {
+  label: string;
+  date: string;
+  offer: FlightOffer;
+  origin: Place;
+  destination: Place;
+  legs: FlightLeg[];
+  layovers: LayoverInfo[];
+};
+
+function buildSegmentBlocks(
+  pair: FlightPair,
+  tripType: TripType,
+  outboundDate: string,
+  inboundDate: string,
+  from: Place,
+  to: Place,
+): SegmentBlock[] {
+  const blocks: SegmentBlock[] = [];
+
+  blocks.push(buildSegmentBlock("Outbound", outboundDate, pair.outbound, from, to));
+
+  if (tripType === "return" && pair.inbound) {
+    blocks.push(buildSegmentBlock("Inbound", inboundDate, pair.inbound, to, from));
+  }
+
+  return blocks;
+}
+
+function buildSegmentBlock(
+  label: string,
+  date: string,
+  offer: FlightOffer,
+  origin: Place,
+  destination: Place,
+): SegmentBlock {
+  const layovers = layoverDetails(offer, origin, destination);
+  const totalDuration = estimateOfferDurationMinutes(offer);
+  const totalLayoverMinutes = layovers.reduce((sum, layover) => sum + layover.durationMinutes, 0);
+  const segmentCount = layovers.length + 1;
+  const flightMinutes = Math.max(45, Math.floor((totalDuration - totalLayoverMinutes) / segmentCount));
+
+  let currentTime = offer.departureTime ? formatClockTime(offer.departureTime) : "--:--";
+  const legs: FlightLeg[] = [];
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const isFirst = index === 0;
+    const isLast = index === segmentCount - 1;
+    const layover = layovers[index - 1];
+    const previousLayover = layovers[index];
+
+    const legDepartureTime = isFirst
+      ? currentTime
+      : addMinutesToClock(currentTime, layover.durationMinutes);
+
+    const legArrivalTime = isLast && offer.arrivalTime
+      ? formatClockTime(offer.arrivalTime)
+      : addMinutesToClock(legDepartureTime, flightMinutes);
+
+    const legOriginCity = isFirst ? (origin.cityName || origin.name) : layover.city;
+    const legOriginCode = isFirst ? origin.code : layover.code;
+    const legOriginAirport = isFirst ? origin.name : layover.airport;
+
+    const legDestinationCity = isLast ? (destination.cityName || destination.name) : previousLayover.city;
+    const legDestinationCode = isLast ? destination.code : previousLayover.code;
+    const legDestinationAirport = isLast ? destination.name : previousLayover.airport;
+
+    legs.push({
+      departureTime: legDepartureTime,
+      arrivalTime: legArrivalTime,
+      departureCity: legOriginCity,
+      departureCode: legOriginCode,
+      departureAirport: legOriginAirport,
+      arrivalCity: legDestinationCity,
+      arrivalCode: legDestinationCode,
+      arrivalAirport: legDestinationAirport,
+      flightMinutes,
+    });
+
+    currentTime = legArrivalTime;
+  }
+
+  return { label, date, offer, origin, destination, legs, layovers };
+}
+
+function TripDetailsModal({
+  pair,
+  tripType,
+  outboundDate,
+  inboundDate,
+  from,
+  to,
+  passengers,
+  onClose,
+}: {
+  pair: FlightPair;
+  tripType: TripType;
+  outboundDate: string;
+  inboundDate: string;
+  from: Place;
+  to: Place;
+  passengers: number;
+  onClose: () => void;
+}) {
+  const blocks = buildSegmentBlocks(pair, tripType, outboundDate, inboundDate, from, to);
+
   return (
-    <div className="animate-pulse rounded-lg border border-slate-200 bg-white p-5">
-      <div className="flex items-center gap-4">
-        <div className="h-12 w-12 rounded-xl bg-slate-200" />
-        <div className="flex-1 space-y-2">
-          <div className="h-4 w-1/3 rounded bg-slate-200" />
-          <div className="h-3 w-1/2 rounded bg-slate-100" />
+    <div
+      className="fixed inset-0 z-70 flex items-center justify-center bg-slate-950/60 px-4 py-8 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-full w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+          <h2 className="text-xl font-black text-slate-950">Trip details</h2>
+          <div className="flex items-center gap-4 text-sm font-bold text-slate-500">
+            <span className="flex items-center gap-1.5"><User className="h-4 w-4" />{passengers}</span>
+            <span className="flex items-center gap-1.5"><Briefcase className="h-4 w-4" />1</span>
+            <span className="flex items-center gap-1.5"><Luggage className="h-4 w-4" />0</span>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full bg-slate-100 p-2 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
+              aria-label="Close trip details"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </header>
+
+        <div className="max-h-[75vh] space-y-8 overflow-y-auto bg-slate-100 px-6 py-6">
+          {blocks.map((block) => (
+            <SegmentBlockView key={`${block.label}-${block.offer.departureTime}-${block.offer.arrivalTime}`} block={block} />
+          ))}
         </div>
-        <div className="h-10 w-24 rounded bg-slate-200" />
       </div>
     </div>
+  );
+}
+
+function SegmentBlockView({ block }: { block: SegmentBlock }) {
+  return (
+    <section>
+      <div className="mb-4 flex items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">{block.label}</p>
+          <h3 className="mt-1 text-lg font-black text-slate-950">
+            {block.origin.cityName || block.origin.name}
+            <span className="mx-2 text-slate-400">→</span>
+            {block.destination.cityName || block.destination.name}
+          </h3>
+        </div>
+        <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-sm font-black text-slate-700 shadow-sm">
+          <Clock className="h-3.5 w-3.5 text-slate-500" />
+          {formatDuration(block.offer)}
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        {block.legs.map((leg, index) => (
+          <div key={`${leg.departureCode}-${leg.arrivalCode}-${index}`}>
+            <FlightLegCard leg={leg} date={block.date} carrier={block.offer.carrier || "Unknown airline"} />
+
+            {index < block.legs.length - 1 && (
+              <div className="flex items-center justify-center py-4">
+                <span className="flex items-center gap-2 rounded-full bg-white px-4 py-1.5 text-sm font-bold text-slate-600 shadow-sm ring-1 ring-slate-200">
+                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                  {formatMinutes(block.layovers[index].durationMinutes)} layover
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FlightLegCard({ leg, date, carrier }: { leg: FlightLeg; date: string; carrier: string }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-100">
+      <div className="flex items-stretch px-5 py-5">
+        <div className="flex w-20 flex-col justify-between text-right">
+          <div>
+            <p className="text-base font-black leading-none text-slate-950">{leg.departureTime}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{formatDisplayDate(date)}</p>
+          </div>
+          <div className="py-3 text-sm font-black text-slate-500">
+            {formatMinutes(leg.flightMinutes)}
+          </div>
+          <div>
+            <p className="text-base font-black leading-none text-slate-950">{leg.arrivalTime}</p>
+            <p className="mt-1 text-xs font-semibold text-slate-500">{formatDisplayDate(date)}</p>
+          </div>
+        </div>
+
+        <div className="relative mx-4 flex w-3 flex-col items-center justify-between">
+          <span className="absolute top-2 bottom-2 left-1/2 w-px -translate-x-1/2 bg-slate-200" />
+          <span className="relative z-10 h-2.5 w-2.5 rounded-full bg-slate-900 ring-2 ring-white" />
+          <span className="relative z-10 rounded-full bg-white p-1 ring-1 ring-slate-200">
+            <Plane className="h-3.5 w-3.5 rotate-90 text-blue-600" />
+          </span>
+          <span className="relative z-10 h-2.5 w-2.5 rounded-full bg-slate-900 ring-2 ring-white" />
+        </div>
+
+        <div className="flex flex-1 flex-col justify-between gap-3">
+          <div>
+            <p className="text-sm font-black text-slate-950">
+              {leg.departureCity} <span className="text-slate-400">·</span> {leg.departureCode}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">{leg.departureAirport}</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="flex w-full items-center gap-3 rounded-xl px-2 py-1 text-left transition-colors hover:bg-slate-50"
+          >
+            <span className="inline-flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-white text-[10px] font-black text-blue-700 ring-1 ring-slate-200">
+              <CarrierLogo carrier={carrier} />
+            </span>
+            <span className="flex-1 truncate text-sm font-bold text-slate-800">{carrier}</span>
+            <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          </button>
+
+          <div>
+            <p className="text-sm font-black text-slate-950">
+              {leg.arrivalCity} <span className="text-slate-400">·</span> {leg.arrivalCode}
+            </p>
+            <p className="mt-1 text-sm text-slate-500">{leg.arrivalAirport}</p>
+          </div>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-3 text-sm text-slate-600">
+          <p>Operated by {carrier}. Economy cabin. Standard carry-on included.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FlightSearchLoader({ from, to }: { from: Place; to: Place }) {
+  return (
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <SkySvgScene />
+      <div className="px-6 py-6 text-center">
+        <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-600">SkyNode</p>
+        <p className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">
+          Searching flights from {from.cityName || from.name} to {to.cityName || to.name}
+        </p>
+        <p className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-slate-500">
+          Comparing live fares
+          <span className="inline-flex items-center gap-1">
+            <span className="plane-loader-sky__dot" />
+            <span className="plane-loader-sky__dot" />
+            <span className="plane-loader-sky__dot" />
+          </span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SkySvgScene() {
+  return (
+    <svg
+      viewBox="0 0 600 280"
+      preserveAspectRatio="xMidYMid slice"
+      className="block h-56 w-full sm:h-64"
+      role="img"
+      aria-label="Plane flying through clouds"
+    >
+      <defs>
+        <linearGradient id="sky-gradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0ea5e9" />
+          <stop offset="55%" stopColor="#38bdf8" />
+          <stop offset="100%" stopColor="#bae6fd" />
+        </linearGradient>
+        <radialGradient id="sun-glow" cx="0.78" cy="0.18" r="0.4">
+          <stop offset="0%" stopColor="rgba(255,255,255,0.85)" />
+          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
+        </radialGradient>
+        <path id="flight-path" d="M 30 220 C 180 60, 420 60, 570 220" fill="none" />
+        <symbol id="cloud-shape" viewBox="0 0 80 30">
+          <ellipse cx="20" cy="20" rx="20" ry="10" fill="white" />
+          <ellipse cx="40" cy="14" rx="22" ry="14" fill="white" />
+          <ellipse cx="62" cy="20" rx="18" ry="10" fill="white" />
+        </symbol>
+        <symbol id="plane-shape" viewBox="-40 -40 80 80">
+          <g fill="#ffffff" stroke="#1e3a8a" strokeWidth="1.2" strokeLinejoin="round">
+            <path d="M -30 0 L -8 -3 L 5 -22 L 12 -22 L 8 -5 L 28 -7 L 32 -2 L 28 2 L 8 0 L 14 18 L 9 20 L -2 4 L -16 6 L -20 12 L -24 12 L -22 4 L -28 2 Z" />
+          </g>
+        </symbol>
+      </defs>
+
+      <rect width="600" height="280" fill="url(#sky-gradient)" />
+      <rect width="600" height="280" fill="url(#sun-glow)" />
+
+      <g opacity="0.95">
+        <use href="#cloud-shape" width="120" height="44" y="40">
+          <animate attributeName="x" from="-140" to="640" dur="18s" repeatCount="indefinite" />
+        </use>
+        <use href="#cloud-shape" width="80" height="30" y="170" opacity="0.85">
+          <animate attributeName="x" from="-100" to="660" dur="14s" repeatCount="indefinite" begin="-3s" />
+        </use>
+        <use href="#cloud-shape" width="160" height="60" y="100" opacity="0.85">
+          <animate attributeName="x" from="-200" to="720" dur="22s" repeatCount="indefinite" begin="-7s" />
+        </use>
+        <use href="#cloud-shape" width="100" height="36" y="210" opacity="0.7">
+          <animate attributeName="x" from="-120" to="700" dur="16s" repeatCount="indefinite" begin="-10s" />
+        </use>
+        <use href="#cloud-shape" width="70" height="24" y="20" opacity="0.65">
+          <animate attributeName="x" from="-90" to="660" dur="12s" repeatCount="indefinite" begin="-5s" />
+        </use>
+      </g>
+
+      <path
+        d="M 30 220 C 180 60, 420 60, 570 220"
+        stroke="rgba(255,255,255,0.7)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray="6 9"
+        fill="none"
+      >
+        <animate attributeName="stroke-dashoffset" from="0" to="-30" dur="1.6s" repeatCount="indefinite" />
+      </path>
+
+      <circle cx="30" cy="220" r="5" fill="white" stroke="#1e3a8a" strokeWidth="1.5" />
+      <circle cx="570" cy="220" r="5" fill="white" stroke="#1e3a8a" strokeWidth="1.5" />
+
+      <g>
+        <use href="#plane-shape" width="54" height="54" x="-27" y="-27">
+          <animate attributeName="opacity" values="1;1" dur="6s" repeatCount="indefinite" />
+        </use>
+        <animateMotion dur="6s" repeatCount="indefinite" rotate="auto">
+          <mpath href="#flight-path" />
+        </animateMotion>
+      </g>
+    </svg>
   );
 }
 
@@ -218,6 +797,7 @@ function FlightSegment({
   origin,
   destination,
   direction,
+  onShowDetails,
 }: {
   label: string;
   date: string;
@@ -225,6 +805,7 @@ function FlightSegment({
   origin: Place;
   destination: Place;
   direction: "outbound" | "inbound";
+  onShowDetails: () => void;
 }) {
   if (!offer) {
     return (
@@ -239,14 +820,16 @@ function FlightSegment({
 
   const carrier = offer.carrier || "Unknown airline";
   const planeDirectionClass = direction === "outbound" ? "" : "rotate-180";
-  const layovers = layoverDetails(offer);
+  const layovers = layoverDetails(offer, origin, destination);
+  const isGroundTransport = isGroundTransportOffer(offer);
+  const TransportIcon = isGroundTransport ? Bus : Plane;
 
   return (
     <div className="py-5">
       <p className="mb-3 text-xs font-semibold text-slate-500">{formatDisplayDate(date)} · {label}</p>
       <div className="grid grid-cols-[72px_1fr_72px] items-center gap-3">
         <div>
-          <p className="text-xl font-black leading-none text-slate-950">{offer.departureTime || "--:--"}</p>
+          <p className="text-xl font-black leading-none text-slate-950">{offer.departureTime ? formatClockTime(offer.departureTime) : "--:--"}</p>
           <p className="mt-2 text-sm font-semibold text-slate-600">{origin.code}</p>
         </div>
 
@@ -254,10 +837,15 @@ function FlightSegment({
           <div className="flex items-center gap-3">
             <div className="h-px flex-1 bg-slate-200" />
             <div className="flex flex-col items-center gap-1">
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+              <button
+                type="button"
+                onClick={onShowDetails}
+                className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700 transition-colors hover:bg-blue-50 hover:text-blue-700"
+                title="Open trip details"
+              >
                 {formatDuration(offer)}
-              </span>
-              <Plane className={`h-4 w-4 text-blue-500 ${planeDirectionClass}`} />
+              </button>
+              <TransportIcon className={`h-4 w-4 text-blue-500 ${isGroundTransport ? "" : planeDirectionClass}`} />
               <div className="group relative">
                 <span
                   className={`text-xs font-bold text-slate-600 ${layovers.length > 0 ? "cursor-help decoration-dotted underline-offset-2 hover:underline" : ""}`}
@@ -270,7 +858,9 @@ function FlightSegment({
                     <span className="absolute -top-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 bg-slate-900" />
                     <div className="space-y-2">
                       {layovers.map((layover) => (
-                        <p key={layover}>{layover}</p>
+                        <p key={`${layover.code}-${layover.durationMinutes}`}>
+                          {formatMinutes(layover.durationMinutes)} layover · {layover.airport} ({layover.code})
+                        </p>
                       ))}
                     </div>
                   </div>
@@ -280,15 +870,15 @@ function FlightSegment({
             <div className="h-px flex-1 bg-slate-200" />
           </div>
           <div className="mt-2 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <span className={`inline-flex h-5 min-w-5 items-center justify-center rounded-md ${getAirlineBg(carrier)} px-1.5 text-[10px] font-black text-white`}>
-              {getAirlineAbbr(carrier)}
+            <span className={`inline-flex h-7 w-7 items-center justify-center overflow-hidden rounded-full ${getAirlineBg(carrier)} text-[10px] font-black text-white ring-1 ring-slate-200`}>
+              <CarrierLogo carrier={carrier} />
             </span>
             <span className="truncate">{carrier}</span>
           </div>
         </div>
 
         <div className="text-right">
-          <p className="text-xl font-black leading-none text-slate-950">{offer.arrivalTime || "--:--"}</p>
+          <p className="text-xl font-black leading-none text-slate-950">{offer.arrivalTime ? formatClockTime(offer.arrivalTime) : "--:--"}</p>
           <p className="mt-2 text-sm font-semibold text-slate-600">{destination.code}</p>
         </div>
       </div>
@@ -324,6 +914,11 @@ export function SearchResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [sort, setSort] = useState<SortMode>("best");
+  const [currency, setCurrency] = useState<CurrencyCode>(() => {
+    const currencyParam = params.get("currency");
+    return currencyParam ? normalizeCurrency(currencyParam) : getStoredCurrency();
+  });
+  const [detailsPair, setDetailsPair] = useState<FlightPair | null>(null);
 
   const [maxPrice, setMaxPrice] = useState(2400);
   const [stopsFilters, setStopsFilters] = useState<StopsFilter[]>(["any"]);
@@ -334,12 +929,24 @@ export function SearchResultsPage() {
     doSearch(initialFromCode, initialToCode, initialDate, initialTripType, initialReturnDate);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    const handleCurrencyChange = (event: Event) => {
+      const nextCurrency = normalizeCurrency((event as CustomEvent<CurrencyCode>).detail);
+      setCurrency(nextCurrency);
+      doSearch(from.code, to.code, date, tripType, returnDate, nextCurrency);
+    };
+
+    window.addEventListener(currencyChangedEvent, handleCurrencyChange);
+    return () => window.removeEventListener(currencyChangedEvent, handleCurrencyChange);
+  }, [from.code, to.code, date, tripType, returnDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function doSearch(
     fromCode: string,
     toCode: string,
     searchDate: string,
     mode: TripType,
     inboundDate: string,
+    searchCurrency = currency,
   ) {
     setLoading(true);
     setError("");
@@ -347,9 +954,9 @@ export function SearchResultsPage() {
     setReturnOffers([]);
 
     try {
-      const outboundPromise = searchFlights({ from: fromCode, to: toCode, date: searchDate, provider: "auto" });
+      const outboundPromise = searchFlights({ from: fromCode, to: toCode, date: searchDate, provider: "auto", currency: searchCurrency });
       const inboundPromise = mode === "return"
-        ? searchFlights({ from: toCode, to: fromCode, date: inboundDate, provider: "auto" })
+        ? searchFlights({ from: toCode, to: fromCode, date: inboundDate, provider: "auto", currency: searchCurrency })
         : Promise.resolve(null);
       const [outboundResult, inboundResult] = await Promise.all([outboundPromise, inboundPromise]);
 
@@ -373,6 +980,7 @@ export function SearchResultsPage() {
       toName: to.cityName || to.name,
       tripType,
       passengers: String(passengers),
+      currency,
     });
 
     if (tripType === "return") {
@@ -436,12 +1044,16 @@ export function SearchResultsPage() {
 
     return true;
   });
-  const sorted = [...filtered].sort((a, b) => {
+  const sortedByMode = [...filtered].sort((a, b) => {
     if (sort === "price") return pairPrice(a) - pairPrice(b);
     if (sort === "duration") return pairDurationHours(a) - pairDurationHours(b);
     if (sort === "earliest") return pairEarliestMinutes(a) - pairEarliestMinutes(b);
     return pairPrice(a) + pairDurationHours(a) * 12 - (pairPrice(b) + pairDurationHours(b) * 12);
   });
+  const flightPairs = sortedByMode.filter((pair) => !isGroundTransportPair(pair));
+  const groundTransportPairs = sortedByMode.filter(isGroundTransportPair);
+  const sorted = [...flightPairs, ...groundTransportPairs];
+  const currencySymbol = currencyOptions.find((option) => option.code === currency)?.symbol || currency;
 
   return (
     <div className="min-h-screen bg-slate-100">
@@ -569,7 +1181,7 @@ export function SearchResultsPage() {
               <div className="mb-6">
                 <div className="mb-3 flex items-center gap-2">
                   <SlidersHorizontal className="h-4 w-4 text-slate-600" />
-                  <p className="font-bold text-slate-900">Price</p>
+                  <p className="font-bold text-slate-900">Price ({currencySymbol})</p>
                 </div>
                 <input
                   type="range"
@@ -580,8 +1192,8 @@ export function SearchResultsPage() {
                   className="w-full accent-blue-600"
                 />
                 <div className="mt-1 flex justify-between text-xs text-slate-500">
-                  <span>$200</span>
-                  <span>${maxPrice.toLocaleString()}</span>
+                  <span>{formatCurrencyAmount(convertUsdAmount(200, currency), currency)}</span>
+                  <span>{formatCurrencyAmount(convertUsdAmount(maxPrice, currency), currency)}</span>
                 </div>
               </div>
 
@@ -655,18 +1267,14 @@ export function SearchResultsPage() {
                     : mode === "earliest"
                       ? "First departure"
                       : sorted[0]
-                        ? `$${pairPrice(sorted[0]).toLocaleString()}`
+                        ? formatDisplayPrice(sorted[0], currency)
                         : "No price"}
                 </span>
               </button>
             ))}
           </div>
 
-          {loading && (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((item) => <SkeletonCard key={item} />)}
-            </div>
-          )}
+          {loading && <FlightSearchLoader from={from} to={to} />}
 
           {!loading && error && (
             <div className="rounded-lg border border-red-100 bg-red-50 p-6 text-center">
@@ -691,20 +1299,17 @@ export function SearchResultsPage() {
 
           {!loading && !error && sorted.length > 0 && (
             <div className="space-y-4">
-              {sorted.map((pair, index) => {
-                const totalPrice = pairPrice(pair);
-                const displayPrice = totalPrice >= 9999
-                  ? pair.outbound.priceText || pair.inbound?.priceText || "--"
-                  : `$${totalPrice.toLocaleString()}`;
+              {flightPairs.map((pair, index) => {
+                const displayPrice = formatDisplayPrice(pair, currency);
                 return (
                   <div
                     key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
                     className="grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px]"
                   >
                     <div className="divide-y divide-dashed divide-slate-200 px-4">
-                      <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={from} destination={to} direction="outbound" />
+                      <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={from} destination={to} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
                       {tripType === "return" && (
-                        <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={to} destination={from} direction="inbound" />
+                        <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={to} destination={from} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
                       )}
                       <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
                         <span className="flex items-center gap-1"><Plane className="h-3.5 w-3.5" /> 1 carry-on</span>
@@ -729,10 +1334,68 @@ export function SearchResultsPage() {
                   </div>
                 );
               })}
+
+              {groundTransportPairs.length > 0 && (
+                <div className="space-y-4 pt-2">
+                  <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+                    <Bus className="h-4 w-4" />
+                    FlixBus / ground transport option shown separately
+                  </div>
+
+                  {groundTransportPairs.map((pair, index) => {
+                    const displayPrice = formatDisplayPrice(pair, currency);
+                    return (
+                      <div
+                        key={`ground-${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
+                        className="grid overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px]"
+                      >
+                        <div className="divide-y divide-dashed divide-slate-200 px-4">
+                          <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={from} destination={to} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
+                          {tripType === "return" && (
+                            <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={to} destination={from} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
+                          )}
+                          <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
+                            <span className="flex items-center gap-1"><Bus className="h-3.5 w-3.5" /> Ground transport</span>
+                            <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Separate route option</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col justify-center border-t border-amber-100 bg-amber-50/40 p-5 text-center lg:border-l lg:border-t-0">
+                          <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {tripType === "return" ? "Return total estimate" : "One-way estimate"}
+                          </p>
+
+                          <button
+                            type="button"
+                            onClick={() => openPlanner(pair)}
+                            className="mt-8 rounded-lg bg-amber-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-700"
+                          >
+                            Select and plan trip
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </main>
       </div>
+
+      {detailsPair && (
+        <TripDetailsModal
+          pair={detailsPair}
+          tripType={tripType}
+          outboundDate={date}
+          inboundDate={returnDate}
+          from={from}
+          to={to}
+          passengers={passengers}
+          onClose={() => setDetailsPair(null)}
+        />
+      )}
 
       <Footer />
     </div>

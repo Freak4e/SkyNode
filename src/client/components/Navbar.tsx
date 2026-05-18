@@ -1,5 +1,8 @@
-import { Plane } from "lucide-react";
+import { Globe2, Plane } from "lucide-react";
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import type { CurrencyCode } from "../../shared/types.js";
+import { currencyOptions, getStoredCurrency, storeCurrency } from "../utils/currency.js";
 
 const navLinks = [
   { label: "Flights", to: "/search" },
@@ -13,6 +16,12 @@ type Props = { transparent?: boolean };
 
 export function Navbar({ transparent = false }: Props) {
   const location = useLocation();
+  const [currency, setCurrency] = useState<CurrencyCode>(() => getStoredCurrency());
+
+  function handleCurrencyChange(nextCurrency: CurrencyCode) {
+    setCurrency(nextCurrency);
+    storeCurrency(nextCurrency);
+  }
 
   return (
     <nav
@@ -21,7 +30,7 @@ export function Navbar({ transparent = false }: Props) {
       }`}
     >
       <Link to="/" className="flex items-center gap-2 no-underline">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-md">
+        <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-md">
           <Plane className="w-5 h-5 text-white" strokeWidth={2.5} />
         </div>
         <span className={`text-lg font-bold tracking-tight ${transparent ? "text-white" : "text-slate-900"}`}>
@@ -50,12 +59,33 @@ export function Navbar({ transparent = false }: Props) {
       </div>
 
       <div className="flex items-center gap-3">
+        <label
+          className={`hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition-colors sm:flex ${
+            transparent
+              ? "border-white/20 bg-white/10 text-white"
+              : "border-slate-200 bg-white text-slate-700 shadow-sm"
+          }`}
+        >
+          <Globe2 className="h-3.5 w-3.5" />
+          <select
+            value={currency}
+            onChange={(event) => handleCurrencyChange(event.target.value as CurrencyCode)}
+            className={`bg-transparent text-xs font-black outline-none ${transparent ? "text-white" : "text-slate-800"}`}
+            aria-label="Currency"
+          >
+            {currencyOptions.map((option) => (
+              <option key={option.code} value={option.code} className="text-slate-900">
+                {option.code}
+              </option>
+            ))}
+          </select>
+        </label>
         <button className={`text-sm font-medium transition-colors ${transparent ? "text-white/80 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}>
           Sign in
         </button>
         <Link
           to="/planner"
-          className="text-sm font-semibold px-4 py-2 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200 no-underline"
+          className="text-sm font-semibold px-4 py-2 rounded-full bg-linear-to-r from-blue-500 to-cyan-400 text-white shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200 no-underline"
         >
           Get started
         </Link>

@@ -1,13 +1,22 @@
 export type ProviderId = "scrapingbee" | "travelpayouts" | "auto";
+export type CurrencyCode = "USD" | "EUR" | "GBP" | "JPY" | "CHF" | "CAD" | "AUD" | "CNY";
 
 export type FlightSearchInput = {
   from: string;
   to: string;
   date: string;
   provider?: ProviderId;
+  currency?: CurrencyCode;
 };
 
 export type FlightSource = "scrapingbee" | "travelpayouts" | "none";
+
+export type FlightLayover = {
+  code: string;
+  airport: string;
+  city?: string;
+  durationMinutes?: number;
+};
 
 export type FlightOffer = {
   departureTime: string;
@@ -18,6 +27,7 @@ export type FlightOffer = {
   bookingLink: string;
   source?: Exclude<FlightSource, "none">;
   expiresAt?: string;
+  layovers?: FlightLayover[];
 };
 
 export type FlightSearchResponse = {
@@ -32,6 +42,10 @@ export type Place = {
   cityName: string;
   countryName: string;
   type: string;
+  cityCode?: string;
+  countryCode?: string;
+  mainAirportName?: string;
+  coordinates?: { lat: number; lon: number };
 };
 
 export type BudgetLevel = "low" | "medium" | "high";

@@ -1,6 +1,6 @@
 import { searchKayakWithScrapingBee } from "../providers/scrapingBeeProvider.js";
 import { searchTravelpayoutsCachedData } from "../providers/travelpayoutsDataProvider.js";
-import type { FlightSearchInput, FlightSearchResponse, ProviderId } from "../../shared/types.js";
+import type { CurrencyCode, FlightSearchInput, FlightSearchResponse, ProviderId } from "../../shared/types.js";
 
 export async function searchFlights(input: FlightSearchInput): Promise<FlightSearchResponse> {
   const normalizedInput = normalizeInput(input);
@@ -49,6 +49,7 @@ function normalizeInput(input: FlightSearchInput): Required<FlightSearchInput> {
     to: input.to.trim().toUpperCase(),
     date: input.date.trim(),
     provider: normalizeProvider(input.provider),
+    currency: normalizeCurrency(input.currency),
   };
 }
 
@@ -58,4 +59,21 @@ function normalizeProvider(provider: ProviderId | undefined): ProviderId {
   }
 
   return "scrapingbee";
+}
+
+function normalizeCurrency(currency: CurrencyCode | undefined): CurrencyCode {
+  if (
+    currency === "USD" ||
+    currency === "EUR" ||
+    currency === "GBP" ||
+    currency === "JPY" ||
+    currency === "CHF" ||
+    currency === "CAD" ||
+    currency === "AUD" ||
+    currency === "CNY"
+  ) {
+    return currency;
+  }
+
+  return "USD";
 }

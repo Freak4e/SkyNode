@@ -1,6 +1,6 @@
 import axios, { AxiosError } from "axios";
 import { config, requireTravelpayoutsAccessToken } from "./config.js";
-import type { FlightOffer } from "./types.js";
+import type { CurrencyCode, FlightOffer } from "./types.js";
 
 type CheapPricesResponse = {
   success: boolean;
@@ -21,6 +21,7 @@ export async function fetchTravelpayoutsOffers(
   from: string,
   to: string,
   date: string,
+  currency: CurrencyCode = "USD",
 ): Promise<FlightOffer[]> {
   const accessToken = requireTravelpayoutsAccessToken();
 
@@ -39,7 +40,7 @@ export async function fetchTravelpayoutsOffers(
           origin: from,
           destination: to,
           depart_date: date,
-          currency: config.travelpayouts.currency,
+          currency,
         },
       },
     );
@@ -48,7 +49,7 @@ export async function fetchTravelpayoutsOffers(
       throw new Error(response.data.error || "Travelpayouts returned an unsuccessful response.");
     }
 
-    return normalizeCheapPrices(response.data.data, from, to);
+    return normalizeCheapPrices(response.data.data, from, to, currency);
   } catch (error) {
     throw new Error(`Travelpayouts request failed: ${describeError(error)}`);
   }
@@ -58,6 +59,7 @@ function normalizeCheapPrices(
   data: CheapPricesResponse["data"],
   from: string,
   to: string,
+  currency: CurrencyCode,
 ): FlightOffer[] {
   const tickets = Object.values(data?.[to] || {}).filter(Boolean);
 
@@ -65,7 +67,7 @@ function normalizeCheapPrices(
     .map((ticket) => ({
       departureTime: formatDateTime(ticket.departure_at),
       arrivalTime: "",
-      priceText: formatPrice(ticket.price),
+      priceText: formatPrice(ticket.price, currency),
       carrier: formatCarrier(ticket),
       stopsText: "Cached fare from recent Aviasales searches",
       bookingLink: buildSearchLink(from, to, ticket.departure_at),
@@ -94,14 +96,14 @@ function formatDateTime(value: string | undefined): string {
   }).format(date);
 }
 
-function formatPrice(value: number | undefined): string {
+function formatPrice(value: number | undefined, currency: CurrencyCode): string {
   if (typeof value !== "number") {
     return "";
   }
 
   return new Intl.NumberFormat("en", {
     style: "currency",
-    currency: config.travelpayouts.currency,
+    currency,
     maximumFractionDigits: 0,
   }).format(value);
 }

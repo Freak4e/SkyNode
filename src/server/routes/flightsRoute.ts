@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { searchFlights } from "../services/flightSearchService.js";
-import type { FlightSearchResponse, ProviderId } from "../../shared/types.js";
+import type { CurrencyCode, FlightSearchResponse, ProviderId } from "../../shared/types.js";
 
 export const flightsRoute = Router();
 
@@ -9,6 +9,7 @@ flightsRoute.get("/", async (req, res) => {
   const to = String(req.query.to || "").trim();
   const date = String(req.query.date || "").trim();
   const provider = String(req.query.provider || "scrapingbee").trim() as ProviderId;
+  const currency = String(req.query.currency || "USD").trim().toUpperCase() as CurrencyCode;
 
   if (!from || !to || !date) {
     return res.status(400).json({
@@ -19,7 +20,7 @@ flightsRoute.get("/", async (req, res) => {
   }
 
   try {
-    return res.json(await searchFlights({ from, to, date, provider }));
+    return res.json(await searchFlights({ from, to, date, provider, currency }));
   } catch (error) {
     console.error("[route:flights] search failed", error);
 

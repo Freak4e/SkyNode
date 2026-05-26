@@ -20,7 +20,7 @@ Expected result: the user generates a daily itinerary from a selected destinatio
 
 - Status: Sprint 2 MVP implemented.
 - Geoapify Places integration for destination attractions.
-- Mock LLM-style itinerary generator for stable Sprint 2 demos.
+- Local Ollama itinerary generator.
 - Structured JSON itinerary response.
 - Planner UI with day-by-day itinerary display.
 - Save trip draft to Supabase PostgreSQL.
@@ -29,7 +29,7 @@ Expected result: the user generates a daily itinerary from a selected destinatio
 Remaining hardening:
 
 - Add saved trip read endpoint.
-- Improve generated itinerary quality with a real LLM adapter.
+- Improve prompt quality and response validation for Ollama-generated itineraries.
 - Add unit/integration tests for attractions, itinerary generation, and trip saving.
 - Add more polished error states for failed database saves.
 

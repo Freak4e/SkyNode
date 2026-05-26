@@ -84,7 +84,7 @@ function normalizeAttraction(feature: GeoapifyFeature, index: number): Attractio
   return {
     id: properties?.place_id || `geoapify-${index}`,
     name,
-    category: cleanCategory(properties?.categories?.[0]),
+    category: cleanCategory(properties?.categories),
     address: properties?.formatted || "",
     lat: properties?.lat,
     lon: properties?.lon,
@@ -92,12 +92,19 @@ function normalizeAttraction(feature: GeoapifyFeature, index: number): Attractio
   };
 }
 
-function cleanCategory(category: string | undefined): string {
-  if (!category) {
+function cleanCategory(categories: string[] | undefined): string {
+  if (!categories || categories.length === 0) {
     return "Attraction";
   }
 
-  const parts = category.split(".");
+  const priorityCategory =
+    categories.find((category) => /museum|gallery|castle|zoo|aquarium/i.test(category)) ||
+    categories.find((category) => /catering|restaurant|cafe|bar|food/i.test(category)) ||
+    categories.find((category) => /park|garden|viewpoint|natural|beach/i.test(category)) ||
+    categories.find((category) => /monument|memorial|sights|tourism|attraction/i.test(category)) ||
+    categories[0];
+  const parts = priorityCategory.split(".");
+
   return parts[parts.length - 1]?.replaceAll("_", " ") || "Attraction";
 }
 

@@ -54,7 +54,28 @@ TRAVELPAYOUTS_ACCESS_TOKEN=your_travelpayouts_token
 TRAVELPAYOUTS_CURRENCY=USD
 GEOAPIFY_API_KEY=your_geoapify_key
 DATABASE_URL=your_supabase_postgres_pooler_url
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your_google_ai_studio_key
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta
+GEMINI_THINKING_BUDGET=0
+GEMINI_TIMEOUT_MS=120000
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3:latest
+OLLAMA_TIMEOUT_MS=300000
 ```
+
+Each developer keeps their own `.env` file. It is ignored by Git, so LLM settings can differ per user or machine.
+
+`LLM_PROVIDER=gemini` uses Google Gemini through the API and does not require local model files. `LLM_PROVIDER=ollama` uses a local Ollama server. Do not put the local `ollama.exe` path in `.env`; SkyNode talks to Ollama through the HTTP server at `OLLAMA_BASE_URL`.
+
+If using Ollama, pull the model configured in your own `.env` before generating itineraries:
+
+```powershell
+ollama pull llama3:latest
+```
+
+If PowerShell cannot find `ollama`, use the full local install path or add the Ollama install folder to your user `PATH`.
 
 Then run:
 

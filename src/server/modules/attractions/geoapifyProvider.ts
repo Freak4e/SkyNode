@@ -1,5 +1,5 @@
 import axios from "axios";
-import { config, requireGeoapifyApiKey } from "../../../config.js";
+import { config } from "../../../config.js";
 import type { Attraction } from "../../../shared/types.js";
 
 type GeoapifyFeature = {
@@ -27,7 +27,12 @@ type GeoapifyGeocodeResponse = {
 };
 
 export async function fetchAttractions(destination: string): Promise<Attraction[]> {
-  const apiKey = requireGeoapifyApiKey();
+  const apiKey = config.geoapify.apiKey;
+
+  if (!apiKey) {
+    return fallbackAttractions(destination);
+  }
+
   const coordinates = await geocodeDestination(destination, apiKey);
 
   if (!coordinates) {

@@ -38,7 +38,7 @@ export async function generateItineraryWithOllama(
   request: GenerateItineraryRequest,
   attractions: Attraction[],
 ): Promise<GeneratedItinerary> {
-  const prompt = buildPrompt(request, attractions);
+  const prompt = buildItineraryPrompt(request, attractions);
 
   const response = await axios.post<OllamaChatResponse>(
     `${config.ollama.baseUrl.replace(/\/$/, "")}/api/chat`,
@@ -76,10 +76,10 @@ export async function generateItineraryWithOllama(
     throw new Error("Ollama returned an empty itinerary response.");
   }
 
-  return normalizeItinerary(parseJson(content), request, attractions);
+  return normalizeItinerary(parseItineraryJson(content), request, attractions, "ollama");
 }
 
-function buildPrompt(request: GenerateItineraryRequest, attractions: Attraction[]): string {
+export function buildItineraryPrompt(request: GenerateItineraryRequest, attractions: Attraction[]): string {
   const context = attractions.slice(0, 10).map((attraction) => ({
     name: attraction.name,
     category: attraction.category,
@@ -125,6 +125,8 @@ function buildPrompt(request: GenerateItineraryRequest, attractions: Attraction[
       `Return exactly ${request.days} days.`,
       "Each day must contain exactly three items: morning, afternoon, evening.",
       "Use provided attractions when possible.",
+      "Prefer specific local stops over generic activity titles.",
+      "Do not invent ticketed attractions if provided free public sights fit the request.",
       "Keep estimatedCost numeric.",
       "Estimate user-paid activity costs, not total travel costs.",
       "Free public squares, streets, viewpoints, walks, monuments and parks should usually be 0.",
@@ -139,7 +141,7 @@ function buildPrompt(request: GenerateItineraryRequest, attractions: Attraction[
   });
 }
 
-function parseJson(content: string): RawItinerary {
+export function parseItineraryJson(content: string): RawItinerary {
   try {
     return JSON.parse(content) as RawItinerary;
   } catch {
@@ -153,10 +155,11 @@ function parseJson(content: string): RawItinerary {
   }
 }
 
-function normalizeItinerary(
+export function normalizeItinerary(
   raw: RawItinerary,
   request: GenerateItineraryRequest,
   attractions: Attraction[],
+  generationMode: GeneratedItinerary["generationMode"],
 ): GeneratedItinerary {
   const days = Array.from({ length: request.days }, (_, index) => {
     const rawDay = raw.days?.[index];
@@ -169,7 +172,7 @@ function normalizeItinerary(
     days,
     attractions: attractions.slice(0, 8),
     estimatedTotalCost: days.reduce((sum, day) => sum + day.estimatedCost, 0),
-    generationMode: "ollama",
+    generationMode,
   };
 }
 

@@ -124,7 +124,7 @@ export function AssistantPage() {
       setPendingProposal(response.proposal);
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Assistant failed.");
-      setMessages([...nextMessages, { role: "assistant", content: "I could not answer that right now. Check Ollama and try again." }]);
+      setMessages([...nextMessages, { role: "assistant", content: "I could not answer that right now. Check the AI provider settings and try again." }]);
     } finally {
       setSending(false);
     }
@@ -176,7 +176,7 @@ export function AssistantPage() {
                   Chat with a travel assistant that understands your trips.
                 </h1>
                 <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-300">
-                  Ask general destination questions, or select a saved trip so Ollama can answer with itinerary context.
+                  Ask general destination questions, or select a saved trip so the assistant can answer with itinerary context.
                 </p>
               </div>
 

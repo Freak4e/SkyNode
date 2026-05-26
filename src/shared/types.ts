@@ -111,7 +111,7 @@ export type GeneratedItinerary = {
   days: ItineraryDay[];
   attractions: Attraction[];
   estimatedTotalCost: number;
-  generationMode: "ollama";
+  generationMode: "ollama" | "gemini";
 };
 
 export type SaveTripRequest = GenerateItineraryRequest & {

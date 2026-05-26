@@ -6,6 +6,7 @@ const apiKey = process.env.SCRAPINGBEE_API_KEY || process.env.API_KEY;
 
 export const config = {
   port: Number(process.env.PORT || 3000),
+  llmProvider: (process.env.LLM_PROVIDER || "ollama").toLowerCase(),
   database: {
     url: process.env.DATABASE_URL,
   },
@@ -18,6 +19,13 @@ export const config = {
     baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
     model: process.env.OLLAMA_MODEL || "llama3:latest",
     timeoutMs: Number(process.env.OLLAMA_TIMEOUT_MS || 300000),
+  },
+  gemini: {
+    apiUrl: process.env.GEMINI_API_URL || "https://generativelanguage.googleapis.com/v1beta",
+    apiKey: process.env.GEMINI_API_KEY,
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    thinkingBudget: Number(process.env.GEMINI_THINKING_BUDGET || 0),
+    timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS || 120000),
   },
   travelpayouts: {
     apiUrl: "https://api.travelpayouts.com",
@@ -48,6 +56,14 @@ export function requireGeoapifyApiKey(): string {
   }
 
   return config.geoapify.apiKey;
+}
+
+export function requireGeminiApiKey(): string {
+  if (!config.gemini.apiKey) {
+    throw new Error("Missing GEMINI_API_KEY. Add your Google AI Studio API key to .env.");
+  }
+
+  return config.gemini.apiKey;
 }
 
 export function requireTravelpayoutsAccessToken(): string {

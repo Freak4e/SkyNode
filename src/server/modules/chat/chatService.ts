@@ -1,5 +1,9 @@
 import axios from "axios";
 import { config } from "../../../config.js";
+import {
+  answerTravelChatWithGemini,
+  proposeTripChangeWithGemini,
+} from "../../infrastructure/llm/geminiClient.js";
 import type {
   GeneratedItinerary,
   ItineraryDay,
@@ -24,6 +28,26 @@ export async function answerTravelChat(request: TravelChatRequest): Promise<Trav
   }
 
   const mode = request.trip ? "trip-aware" : "general";
+  const content = config.llmProvider === "gemini"
+    ? await answerTravelChatWithGemini(request, buildSystemPrompt(request.trip))
+    : await answerTravelChatWithOllama(request);
+
+  if (!content) {
+    throw new Error(`${config.llmProvider} returned an empty chat response.`);
+  }
+
+  const proposal = request.trip && shouldProposeTripChange(message)
+    ? await proposeTripChange(request.trip, message)
+    : undefined;
+
+  return {
+    message: content,
+    mode,
+    proposal,
+  };
+}
+
+async function answerTravelChatWithOllama(request: TravelChatRequest): Promise<string> {
   const response = await axios.post<OllamaChatResponse>(
     `${config.ollama.baseUrl.replace(/\/$/, "")}/api/chat`,
     {
@@ -40,7 +64,7 @@ export async function answerTravelChat(request: TravelChatRequest): Promise<Trav
         })),
         {
           role: "user",
-          content: message,
+          content: request.message.trim(),
         },
       ],
       options: {
@@ -53,21 +77,7 @@ export async function answerTravelChat(request: TravelChatRequest): Promise<Trav
     },
   );
 
-  const content = response.data.message?.content?.trim();
-
-  if (!content) {
-    throw new Error("Ollama returned an empty chat response.");
-  }
-
-  const proposal = request.trip && shouldProposeTripChange(message)
-    ? await proposeTripChange(request.trip, message)
-    : undefined;
-
-  return {
-    message: content,
-    mode,
-    proposal,
-  };
+  return response.data.message?.content?.trim() || "";
 }
 
 function buildSystemPrompt(trip: SavedTripDetail | undefined): string {
@@ -85,21 +95,28 @@ function buildSystemPrompt(trip: SavedTripDetail | undefined): string {
       "You are in general travel chat mode.",
       "For destination questions, suggest concrete places with short descriptions.",
       "If the user asks for top things to see, give ranked recommendations.",
+      "Do not rewrite or invent a saved itinerary unless the user provides one.",
     ].join(" ");
   }
 
   return [
     ...base,
     "You are in trip-aware mode.",
-    "Use the provided saved trip context when answering.",
-    "Suggest itinerary tweaks that fit the trip budget, pace, dates, and interests.",
-    "When proposing changes, identify the day and activity that should change.",
+    "Treat the provided saved trip context as the source of truth.",
+    "Suggest itinerary tweaks that fit the trip budget, pace, dates, interests, and existing day structure.",
+    "When the user asks for a change, explain the likely day/activity impact briefly instead of rewriting the whole itinerary in chat.",
+    "Preserve existing itinerary choices unless the user clearly asks to change them.",
     `Trip context: ${JSON.stringify(buildTripContext(trip))}`,
   ].join(" ");
 }
 
 async function proposeTripChange(trip: SavedTripDetail, message: string): Promise<TripChangeProposal | undefined> {
   try {
+    if (config.llmProvider === "gemini") {
+      const content = await proposeTripChangeWithGemini(trip, message, buildTripContext(trip));
+      return normalizeProposal(parseJson(content), trip);
+    }
+
     const response = await axios.post<OllamaChatResponse>(
       `${config.ollama.baseUrl.replace(/\/$/, "")}/api/chat`,
       {
@@ -130,7 +147,7 @@ async function proposeTripChange(trip: SavedTripDetail, message: string): Promis
                   days: trip.itinerary.days,
                   attractions: trip.itinerary.attractions,
                   estimatedTotalCost: 0,
-                  generationMode: "ollama",
+                  generationMode: config.llmProvider === "gemini" ? "gemini" : "ollama",
                 },
               },
             }),
@@ -194,7 +211,7 @@ function normalizeProposal(raw: unknown, trip: SavedTripDetail): TripChangePropo
       days: normalizedDays,
       attractions: trip.itinerary.attractions,
       estimatedTotalCost,
-      generationMode: "ollama",
+      generationMode: config.llmProvider === "gemini" ? "gemini" : "ollama",
     },
   };
 }
@@ -342,7 +359,7 @@ function buildFallbackProposal(trip: SavedTripDetail, message: string): TripChan
       ...trip.itinerary,
       days,
       estimatedTotalCost,
-      generationMode: "ollama",
+      generationMode: config.llmProvider === "gemini" ? "gemini" : "ollama",
     },
   };
 }

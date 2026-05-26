@@ -1,4 +1,6 @@
 import { getDestinationAttractions } from "../attractions/attractionsService.js";
+import { config } from "../../../config.js";
+import { generateItineraryWithGemini } from "../../infrastructure/llm/geminiClient.js";
 import { generateItineraryWithOllama } from "../../infrastructure/llm/ollamaClient.js";
 import type { GenerateItineraryRequest } from "../../../shared/types.js";
 
@@ -6,6 +8,11 @@ export async function generateItinerary(request: GenerateItineraryRequest) {
   validateRequest(request);
 
   const attractions = await getDestinationAttractions(request.destinationName);
+
+  if (config.llmProvider === "gemini") {
+    return generateItineraryWithGemini(request, attractions);
+  }
+
   return generateItineraryWithOllama(request, attractions);
 }
 

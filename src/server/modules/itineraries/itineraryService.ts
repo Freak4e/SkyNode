@@ -1,12 +1,12 @@
 import { getDestinationAttractions } from "../attractions/attractionsService.js";
-import { generateMockItinerary } from "./mockItineraryGenerator.js";
+import { generateItineraryWithOllama } from "../../infrastructure/llm/ollamaClient.js";
 import type { GenerateItineraryRequest } from "../../../shared/types.js";
 
 export async function generateItinerary(request: GenerateItineraryRequest) {
   validateRequest(request);
 
   const attractions = await getDestinationAttractions(request.destinationName);
-  return generateMockItinerary(request, attractions);
+  return generateItineraryWithOllama(request, attractions);
 }
 
 function validateRequest(request: GenerateItineraryRequest): void {

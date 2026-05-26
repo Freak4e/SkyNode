@@ -82,7 +82,7 @@ Response:
     "days": [],
     "attractions": [],
     "estimatedTotalCost": 252,
-    "generationMode": "mock"
+    "generationMode": "ollama"
   },
   "warnings": []
 }

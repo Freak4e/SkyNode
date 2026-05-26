@@ -21,7 +21,7 @@ Sprint 2 adds:
 - `/planner` page with the current SkyNode visual style.
 - Route from landing page and flight results into the planner.
 - Geoapify attractions integration.
-- Mock itinerary generator that produces structured day-by-day plans.
+- Local Ollama itinerary generator that produces structured day-by-day plans.
 - Supabase PostgreSQL persistence for saved trip drafts.
 - Auto-created database tables for trips, attractions, itinerary days, and itinerary items.
 
@@ -91,7 +91,7 @@ src/
     providers/             Flight provider integrations
     modules/               Domain modules
       attractions/         Geoapify attraction discovery
-      itineraries/         Mock itinerary generation
+      itineraries/         Ollama itinerary generation
       trips/               Supabase trip persistence
     infrastructure/        Database/cache/LLM/external API clients
   shared/                  Shared TypeScript domain/API types

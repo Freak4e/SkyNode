@@ -111,7 +111,7 @@ export type GeneratedItinerary = {
   days: ItineraryDay[];
   attractions: Attraction[];
   estimatedTotalCost: number;
-  generationMode: "mock";
+  generationMode: "ollama";
 };
 
 export type SaveTripRequest = GenerateItineraryRequest & {
@@ -122,4 +122,56 @@ export type SaveTripRequest = GenerateItineraryRequest & {
 export type SaveTripResponse = {
   tripId: string;
   savedAt: string;
+};
+
+export type SavedTripSummary = {
+  id: string;
+  title: string;
+  destinationCode: string;
+  destinationName: string;
+  originCode?: string;
+  startDate: string;
+  days: number;
+  budget: BudgetLevel;
+  pace: TravelPace;
+  interests: string[];
+  estimatedTotalCost: number;
+  createdAt: string;
+};
+
+export type SavedTripDetail = SavedTripSummary & {
+  selectedFlight?: FlightOffer;
+  itinerary: GeneratedItinerary;
+};
+
+export type ChatRole = "user" | "assistant";
+
+export type ChatMessage = {
+  role: ChatRole;
+  content: string;
+};
+
+export type TravelChatRequest = {
+  message: string;
+  history?: ChatMessage[];
+  trip?: SavedTripDetail;
+};
+
+export type TripChangeProposal = {
+  summary: string;
+  itinerary: GeneratedItinerary;
+};
+
+export type TravelChatResponse = {
+  message: string;
+  mode: "general" | "trip-aware";
+  proposal?: TripChangeProposal;
+};
+
+export type ApplyTripChangeRequest = {
+  proposal: TripChangeProposal;
+};
+
+export type ApplyTripChangeResponse = {
+  trip: SavedTripDetail;
 };

@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { attractionsRoute } from "./modules/attractions/attractionsRoute.js";
+import { chatRoute } from "./modules/chat/chatRoute.js";
 import { itinerariesRoute } from "./modules/itineraries/itinerariesRoute.js";
 import { tripsRoute } from "./modules/trips/tripsRoute.js";
 import { flightsRoute } from "./routes/flightsRoute.js";
@@ -17,6 +18,7 @@ export function createApp() {
   app.use("/api/attractions", attractionsRoute);
   app.use("/api/itineraries", itinerariesRoute);
   app.use("/api/trips", tripsRoute);
+  app.use("/api/chat", chatRoute);
 
   app.get("/test-flight-search", (req, res) => {
     const params = new URLSearchParams(req.query as Record<string, string>);

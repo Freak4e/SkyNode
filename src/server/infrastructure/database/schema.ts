@@ -61,6 +61,14 @@ export async function ensureSchema(): Promise<void> {
       sort_order integer not null,
       created_at timestamptz not null default now()
     );
+
+    create table if not exists chat_messages (
+      id uuid primary key default gen_random_uuid(),
+      trip_id uuid references trips(id) on delete cascade,
+      role text not null,
+      content text not null,
+      created_at timestamptz not null default now()
+    );
   `);
 
   schemaReady = true;

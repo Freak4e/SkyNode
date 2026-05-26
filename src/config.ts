@@ -14,6 +14,11 @@ export const config = {
     apiKey: process.env.GEOAPIFY_API_KEY,
     timeoutMs: Number(process.env.GEOAPIFY_TIMEOUT_MS || 12000),
   },
+  ollama: {
+    baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
+    model: process.env.OLLAMA_MODEL || "llama3:latest",
+    timeoutMs: Number(process.env.OLLAMA_TIMEOUT_MS || 300000),
+  },
   travelpayouts: {
     apiUrl: "https://api.travelpayouts.com",
     accessToken: process.env.TRAVELPAYOUTS_ACCESS_TOKEN,

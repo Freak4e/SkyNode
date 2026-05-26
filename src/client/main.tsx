@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { AssistantPage } from "./pages/AssistantPage";
 import { HomePage } from "./pages/HomePage";
 import { LiveFlightsPage } from "./pages/LiveFlightsPage";
 import { PlannerPage } from "./pages/PlannerPage";
@@ -14,6 +15,7 @@ function App() {
         <Route path="/search" element={<SearchResultsPage />} />
         <Route path="/live-flights" element={<LiveFlightsPage />} />
         <Route path="/planner" element={<PlannerPage />} />
+        <Route path="/assistant" element={<AssistantPage />} />
         <Route path="*" element={<HomePage />} />
       </Routes>
     </BrowserRouter>

@@ -1,5 +1,6 @@
 export type {
   FlightLayover,
+  FlightSegment,
   FlightOffer,
   FlightSearchInput,
   FlightSearchResponse,

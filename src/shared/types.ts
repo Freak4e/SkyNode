@@ -18,16 +18,31 @@ export type FlightLayover = {
   durationMinutes?: number;
 };
 
+export type FlightSegment = {
+  departureTime: string;
+  arrivalTime: string;
+  originCode: string;
+  destinationCode: string;
+  originAirport?: string;
+  destinationAirport?: string;
+  durationText?: string;
+  durationMinutes?: number;
+  carrier?: string;
+};
+
 export type FlightOffer = {
   departureTime: string;
   arrivalTime: string;
   priceText: string;
   carrier: string;
   stopsText: string;
+  durationText?: string;
+  durationMinutes?: number;
   bookingLink: string;
   source?: Exclude<FlightSource, "none">;
   expiresAt?: string;
   layovers?: FlightLayover[];
+  segments?: FlightSegment[];
 };
 
 export type FlightSearchResponse = {

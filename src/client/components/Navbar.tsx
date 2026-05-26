@@ -6,6 +6,7 @@ import { currencyOptions, getStoredCurrency, storeCurrency } from "../utils/curr
 
 const navLinks = [
   { label: "Flights", to: "/search" },
+  { label: "Live Flights", to: "/live-flights", accent: true },
   { label: "AI Planner", to: "/planner" },
   { label: "Destinations", to: "/destinations" },
   { label: "Assistant", to: "/assistant" },
@@ -43,15 +44,25 @@ export function Navbar({ transparent = false }: Props) {
           <Link
             key={link.to}
             to={link.to}
-            className={`text-sm font-medium transition-colors no-underline ${
-              transparent
-                ? location.pathname === link.to
-                  ? "text-white"
-                  : "text-white/70 hover:text-white"
-                : location.pathname === link.to
-                ? "text-blue-600"
-                : "text-slate-500 hover:text-slate-900"
-            }`}
+            className={
+              link.accent
+                ? `rounded-full px-3 py-1.5 text-sm font-black no-underline transition-all ${
+                    location.pathname === link.to
+                      ? "bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25"
+                      : transparent
+                      ? "bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/30 hover:bg-emerald-300 hover:text-slate-950"
+                      : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-500 hover:text-white hover:ring-emerald-500"
+                  }`
+                : `text-sm font-medium transition-colors no-underline ${
+                    transparent
+                      ? location.pathname === link.to
+                        ? "text-white"
+                        : "text-white/70 hover:text-white"
+                      : location.pathname === link.to
+                      ? "text-blue-600"
+                      : "text-slate-500 hover:text-slate-900"
+                  }`
+            }
           >
             {link.label}
           </Link>

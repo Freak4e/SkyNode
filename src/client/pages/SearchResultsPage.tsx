@@ -20,6 +20,13 @@ import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
 import type { CurrencyCode, FlightOffer, Place } from "../../shared/types.js";
 import {
+  estimateDurationMinutes,
+  parseClockMinutes,
+  parseDurationMinutes,
+  parseStopsCount,
+  resolveStopsCount,
+} from "../../shared/flightParsing.js";
+import {
   currencyChangedEvent,
   currencyOptions,
   formatCurrencyAmount,
@@ -232,51 +239,33 @@ function formatDisplayPrice(pair: FlightPair, currency: CurrencyCode): string {
   return formatCurrencyAmount(convertUsdAmount(totalPrice, currency), currency);
 }
 
-function parseTimeMinutes(value: string): number | null {
-  const match = value.match(/(\d{1,2})[:;.](\d{2})\s*(AM|PM)?/i);
-
-  if (!match) return null;
-
-  let hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  const meridiem = match[3]?.toUpperCase();
-
-  if (meridiem === "PM" && hours < 12) hours += 12;
-  if (meridiem === "AM" && hours === 12) hours = 0;
-
-  return hours * 60 + minutes;
-}
-
 function formatClockTime(value: string): string {
-  const match = value.match(/(\d{1,2})[:;.](\d{2})\s*(AM|PM)?/i);
+  const minutes = parseClockMinutes(value);
 
-  if (!match) {
+  if (minutes === null) {
     return value.replace(/\s*\b(?:AM|PM)\b\.?/gi, "").trim();
   }
 
-  let hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  const meridiem = match[3]?.toUpperCase();
+  const dayOffset = Math.floor(minutes / (24 * 60));
+  const clock = minutes % (24 * 60);
+  const hours = Math.floor(clock / 60);
+  const mins = clock % 60;
 
-  if (meridiem === "PM" && hours < 12) hours += 12;
-  if (meridiem === "AM" && hours === 12) hours = 0;
-
-  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`;
+  const formatted = `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`;
+  return dayOffset > 0 ? `${formatted}+${dayOffset}` : formatted;
 }
 
 function estimateOfferDurationMinutes(offer: FlightOffer): number {
-  const departure = parseTimeMinutes(offer.departureTime);
-  const arrival = parseTimeMinutes(offer.arrivalTime);
+  const stopsCount = resolveStopsCount(offer);
+  const estimated = estimateDurationMinutes({
+    durationMinutes: offer.durationMinutes,
+    durationText: offer.durationText,
+    departureTime: offer.departureTime,
+    arrivalTime: offer.arrivalTime,
+    stopsCount,
+  });
 
-  if (departure !== null && arrival !== null) {
-    const sameDayMinutes = arrival >= departure ? arrival - departure : arrival + 24 * 60 - departure;
-    return Math.max(60, sameDayMinutes);
-  }
-
-  const stops = parseStopsCount(offer.stopsText);
-  if (stops !== null) return 150 + stops * 150;
-
-  return 24 * 60;
+  return estimated > 0 ? estimated : 24 * 60;
 }
 
 function estimateOfferDurationHours(offer: FlightOffer): number {
@@ -296,23 +285,13 @@ function formatDuration(offer: FlightOffer): string {
 }
 
 function pairEarliestMinutes(pair: FlightPair): number {
-  return parseTimeMinutes(pair.outbound.departureTime) ?? 24 * 60;
-}
-
-function parseStopsCount(text: string | undefined): number | null {
-  const normalized = text?.toLowerCase() || "";
-
-  if (!normalized) return null;
-  if (normalized.includes("nonstop") || normalized.includes("direct")) return 0;
-
-  const match = normalized.match(/\b(\d+)\b/);
-  return match ? Number(match[1]) : null;
+  return parseClockMinutes(pair.outbound.departureTime) ?? 24 * 60;
 }
 
 function matchesStopsFilter(offer: FlightOffer, filters: StopsFilter[]): boolean {
   if (filters.length === 0 || filters.includes("any")) return true;
 
-  const stops = parseStopsCount(offer.stopsText);
+  const stops = resolveStopsCount(offer);
   if (stops === null) return true;
 
   return filters.some((filter) => {
@@ -324,12 +303,15 @@ function matchesStopsFilter(offer: FlightOffer, filters: StopsFilter[]): boolean
 }
 
 function displayStopsText(offer: FlightOffer): string {
-  const stops = parseStopsCount(offer.stopsText);
+  const stops = resolveStopsCount(offer);
 
   if (stops === 0) return "Direct";
   if (typeof stops === "number") return stops === 1 ? "1 stop" : `${stops} stops`;
 
-  return offer.stopsText?.replace(/nonstop/gi, "Direct") || "Flight";
+  const fromText = offer.stopsText?.replace(/non[- ]?stop/gi, "Direct").trim();
+  if (fromText && !parseDurationMinutes(fromText)) return fromText;
+
+  return "Flight";
 }
 
 function formatMinutes(totalMinutes: number): string {
@@ -340,6 +322,26 @@ function formatMinutes(totalMinutes: number): string {
   if (minutes === 0) return `${hours}h`;
 
   return `${hours}h ${minutes}m`;
+}
+
+function splitEstimatedFlightMinutes(totalFlightMinutes: number, segmentCount: number): number[] {
+  if (segmentCount <= 1) return [Math.max(45, totalFlightMinutes)];
+
+  if (segmentCount === 2) {
+    const firstLeg = Math.min(totalFlightMinutes - 45, roundToNearestFive(totalFlightMinutes * 0.55));
+    return [Math.max(45, firstLeg), Math.max(45, totalFlightMinutes - firstLeg)];
+  }
+
+  const baseMinutes = Math.max(45, Math.floor(totalFlightMinutes / segmentCount));
+  const minutes = Array.from({ length: segmentCount }, () => baseMinutes);
+  const assignedMinutes = baseMinutes * segmentCount;
+  minutes[minutes.length - 1] += Math.max(0, totalFlightMinutes - assignedMinutes);
+
+  return minutes;
+}
+
+function roundToNearestFive(value: number): number {
+  return Math.round(value / 5) * 5;
 }
 
 function layoverDetails(offer: FlightOffer, origin?: Place, destination?: Place): LayoverInfo[] {
@@ -354,9 +356,9 @@ function layoverDetails(offer: FlightOffer, origin?: Place, destination?: Place)
     }));
   }
 
-  const stops = parseStopsCount(offer.stopsText);
+  const stops = resolveStopsCount(offer);
 
-  if (!stops || stops < 1) return [];
+  if (stops === null || stops < 1) return [];
 
   const airlineHub = findAirlineHub(offer.carrier);
 
@@ -419,7 +421,7 @@ function formatDisplayDate(value: string): string {
 }
 
 function addMinutesToClock(value: string, minutesToAdd: number): string {
-  const minutes = parseTimeMinutes(value);
+  const minutes = parseClockMinutes(value);
 
   if (minutes === null) return "--:--";
 
@@ -433,6 +435,7 @@ function addMinutesToClock(value: string, minutesToAdd: number): string {
 type FlightLeg = {
   departureTime: string;
   arrivalTime: string;
+  carrier?: string;
   departureCity: string;
   departureCode: string;
   departureAirport: string;
@@ -479,10 +482,83 @@ function buildSegmentBlock(
   destination: Place,
 ): SegmentBlock {
   const layovers = layoverDetails(offer, origin, destination);
+
+  if (offer.segments && offer.segments.length > 1) {
+    const legs: FlightLeg[] = offer.segments.map((segment) => ({
+      departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+      arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+      carrier: segment.carrier,
+      departureCity: segment.originAirport || segment.originCode,
+      departureCode: segment.originCode || origin.code,
+      departureAirport: segment.originAirport || origin.name,
+      arrivalCity: segment.destinationAirport || segment.destinationCode,
+      arrivalCode: segment.destinationCode || destination.code,
+      arrivalAirport: segment.destinationAirport || destination.name,
+      flightMinutes: segment.durationMinutes || 60,
+    }));
+
+    return { label, date, offer, origin, destination, legs, layovers };
+  }
+
+  if (offer.segments?.length === 1 && layovers.length > 0) {
+    const segment = offer.segments[0];
+    const layover = layovers[0];
+    const totalMinutes = offer.durationMinutes || estimateOfferDurationMinutes(offer);
+    const layoverMinutes = layover.durationMinutes || 90;
+    const flightMinutes = Math.max(45, Math.floor((totalMinutes - layoverMinutes) / 2));
+
+    const legs: FlightLeg[] = [
+      {
+        departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+        arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+        departureCity: segment.originAirport || origin.cityName || origin.name,
+        departureCode: segment.originCode || origin.code,
+        departureAirport: segment.originAirport || origin.name,
+        arrivalCity: layover.city || layover.airport,
+        arrivalCode: layover.code,
+        arrivalAirport: layover.airport,
+        flightMinutes,
+      },
+      {
+        departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+        arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+        departureCity: layover.city || layover.airport,
+        departureCode: layover.code,
+        departureAirport: layover.airport,
+        arrivalCity: segment.destinationAirport || destination.cityName || destination.name,
+        arrivalCode: segment.destinationCode || destination.code,
+        arrivalAirport: segment.destinationAirport || destination.name,
+        flightMinutes,
+      },
+    ];
+
+    return { label, date, offer, origin, destination, legs, layovers };
+  }
+
+  if (offer.segments?.length === 1) {
+    const segment = offer.segments[0];
+    const legs: FlightLeg[] = [{
+      departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+      arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+      departureCity: segment.originAirport || origin.cityName || origin.name,
+      departureCode: segment.originCode || origin.code,
+      departureAirport: segment.originAirport || origin.name,
+      arrivalCity: segment.destinationAirport || destination.cityName || destination.name,
+      arrivalCode: segment.destinationCode || destination.code,
+      arrivalAirport: segment.destinationAirport || destination.name,
+      flightMinutes: segment.durationMinutes || estimateOfferDurationMinutes(offer),
+    }];
+
+    return { label, date, offer, origin, destination, legs, layovers };
+  }
+
   const totalDuration = estimateOfferDurationMinutes(offer);
   const totalLayoverMinutes = layovers.reduce((sum, layover) => sum + layover.durationMinutes, 0);
   const segmentCount = layovers.length + 1;
-  const flightMinutes = Math.max(45, Math.floor((totalDuration - totalLayoverMinutes) / segmentCount));
+  const flightMinutesBySegment = splitEstimatedFlightMinutes(
+    Math.max(45, totalDuration - totalLayoverMinutes),
+    segmentCount,
+  );
 
   let currentTime = offer.departureTime ? formatClockTime(offer.departureTime) : "--:--";
   const legs: FlightLeg[] = [];
@@ -497,6 +573,7 @@ function buildSegmentBlock(
       ? currentTime
       : addMinutesToClock(currentTime, layover.durationMinutes);
 
+    const flightMinutes = flightMinutesBySegment[index] ?? flightMinutesBySegment[flightMinutesBySegment.length - 1] ?? 60;
     const legArrivalTime = isLast && offer.arrivalTime
       ? formatClockTime(offer.arrivalTime)
       : addMinutesToClock(legDepartureTime, flightMinutes);
@@ -605,7 +682,7 @@ function SegmentBlockView({ block }: { block: SegmentBlock }) {
       <div className="space-y-3">
         {block.legs.map((leg, index) => (
           <div key={`${leg.departureCode}-${leg.arrivalCode}-${index}`}>
-            <FlightLegCard leg={leg} date={block.date} carrier={block.offer.carrier || "Unknown airline"} />
+            <FlightLegCard leg={leg} date={block.date} carrier={leg.carrier || block.offer.carrier || "Unknown airline"} />
 
             {index < block.legs.length - 1 && (
               <div className="flex items-center justify-center py-4">

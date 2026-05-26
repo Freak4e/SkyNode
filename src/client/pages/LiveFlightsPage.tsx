@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Activity, Clock3, Plane, Radar, RadioTower, Route, Satellite } from "lucide-react";
@@ -16,6 +16,31 @@ type LiveFlight = {
   rotation: number;
 };
 
+type WeatherSelection = {
+  status: "idle" | "loading" | "ready" | "error";
+  placeName?: string;
+  country?: string;
+  imageUrl?: string;
+  lat?: number;
+  lon?: number;
+  temperature?: number;
+  apparentTemperature?: number;
+  humidity?: number;
+  windSpeed?: number;
+  weatherCode?: number;
+  forecast?: ForecastDay[];
+  updatedAt?: string;
+  error?: string;
+};
+
+type ForecastDay = {
+  date: string;
+  min: number;
+  max: number;
+  precipitationChance?: number;
+  weatherCode?: number;
+};
+
 const liveFlights: LiveFlight[] = [
   { code: "JU621", airline: "Air Serbia", from: "LJU", to: "BEG", status: "Cruising", lat: 45.4, lon: 17.4, rotation: 120 },
   { code: "TK1062", airline: "Turkish Airlines", from: "LJU", to: "IST", status: "Climbing", lat: 43.7, lon: 20.9, rotation: 135 },
@@ -30,6 +55,78 @@ const stats = [
 ];
 
 export function LiveFlightsPage() {
+  const [weather, setWeather] = useState<WeatherSelection>({ status: "idle" });
+
+  const handleLocationSelect = useCallback(async ({ lat, lon }: { lat: number; lon: number }) => {
+    setWeather({
+      status: "loading",
+      lat,
+      lon,
+    });
+
+    try {
+      const weatherUrl = new URL("https://api.open-meteo.com/v1/forecast");
+      weatherUrl.searchParams.set("latitude", String(lat));
+      weatherUrl.searchParams.set("longitude", String(lon));
+      weatherUrl.searchParams.set("current", "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m");
+      weatherUrl.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max");
+      weatherUrl.searchParams.set("forecast_days", "5");
+      weatherUrl.searchParams.set("timezone", "auto");
+
+      const reverseUrl = new URL("https://nominatim.openstreetmap.org/reverse");
+      reverseUrl.searchParams.set("format", "jsonv2");
+      reverseUrl.searchParams.set("lat", String(lat));
+      reverseUrl.searchParams.set("lon", String(lon));
+      reverseUrl.searchParams.set("zoom", "10");
+      reverseUrl.searchParams.set("addressdetails", "1");
+
+      const [weatherResponse, locationResponse] = await Promise.allSettled([
+        fetch(weatherUrl),
+        fetch(reverseUrl),
+      ]);
+
+      if (weatherResponse.status !== "fulfilled" || !weatherResponse.value.ok) {
+        throw new Error("Weather API did not return data for this location.");
+      }
+
+      const weatherData = await weatherResponse.value.json();
+      const current = weatherData.current;
+      let placeName = "Selected location";
+      let country = "";
+
+      if (locationResponse.status === "fulfilled" && locationResponse.value.ok) {
+        const locationData = await locationResponse.value.json();
+        const address = locationData.address || {};
+        placeName = address.city || address.town || address.village || address.state || locationData.name || placeName;
+        country = address.country || "";
+      }
+      const imageUrl = await fetchWikipediaImage(placeName, country);
+
+      setWeather({
+        status: "ready",
+        placeName,
+        country,
+        imageUrl,
+        lat,
+        lon,
+        temperature: current.temperature_2m,
+        apparentTemperature: current.apparent_temperature,
+        humidity: current.relative_humidity_2m,
+        windSpeed: current.wind_speed_10m,
+        weatherCode: current.weather_code,
+        forecast: parseForecast(weatherData.daily),
+        updatedAt: current.time,
+      });
+    } catch (error) {
+      setWeather({
+        status: "error",
+        lat,
+        lon,
+        error: error instanceof Error ? error.message : "Could not load weather data.",
+      });
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
@@ -75,10 +172,12 @@ export function LiveFlightsPage() {
                   Radar preview online
                 </div>
 
-                <LiveFlightMap flights={liveFlights} />
+                <LiveFlightMap flights={liveFlights} onLocationSelect={handleLocationSelect} />
               </section>
 
               <aside className="space-y-4">
+                <WeatherPanel weather={weather} />
+
                 <div className="rounded-4xl border border-white/10 bg-white/10 p-5 shadow-2xl backdrop-blur">
                   <div className="flex items-center justify-between">
                     <div>
@@ -134,7 +233,227 @@ export function LiveFlightsPage() {
   );
 }
 
-function LiveFlightMap({ flights }: { flights: LiveFlight[] }) {
+function WeatherPanel({ weather }: { weather: WeatherSelection }) {
+  const coordinates = typeof weather.lat === "number" && typeof weather.lon === "number"
+    ? `${weather.lat.toFixed(3)}, ${weather.lon.toFixed(3)}`
+    : "Click any country or city on the map";
+  const forecastRange = weather.forecast ? getForecastRange(weather.forecast) : null;
+
+  return (
+    <div className="overflow-hidden rounded-4xl border border-emerald-300/20 bg-slate-950/75 shadow-2xl shadow-emerald-950/30 backdrop-blur">
+      <div className="relative min-h-38 overflow-hidden border-b border-white/10 bg-linear-to-br from-emerald-400/30 via-cyan-400/15 to-slate-950 p-5">
+        {weather.status === "ready" && weather.imageUrl && (
+          <img
+            src={weather.imageUrl}
+            alt={weather.placeName ? `${weather.placeName} city view` : "Selected city"}
+            className="absolute inset-0 h-full w-full object-cover opacity-45"
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+            }}
+          />
+        )}
+        <div className="absolute inset-0 bg-linear-to-t from-slate-950 via-slate-950/45 to-transparent" />
+        <div className="relative flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-100">Live Weather</p>
+            <h2 className="mt-2 text-2xl font-black">
+              {weather.status === "ready" ? weather.placeName : "Select a location"}
+            </h2>
+            {weather.status === "ready" && weather.country && (
+              <p className="mt-1 text-sm font-semibold text-slate-200">{weather.country}</p>
+            )}
+          </div>
+          <Radar className="h-7 w-7 text-emerald-200" />
+        </div>
+      </div>
+
+      <div className="p-5">
+        {weather.status === "idle" && (
+          <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
+            <p className="text-sm leading-6 text-slate-300">
+              Click on any country or city to load current weather, a city visual, and a 5-day forecast.
+            </p>
+          </div>
+        )}
+
+        {weather.status === "loading" && (
+          <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
+            <div className="h-3 w-32 animate-pulse rounded-full bg-emerald-200/40" />
+            <div className="mt-4 h-12 w-24 animate-pulse rounded-2xl bg-white/10" />
+            <p className="mt-4 text-xs text-slate-400">{coordinates}</p>
+          </div>
+        )}
+
+        {weather.status === "error" && (
+          <div className="rounded-3xl border border-red-300/20 bg-red-400/10 p-5">
+            <p className="text-sm font-bold text-red-100">Weather unavailable</p>
+            <p className="mt-1 text-xs text-red-100/80">{weather.error}</p>
+            <p className="mt-2 text-xs text-slate-400">{coordinates}</p>
+          </div>
+        )}
+
+        {weather.status === "ready" && (
+          <>
+            <div className="rounded-3xl border border-white/10 bg-white/6 p-5">
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="text-6xl font-black tracking-tight text-white">
+                    {Math.round(weather.temperature ?? 0)}°C
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-emerald-100">
+                    {weatherCodeLabel(weather.weatherCode)} · feels like {Math.round(weather.apparentTemperature ?? 0)}°C
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-2 text-right">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-emerald-100">Now</p>
+                  <p className="mt-1 text-sm font-black text-white">{weatherIcon(weather.weatherCode)}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Wind</p>
+                <p className="mt-2 text-lg font-black text-white">{Math.round(weather.windSpeed ?? 0)} km/h</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/6 p-4">
+                <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-400">Humidity</p>
+                <p className="mt-2 text-lg font-black text-white">{Math.round(weather.humidity ?? 0)}%</p>
+              </div>
+            </div>
+
+            {weather.forecast && forecastRange && (
+              <div className="mt-4 rounded-3xl border border-white/10 bg-white/6 p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-sm font-black text-white">Next 5 days</p>
+                  <p className="text-xs font-bold text-slate-400">Open-Meteo forecast</p>
+                </div>
+                <div className="space-y-3">
+                  {weather.forecast.map((day) => (
+                    <ForecastRow key={day.date} day={day} range={forecastRange} />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="mt-4 text-xs leading-5 text-slate-400">
+              Coordinates: {coordinates}
+              {weather.updatedAt ? ` · Updated ${new Date(weather.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
+            </p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ForecastRow({ day, range }: { day: ForecastDay; range: { min: number; max: number } }) {
+  const span = Math.max(1, range.max - range.min);
+  const left = ((day.min - range.min) / span) * 100;
+  const width = Math.max(8, ((day.max - day.min) / span) * 100);
+
+  return (
+    <div className="grid grid-cols-[3.8rem_1.5rem_1fr_4.5rem] items-center gap-3 text-sm">
+      <span className="font-black text-slate-200">{formatForecastDay(day.date)}</span>
+      <span className="text-base">{weatherIcon(day.weatherCode)}</span>
+      <div className="relative h-2 rounded-full bg-white/10">
+        <span
+          className="absolute top-0 h-2 rounded-full bg-linear-to-r from-cyan-300 to-emerald-300 shadow-[0_0_16px_rgba(45,212,191,0.45)]"
+          style={{ left: `${left}%`, width: `${width}%` }}
+        />
+      </div>
+      <span className="text-right font-black text-white">
+        {Math.round(day.min)}°/{Math.round(day.max)}°
+      </span>
+      {typeof day.precipitationChance === "number" && (
+        <span className="col-start-3 text-xs font-semibold text-slate-400">
+          {day.precipitationChance}% rain chance
+        </span>
+      )}
+    </div>
+  );
+}
+
+function weatherCodeLabel(code: number | undefined): string {
+  if (code === undefined) return "Current weather";
+  if (code === 0) return "Clear sky";
+  if ([1, 2, 3].includes(code)) return "Partly cloudy";
+  if ([45, 48].includes(code)) return "Fog";
+  if ([51, 53, 55, 56, 57].includes(code)) return "Drizzle";
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "Rain";
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return "Snow";
+  if ([95, 96, 99].includes(code)) return "Thunderstorm";
+  return "Current weather";
+}
+
+function parseForecast(daily: any): ForecastDay[] {
+  const dates: string[] = daily?.time || [];
+
+  return dates.slice(0, 5).map((date, index) => ({
+    date,
+    min: Number(daily.temperature_2m_min?.[index] ?? 0),
+    max: Number(daily.temperature_2m_max?.[index] ?? 0),
+    precipitationChance: daily.precipitation_probability_max?.[index],
+    weatherCode: daily.weather_code?.[index],
+  }));
+}
+
+function getForecastRange(forecast: ForecastDay[]): { min: number; max: number } {
+  return {
+    min: Math.min(...forecast.map((day) => day.min)),
+    max: Math.max(...forecast.map((day) => day.max)),
+  };
+}
+
+function formatForecastDay(date: string): string {
+  return new Intl.DateTimeFormat("en", { weekday: "short" }).format(new Date(date));
+}
+
+async function fetchWikipediaImage(placeName: string, country: string): Promise<string | undefined> {
+  const candidates = [
+    placeName,
+    country ? `${placeName}, ${country}` : "",
+    country,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const url = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(candidate)}`;
+      const response = await fetch(url);
+
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const imageUrl = data?.originalimage?.source || data?.thumbnail?.source;
+
+      if (typeof imageUrl === "string" && imageUrl.startsWith("https://")) {
+        return imageUrl;
+      }
+    } catch {
+      // Try the next candidate; the weather card has a gradient fallback.
+    }
+  }
+
+  return undefined;
+}
+
+function weatherIcon(code: number | undefined): string {
+  if (code === 0) return "☀";
+  if (code !== undefined && [1, 2, 3].includes(code)) return "◐";
+  if (code !== undefined && [45, 48].includes(code)) return "≋";
+  if (code !== undefined && [51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return "☂";
+  if (code !== undefined && [71, 73, 75, 77, 85, 86].includes(code)) return "❄";
+  if (code !== undefined && [95, 96, 99].includes(code)) return "ϟ";
+  return "◌";
+}
+
+function LiveFlightMap({
+  flights,
+  onLocationSelect,
+}: {
+  flights: LiveFlight[];
+  onLocationSelect: (location: { lat: number; lon: number }) => void;
+}) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
@@ -156,6 +475,13 @@ function LiveFlightMap({ flights }: { flights: LiveFlight[] }) {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
+
+    map.on("click", (event: L.LeafletMouseEvent) => {
+      onLocationSelect({
+        lat: event.latlng.lat,
+        lon: event.latlng.lng,
+      });
+    });
 
     const bounds = L.latLngBounds([]);
 
@@ -199,7 +525,7 @@ function LiveFlightMap({ flights }: { flights: LiveFlight[] }) {
       map.remove();
       mapRef.current = null;
     };
-  }, [flights]);
+  }, [flights, onLocationSelect]);
 
   return (
     <>

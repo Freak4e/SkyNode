@@ -9,7 +9,8 @@ import logo from "../../../assets/logo_skynode_horizontal.png";
 const navLinks = [
   { label: "Flights", to: "/search" },
   { label: "Live Flights", to: "/live-flights", accent: true },
-  { label: "AI Planner", to: "/planner" },
+  { label: "Trips", to: "/planner" },
+  { label: "All trips", to: "/trips" },
   { label: "Destinations", to: "/destinations" },
   { label: "Assistant", to: "/assistant" },
   { label: "About", to: "/about" },

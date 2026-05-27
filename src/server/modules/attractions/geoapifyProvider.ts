@@ -20,10 +20,27 @@ type GeoapifyResponse = {
 type GeoapifyGeocodeResponse = {
   features?: Array<{
     properties?: {
+      name?: string;
+      formatted?: string;
       lat?: number;
       lon?: number;
     };
   }>;
+};
+
+export type GeoapifyGeocodePoint = {
+  title: string;
+  address: string;
+  lat: number;
+  lon: number;
+};
+
+type GeocodeTextOptions = {
+  center?: {
+    lat: number;
+    lon: number;
+  };
+  radiusMeters?: number;
 };
 
 export async function fetchAttractions(destination: string): Promise<Attraction[]> {
@@ -58,14 +75,30 @@ export async function fetchAttractions(destination: string): Promise<Attraction[
 }
 
 async function geocodeDestination(destination: string, apiKey: string) {
+  return geocodeText(destination, apiKey);
+}
+
+export async function geocodeText(
+  text: string,
+  apiKey = config.geoapify.apiKey,
+  options: GeocodeTextOptions = {},
+): Promise<GeoapifyGeocodePoint | null> {
+  if (!apiKey) {
+    return null;
+  }
+
   const response = await axios.get<GeoapifyGeocodeResponse>(
     "https://api.geoapify.com/v1/geocode/search",
     {
       timeout: config.geoapify.timeoutMs,
       params: {
         apiKey,
-        text: destination,
+        text,
         limit: 1,
+        ...(options.center ? {
+          bias: `proximity:${options.center.lon},${options.center.lat}`,
+          filter: `circle:${options.center.lon},${options.center.lat},${options.radiusMeters || 25000}`,
+        } : {}),
       },
     },
   );
@@ -75,7 +108,12 @@ async function geocodeDestination(destination: string, apiKey: string) {
     return null;
   }
 
-  return { lat: properties.lat, lon: properties.lon };
+  return {
+    title: properties.name || text,
+    address: properties.formatted || text,
+    lat: properties.lat,
+    lon: properties.lon,
+  };
 }
 
 function normalizeAttraction(feature: GeoapifyFeature, index: number): Attraction | null {

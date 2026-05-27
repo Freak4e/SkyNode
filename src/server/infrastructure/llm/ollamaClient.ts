@@ -34,6 +34,14 @@ type RawItem = {
   estimatedCost?: number;
 };
 
+type PlanningProfile = {
+  itemsPerDay: number;
+  paidActivitiesPerDay: number;
+  premiumActivitiesPerDay: number;
+  dailyCostTarget: string;
+  styleRule: string;
+};
+
 export async function generateItineraryWithOllama(
   request: GenerateItineraryRequest,
   attractions: Attraction[],
@@ -62,7 +70,7 @@ export async function generateItineraryWithOllama(
       ],
       options: {
         temperature: 0.4,
-        num_predict: 1200,
+        num_predict: 1800,
       },
     },
     {
@@ -80,6 +88,7 @@ export async function generateItineraryWithOllama(
 }
 
 export function buildItineraryPrompt(request: GenerateItineraryRequest, attractions: Attraction[]): string {
+  const profile = planningProfile(request);
   const context = attractions.slice(0, 10).map((attraction) => ({
     name: attraction.name,
     category: attraction.category,
@@ -93,6 +102,7 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
     days: request.days,
     budget: request.budget,
     pace: request.pace,
+    planningProfile: profile,
     interests: request.interests,
     selectedFlight: request.selectedFlight
       ? {
@@ -123,14 +133,20 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
     },
     rules: [
       `Return exactly ${request.days} days.`,
-      "Each day must contain exactly three items: morning, afternoon, evening.",
+      `Each day must contain exactly ${profile.itemsPerDay} items.`,
+      `Each day should include at least ${profile.paidActivitiesPerDay} paid activities.`,
+      `Each day should include at least ${profile.premiumActivitiesPerDay} premium activities.`,
+      `Daily activity cost target: ${profile.dailyCostTarget}.`,
+      profile.styleRule,
+      "Use timeOfDay values from morning, afternoon, evening. Multiple items may share a timeOfDay for packed days.",
       "Use provided attractions when possible.",
       "Prefer specific local stops over generic activity titles.",
-      "Do not invent ticketed attractions if provided free public sights fit the request.",
+      "Do not make every item free unless the profile is relaxed low budget.",
+      "Premium activities can be guided tours, museum tickets, boat rides, tastings, workshops, performances, rooftop/viewpoint tickets, spa visits, or curated experiences.",
       "Keep estimatedCost numeric.",
       "Estimate user-paid activity costs, not total travel costs.",
-      "Free public squares, streets, viewpoints, walks, monuments and parks should usually be 0.",
-      "Museums are usually 8-20. Food activities are usually 12-35. Nightlife is usually 15-45.",
+      "Free public squares, streets, casual walks, monuments and parks can be 0, but high budget itineraries should balance them with paid experiences.",
+      "Museums are usually 8-25. Food activities are usually 12-55. Nightlife is usually 15-60. Premium guided experiences are usually 35-120.",
       "Do not assign the same estimatedCost to every item.",
       "Each day estimatedCost must equal the sum of that day's item estimatedCost values.",
       "If interests include food, include one concrete meal, cafe, tasting, restaurant, or market food stop per day.",
@@ -182,15 +198,18 @@ function normalizeDay(
   request: GenerateItineraryRequest,
   attractions: Attraction[],
 ): ItineraryDay {
-  const items = ["morning", "afternoon", "evening"].map((timeOfDay, index) =>
-    normalizeItem(rawDay?.items?.[index], timeOfDay as ItineraryItem["timeOfDay"], request, attractions),
-  );
+  const profile = planningProfile(request);
+  const rawItems = Array.isArray(rawDay?.items) ? rawDay.items : [];
+  const itemCount = profile.itemsPerDay;
+  const items = applyBudgetLogic(Array.from({ length: itemCount }, (_, index) =>
+    normalizeItem(rawItems[index], itemTimeOfDay(index, itemCount), request, attractions, index),
+  ), request, attractions);
   const estimatedCost = items.reduce((sum, item) => sum + item.estimatedCost, 0);
 
   return {
     dayNumber,
     title: rawDay?.title || `Day ${dayNumber}: City highlights`,
-    summary: rawDay?.summary || "A balanced day built around destination highlights.",
+    summary: rawDay?.summary || profile.styleRule,
     estimatedCost,
     items,
   };
@@ -201,14 +220,17 @@ function normalizeItem(
   timeOfDay: ItineraryItem["timeOfDay"],
   request: GenerateItineraryRequest,
   attractions: Attraction[],
+  index: number,
 ): ItineraryItem {
-  const title = rawItem?.title || `${capitalize(timeOfDay)} activity`;
-  const description = rawItem?.description || "Explore a local highlight at a comfortable pace.";
-  const attractionName = rawItem?.attractionName;
+  const fallback = fallbackItem(index, timeOfDay, request, attractions);
+  const title = rawItem?.title || fallback.title;
+  const description = rawItem?.description || fallback.description;
+  const attractionName = rawItem?.attractionName || fallback.attractionName;
   const matchedAttraction = findAttraction(attractions, attractionName || title);
+  const normalizedTimeOfDay = isTimeOfDay(rawItem?.timeOfDay) ? rawItem.timeOfDay : timeOfDay;
 
   return {
-    timeOfDay,
+    timeOfDay: normalizedTimeOfDay,
     title,
     description,
     attractionName,
@@ -217,10 +239,177 @@ function normalizeItem(
       title,
       description,
       attractionName,
-      timeOfDay,
+      timeOfDay: normalizedTimeOfDay,
       budget: request.budget,
       attraction: matchedAttraction,
     }),
+  };
+}
+
+function planningProfile(request: GenerateItineraryRequest): PlanningProfile {
+  const matrix: Record<GenerateItineraryRequest["pace"], Record<GenerateItineraryRequest["budget"], PlanningProfile>> = {
+    relaxed: {
+      low: {
+        itemsPerDay: 2,
+        paidActivitiesPerDay: 0,
+        premiumActivitiesPerDay: 0,
+        dailyCostTarget: "$0-35",
+        styleRule: "Relaxed low budget: fewer stops, mostly free sights, one optional cheap paid stop.",
+      },
+      medium: {
+        itemsPerDay: 3,
+        paidActivitiesPerDay: 1,
+        premiumActivitiesPerDay: 0,
+        dailyCostTarget: "$25-80",
+        styleRule: "Relaxed medium budget: easy pacing, one paid anchor activity, comfortable meal or cafe.",
+      },
+      high: {
+        itemsPerDay: 3,
+        paidActivitiesPerDay: 2,
+        premiumActivitiesPerDay: 1,
+        dailyCostTarget: "$80-180",
+        styleRule: "Relaxed high budget: fewer stops, but upgraded experiences and premium moments.",
+      },
+    },
+    balanced: {
+      low: {
+        itemsPerDay: 3,
+        paidActivitiesPerDay: 0,
+        premiumActivitiesPerDay: 0,
+        dailyCostTarget: "$0-45",
+        styleRule: "Balanced low budget: three practical stops, mostly free sights with cheap food or transit.",
+      },
+      medium: {
+        itemsPerDay: 3,
+        paidActivitiesPerDay: 1,
+        premiumActivitiesPerDay: 0,
+        dailyCostTarget: "$40-110",
+        styleRule: "Balanced medium budget: classic morning/afternoon/evening plan with one or two paid activities.",
+      },
+      high: {
+        itemsPerDay: 4,
+        paidActivitiesPerDay: 2,
+        premiumActivitiesPerDay: 1,
+        dailyCostTarget: "$110-240",
+        styleRule: "Balanced high budget: four polished stops with at least one premium curated experience.",
+      },
+    },
+    packed: {
+      low: {
+        itemsPerDay: 4,
+        paidActivitiesPerDay: 1,
+        premiumActivitiesPerDay: 0,
+        dailyCostTarget: "$15-70",
+        styleRule: "Packed low budget: more stops, mostly free walking-friendly sights, one cheap paid anchor.",
+      },
+      medium: {
+        itemsPerDay: 4,
+        paidActivitiesPerDay: 2,
+        premiumActivitiesPerDay: 0,
+        dailyCostTarget: "$70-160",
+        styleRule: "Packed medium budget: four concrete stops with multiple paid activities and efficient routing.",
+      },
+      high: {
+        itemsPerDay: 5,
+        paidActivitiesPerDay: 3,
+        premiumActivitiesPerDay: 1,
+        dailyCostTarget: "$160-320",
+        styleRule: "Packed high budget: five concrete stops, multiple paid activities, and one premium experience.",
+      },
+    },
+  };
+
+  return matrix[request.pace][request.budget];
+}
+
+function itemTimeOfDay(index: number, itemCount: number): ItineraryItem["timeOfDay"] {
+  if (itemCount <= 3) {
+    return ["morning", "afternoon", "evening"][index] as ItineraryItem["timeOfDay"];
+  }
+
+  if (itemCount === 4) {
+    return ["morning", "afternoon", "afternoon", "evening"][index] as ItineraryItem["timeOfDay"];
+  }
+
+  return ["morning", "morning", "afternoon", "afternoon", "evening"][index] as ItineraryItem["timeOfDay"];
+}
+
+function isTimeOfDay(value: string | undefined): value is ItineraryItem["timeOfDay"] {
+  return value === "morning" || value === "afternoon" || value === "evening";
+}
+
+function applyBudgetLogic(
+  items: ItineraryItem[],
+  request: GenerateItineraryRequest,
+  attractions: Attraction[],
+): ItineraryItem[] {
+  const profile = planningProfile(request);
+  let paidCount = items.filter((item) => item.estimatedCost > 0).length;
+  let premiumCount = items.filter((item) => item.estimatedCost >= 35 || isPremiumActivity(itemText(item))).length;
+
+  return items.map((item, index) => {
+    if (paidCount >= profile.paidActivitiesPerDay && premiumCount >= profile.premiumActivitiesPerDay) {
+      return item;
+    }
+
+    if (request.budget === "low" && profile.paidActivitiesPerDay === 0 && item.estimatedCost === 0) {
+      return item;
+    }
+
+    if (isFoodActivity(itemText(item))) {
+      return item;
+    }
+
+    const attraction = attractions[index % Math.max(attractions.length, 1)];
+    const needsPremium = premiumCount < profile.premiumActivitiesPerDay;
+    const upgradedItem: ItineraryItem = {
+      ...item,
+      title: needsPremium ? `Premium ${item.title}` : item.title,
+      description: needsPremium
+        ? "Upgrade this stop into a curated paid experience matching the selected budget."
+        : item.description,
+      attractionName: item.attractionName || attraction?.name,
+      estimatedCost: needsPremium
+        ? budgetAmount(request.budget, 20, 45, 90)
+        : Math.max(item.estimatedCost, budgetAmount(request.budget, 8, 18, 35)),
+    };
+
+    if (item.estimatedCost === 0 && upgradedItem.estimatedCost > 0) {
+      paidCount += 1;
+    }
+
+    if (needsPremium) {
+      premiumCount += 1;
+    }
+
+    return upgradedItem;
+  });
+}
+
+function itemText(item: ItineraryItem): string {
+  return [item.title, item.description, item.attractionName].filter(Boolean).join(" ").toLowerCase();
+}
+
+function fallbackItem(
+  index: number,
+  timeOfDay: ItineraryItem["timeOfDay"],
+  request: GenerateItineraryRequest,
+  attractions: Attraction[],
+): Pick<ItineraryItem, "title" | "description" | "attractionName"> {
+  const attraction = attractions[index % Math.max(attractions.length, 1)];
+
+  if (request.budget === "high" && (index === 1 || index === 3)) {
+    return {
+      title: `Premium ${request.destinationName} experience`,
+      description: "Add a curated paid experience that fits the high-budget trip style.",
+      attractionName: attraction?.name,
+    };
+  }
+
+  return {
+    title: attraction?.name || `${capitalize(timeOfDay)} ${request.destinationName} highlight`,
+    description: "Explore a concrete local stop matched to the selected trip style.",
+    attractionName: attraction?.name,
   };
 }
 
@@ -278,6 +467,10 @@ function estimateCostFromContext(text: string, context: CostContext): number | n
 
   if (isTourActivity(text)) {
     return budgetAmount(context.budget, 12, 28, 55);
+  }
+
+  if (isPremiumActivity(text)) {
+    return budgetAmount(context.budget, 25, 55, 95);
   }
 
   if (isShoppingActivity(text)) {
@@ -342,6 +535,12 @@ function isTourActivity(text: string): boolean {
     /\bworkshop\b/,
     /\bclass\b/,
   ].some((pattern) => pattern.test(text));
+}
+
+function isPremiumActivity(text: string): boolean {
+  return ["premium", "curated", "skip the line", "private", "spa", "rooftop", "performance", "ticketed", "experience"].some((word) =>
+    text.includes(word),
+  );
 }
 
 function isShoppingActivity(text: string): boolean {

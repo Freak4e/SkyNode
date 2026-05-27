@@ -77,6 +77,32 @@ export type Attraction = {
   source: "geoapify" | "mock";
 };
 
+export type GeocodeRequestItem = {
+  id: string;
+  title: string;
+  description?: string;
+  attractionName?: string;
+};
+
+export type GeocodeRequest = {
+  destinationName: string;
+  items: GeocodeRequestItem[];
+};
+
+export type GeocodedMapPoint = {
+  id: string;
+  title: string;
+  address: string;
+  lat: number;
+  lon: number;
+  source: "geoapify";
+};
+
+export type GeocodeResponse = {
+  points: GeocodedMapPoint[];
+  warnings: string[];
+};
+
 export type ItineraryItem = {
   timeOfDay: "morning" | "afternoon" | "evening";
   title: string;

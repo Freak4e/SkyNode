@@ -54,7 +54,7 @@ export async function generateItineraryWithGemini(
       },
     ],
     temperature: 0.35,
-    maxOutputTokens: 1800,
+    maxOutputTokens: 2600,
     responseMimeType: "application/json",
   });
 

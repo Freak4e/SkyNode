@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { attractionsRoute } from "./modules/attractions/attractionsRoute.js";
 import { chatRoute } from "./modules/chat/chatRoute.js";
+import { geocodingRoute } from "./modules/geocoding/geocodingRoute.js";
 import { itinerariesRoute } from "./modules/itineraries/itinerariesRoute.js";
 import { tripsRoute } from "./modules/trips/tripsRoute.js";
 import { flightsRoute } from "./routes/flightsRoute.js";
@@ -16,6 +17,7 @@ export function createApp() {
   app.use("/api/flights", flightsRoute);
   app.use("/api/places", placesRoute);
   app.use("/api/attractions", attractionsRoute);
+  app.use("/api/geocode", geocodingRoute);
   app.use("/api/itineraries", itinerariesRoute);
   app.use("/api/trips", tripsRoute);
   app.use("/api/chat", chatRoute);

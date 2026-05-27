@@ -54,6 +54,9 @@ TRAVELPAYOUTS_ACCESS_TOKEN=your_travelpayouts_token
 TRAVELPAYOUTS_CURRENCY=USD
 GEOAPIFY_API_KEY=your_geoapify_key
 DATABASE_URL=your_supabase_postgres_pooler_url
+VITE_SUPABASE_URL=https://your-project-ref.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SECRET_KEY=your_server_only_supabase_secret_key
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=your_google_ai_studio_key
 GEMINI_MODEL=gemini-2.5-flash
@@ -66,6 +69,10 @@ OLLAMA_TIMEOUT_MS=300000
 ```
 
 Each developer keeps their own `.env` file. It is ignored by Git, so LLM settings can differ per user or machine.
+
+`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` come from Supabase Project Settings -> API. The anon key is safe to use in the browser; do not expose the service role key.
+
+`SUPABASE_SECRET_KEY` is used only by the Express server for account deletion. Keep it in server-side `.env` only; never expose it as a `VITE_` variable.
 
 `LLM_PROVIDER=gemini` uses Google Gemini through the API and does not require local model files. `LLM_PROVIDER=ollama` uses a local Ollama server. Do not put the local `ollama.exe` path in `.env`; SkyNode talks to Ollama through the HTTP server at `OLLAMA_BASE_URL`.
 

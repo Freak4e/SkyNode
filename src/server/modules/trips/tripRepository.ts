@@ -37,6 +37,7 @@ type TripSummaryRow = {
   interests: string[];
   selected_flight?: FlightOffer | null;
   estimated_total_cost: number;
+  generation_mode?: GeneratedItinerary["generationMode"] | null;
   created_at: string;
 };
 
@@ -68,7 +69,7 @@ type ItineraryItemRow = {
   sort_order: number;
 };
 
-export async function saveTripDraft(request: SaveTripRequest): Promise<SaveTripResponse> {
+export async function saveTripDraft(request: SaveTripRequest, userId: string): Promise<SaveTripResponse> {
   await ensureSchema();
 
   const tripResult = await query<TripRow>(
@@ -84,9 +85,11 @@ export async function saveTripDraft(request: SaveTripRequest): Promise<SaveTripR
         pace,
         interests,
         selected_flight,
-        estimated_total_cost
+        estimated_total_cost,
+        generation_mode,
+        user_id
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       returning id, created_at
     `,
     [
@@ -101,6 +104,8 @@ export async function saveTripDraft(request: SaveTripRequest): Promise<SaveTripR
       request.interests,
       request.selectedFlight ? JSON.stringify(request.selectedFlight) : null,
       request.itinerary.estimatedTotalCost,
+      request.itinerary.generationMode,
+      userId,
     ],
   );
   const trip = tripResult.rows[0];
@@ -168,7 +173,7 @@ export async function saveTripDraft(request: SaveTripRequest): Promise<SaveTripR
   };
 }
 
-export async function listTrips(): Promise<SavedTripSummary[]> {
+export async function listTrips(userId: string): Promise<SavedTripSummary[]> {
   await ensureSchema();
 
   const result = await query<TripSummaryRow>(
@@ -187,15 +192,17 @@ export async function listTrips(): Promise<SavedTripSummary[]> {
         estimated_total_cost,
         created_at::text
       from trips
+      where user_id = $1
       order by created_at desc
       limit 30
     `,
+    [userId],
   );
 
   return result.rows.map(mapTripSummary);
 }
 
-export async function getTripById(tripId: string): Promise<SavedTripDetail | null> {
+export async function getTripById(tripId: string, userId: string): Promise<SavedTripDetail | null> {
   await ensureSchema();
 
   const tripResult = await query<TripSummaryRow>(
@@ -213,12 +220,13 @@ export async function getTripById(tripId: string): Promise<SavedTripDetail | nul
         interests,
         selected_flight,
         estimated_total_cost,
+        generation_mode,
         created_at::text
       from trips
-      where id = $1
+      where id = $1 and user_id = $2
       limit 1
     `,
-    [tripId],
+    [tripId, userId],
   );
   const trip = tripResult.rows[0];
 
@@ -293,7 +301,7 @@ export async function getTripById(tripId: string): Promise<SavedTripDetail | nul
     days: itineraryDays,
     attractions,
     estimatedTotalCost: trip.estimated_total_cost,
-    generationMode: "ollama",
+    generationMode: trip.generation_mode || "ollama",
   };
 
   return {
@@ -306,6 +314,7 @@ export async function getTripById(tripId: string): Promise<SavedTripDetail | nul
 export async function applyTripChangeProposal(
   tripId: string,
   proposal: TripChangeProposal,
+  userId: string,
 ): Promise<SavedTripDetail | null> {
   await ensureSchema();
 
@@ -319,11 +328,12 @@ export async function applyTripChangeProposal(
       `
         update trips
         set estimated_total_cost = $2,
+            generation_mode = $3,
             updated_at = now()
-        where id = $1
+        where id = $1 and user_id = $4
         returning id, created_at
       `,
-      [tripId, proposal.itinerary.estimatedTotalCost],
+      [tripId, proposal.itinerary.estimatedTotalCost, proposal.itinerary.generationMode, userId],
     );
 
     if (!tripResult.rows[0]) {
@@ -385,7 +395,7 @@ export async function applyTripChangeProposal(
     client.release();
   }
 
-  return getTripById(tripId);
+  return getTripById(tripId, userId);
 }
 
 function mapTripSummary(row: TripSummaryRow): SavedTripSummary {

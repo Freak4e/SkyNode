@@ -6,9 +6,12 @@ import type {
   TravelChatRequest,
   TravelChatResponse,
 } from "../../shared/types.js";
+import { authHeaders } from "./authHeaders.js";
 
 export async function listSavedTrips(): Promise<SavedTripSummary[]> {
-  const response = await fetch("/api/trips");
+  const response = await fetch("/api/trips", {
+    headers: await authHeaders(),
+  });
   const body = await response.json() as { trips: SavedTripSummary[]; warnings?: string[] };
 
   if (!response.ok) {
@@ -19,7 +22,9 @@ export async function listSavedTrips(): Promise<SavedTripSummary[]> {
 }
 
 export async function loadSavedTrip(tripId: string): Promise<SavedTripDetail> {
-  const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}`);
+  const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}`, {
+    headers: await authHeaders(),
+  });
   const body = await response.json() as { trip: SavedTripDetail | null; warnings?: string[] };
 
   if (!response.ok || !body.trip) {
@@ -52,7 +57,7 @@ export async function sendTravelChatMessage(input: {
 export async function applyTripChange(tripId: string, proposal: TripChangeProposal): Promise<SavedTripDetail> {
   const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}/itinerary`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ proposal }),
   });
   const body = await response.json() as { trip: SavedTripDetail | null; warnings?: string[] };

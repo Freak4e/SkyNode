@@ -1,8 +1,10 @@
-import { Globe2, Plane } from "lucide-react";
-import { useState } from "react";
+import { Globe2, Menu, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { CurrencyCode } from "../../shared/types.js";
+import { useAuth } from "../auth/AuthContext";
 import { currencyOptions, getStoredCurrency, storeCurrency } from "../utils/currency.js";
+import logo from "../../../assets/logo_skynode_horizontal.png";
 
 const navLinks = [
   { label: "Flights", to: "/search" },
@@ -17,26 +19,49 @@ type Props = { transparent?: boolean };
 
 export function Navbar({ transparent = false }: Props) {
   const location = useLocation();
+  const { user } = useAuth();
   const [currency, setCurrency] = useState<CurrencyCode>(() => getStoredCurrency());
+  const [scrolled, setScrolled] = useState(false);
+  const overlay = transparent && !scrolled;
+
+  useEffect(() => {
+    if (!transparent) {
+      setScrolled(false);
+      return;
+    }
+
+    function updateScrolled() {
+      setScrolled(window.scrollY > 24);
+    }
+
+    updateScrolled();
+    window.addEventListener("scroll", updateScrolled, { passive: true });
+    return () => window.removeEventListener("scroll", updateScrolled);
+  }, [transparent]);
 
   function handleCurrencyChange(nextCurrency: CurrencyCode) {
     setCurrency(nextCurrency);
     storeCurrency(nextCurrency);
   }
 
+  const avatarUrl = typeof user?.user_metadata?.avatar_url === "string"
+    ? user.user_metadata.avatar_url
+    : typeof user?.user_metadata?.picture === "string"
+    ? user.user_metadata.picture
+    : "";
+
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 transition-all duration-300 ${
-        transparent ? "bg-transparent" : "bg-white/90 backdrop-blur-md border-b border-slate-100 shadow-sm"
+        overlay ? "bg-transparent" : "bg-white/90 backdrop-blur-md border-b border-slate-100 shadow-sm"
       }`}
     >
       <Link to="/" className="flex items-center gap-2 no-underline">
-        <div className="w-9 h-9 rounded-xl bg-linear-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-md">
-          <Plane className="w-5 h-5 text-white" strokeWidth={2.5} />
-        </div>
-        <span className={`text-lg font-bold tracking-tight ${transparent ? "text-white" : "text-slate-900"}`}>
-          SkyNode
-        </span>
+        <img
+          src={logo}
+          alt="SkyNode"
+          className={`h-16 w-auto object-contain transition duration-300 ${overlay ? "brightness-0 invert" : ""}`}
+        />
       </Link>
 
       <div className="hidden md:flex items-center gap-7">
@@ -47,14 +72,14 @@ export function Navbar({ transparent = false }: Props) {
             className={
               link.accent
                 ? `rounded-full px-3 py-1.5 text-sm font-black no-underline transition-all ${
-                    location.pathname === link.to
+                    location.pathname === link.to && !overlay
                       ? "bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25"
-                      : transparent
+                      : overlay
                       ? "bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/30 hover:bg-emerald-300 hover:text-slate-950"
                       : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-500 hover:text-white hover:ring-emerald-500"
                   }`
                 : `text-sm font-medium transition-colors no-underline ${
-                    transparent
+                    overlay
                       ? location.pathname === link.to
                         ? "text-white"
                         : "text-white/70 hover:text-white"
@@ -72,7 +97,7 @@ export function Navbar({ transparent = false }: Props) {
       <div className="flex items-center gap-3">
         <label
           className={`hidden items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition-colors sm:flex ${
-            transparent
+            overlay
               ? "border-white/20 bg-white/10 text-white"
               : "border-slate-200 bg-white text-slate-700 shadow-sm"
           }`}
@@ -81,7 +106,7 @@ export function Navbar({ transparent = false }: Props) {
           <select
             value={currency}
             onChange={(event) => handleCurrencyChange(event.target.value as CurrencyCode)}
-            className={`bg-transparent text-xs font-black outline-none ${transparent ? "text-white" : "text-slate-800"}`}
+            className={`bg-transparent text-xs font-black outline-none ${overlay ? "text-white" : "text-slate-800"}`}
             aria-label="Currency"
           >
             {currencyOptions.map((option) => (
@@ -91,15 +116,35 @@ export function Navbar({ transparent = false }: Props) {
             ))}
           </select>
         </label>
-        <button className={`text-sm font-medium transition-colors ${transparent ? "text-white/80 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}>
-          Sign in
-        </button>
-        <Link
-          to="/planner"
-          className="text-sm font-semibold px-4 py-2 rounded-full bg-linear-to-r from-blue-500 to-cyan-400 text-white shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200 no-underline"
-        >
-          Get started
-        </Link>
+        {user ? (
+          <Link
+            to="/account"
+            className={`flex items-center gap-2 rounded-full border px-2 py-1.5 no-underline shadow-sm transition ${
+              overlay
+                ? "border-white/25 bg-white/10 text-white hover:bg-white/20"
+                : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
+            }`}
+            title="My account"
+          >
+            {avatarUrl ? (
+              <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+            ) : (
+              <span className={`grid h-7 w-7 place-items-center rounded-full ${
+                overlay ? "bg-white/20 text-white" : "bg-slate-900 text-white"
+              }`}>
+                <UserRound className="h-4 w-4" />
+              </span>
+            )}
+            <Menu className="h-5 w-5" />
+          </Link>
+        ) : (
+          <Link
+            to="/auth"
+            className={`text-sm font-medium no-underline transition-colors ${overlay ? "text-white/80 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
+          >
+            Sign in
+          </Link>
+        )}
       </div>
     </nav>
   );

@@ -27,6 +27,15 @@ export async function ensureSchema(): Promise<void> {
       updated_at timestamptz not null default now()
     );
 
+    alter table trips
+      add column if not exists user_id uuid;
+
+    alter table trips
+      add column if not exists generation_mode text not null default 'ollama';
+
+    create index if not exists trips_user_created_idx
+      on trips(user_id, created_at desc);
+
     create table if not exists trip_attractions (
       id uuid primary key default gen_random_uuid(),
       trip_id uuid not null references trips(id) on delete cascade,

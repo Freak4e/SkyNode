@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { applyTripChangeProposal, getTripById, listTrips, saveTripDraft } from "./tripRepository.js";
+import { getAuthenticatedUserId, requireAuth } from "../../middleware/authMiddleware.js";
 import type { ApplyTripChangeRequest, SaveTripRequest } from "../../../shared/types.js";
 
 export const tripsRoute = Router();
 
+tripsRoute.use(requireAuth);
+
 tripsRoute.get("/", async (_req, res) => {
   try {
-    return res.json({ trips: await listTrips() });
+    return res.json({ trips: await listTrips(getAuthenticatedUserId(res)) });
   } catch (error) {
     console.error("[route:trips] list failed", error);
 
@@ -19,7 +22,7 @@ tripsRoute.get("/", async (_req, res) => {
 
 tripsRoute.get("/:tripId", async (req, res) => {
   try {
-    const trip = await getTripById(req.params.tripId);
+    const trip = await getTripById(req.params.tripId, getAuthenticatedUserId(res));
 
     if (!trip) {
       return res.status(404).json({ trip: null, warnings: ["Trip not found."] });
@@ -44,7 +47,7 @@ tripsRoute.post("/", async (req, res) => {
       return res.status(400).json({ warnings: ["Missing title or itinerary."] });
     }
 
-    return res.status(201).json(await saveTripDraft(request));
+    return res.status(201).json(await saveTripDraft(request, getAuthenticatedUserId(res)));
   } catch (error) {
     console.error("[route:trips] save failed", error);
 
@@ -62,7 +65,7 @@ tripsRoute.patch("/:tripId/itinerary", async (req, res) => {
       return res.status(400).json({ warnings: ["Missing trip change proposal."] });
     }
 
-    const trip = await applyTripChangeProposal(req.params.tripId, request.proposal);
+    const trip = await applyTripChangeProposal(req.params.tripId, request.proposal, getAuthenticatedUserId(res));
 
     if (!trip) {
       return res.status(404).json({ trip: null, warnings: ["Trip not found."] });

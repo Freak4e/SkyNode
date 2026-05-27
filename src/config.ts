@@ -10,6 +10,11 @@ export const config = {
   database: {
     url: process.env.DATABASE_URL,
   },
+  supabase: {
+    url: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+    anonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+    secretKey: process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY,
+  },
   geoapify: {
     apiUrl: "https://api.geoapify.com/v2/places",
     apiKey: process.env.GEOAPIFY_API_KEY,
@@ -48,6 +53,30 @@ export function requireDatabaseUrl(): string {
   }
 
   return config.database.url;
+}
+
+export function requireSupabaseUrl(): string {
+  if (!config.supabase.url) {
+    throw new Error("Missing SUPABASE_URL. Add your Supabase project URL to .env.");
+  }
+
+  return config.supabase.url;
+}
+
+export function requireSupabaseAnonKey(): string {
+  if (!config.supabase.anonKey) {
+    throw new Error("Missing SUPABASE_ANON_KEY. Add your Supabase anon key to .env.");
+  }
+
+  return config.supabase.anonKey;
+}
+
+export function requireSupabaseSecretKey(): string {
+  if (!config.supabase.secretKey) {
+    throw new Error("Missing SUPABASE_SECRET_KEY. Add your Supabase secret/service-role key to server .env only.");
+  }
+
+  return config.supabase.secretKey;
 }
 
 export function requireGeoapifyApiKey(): string {

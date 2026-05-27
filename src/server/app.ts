@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import { accountRoute } from "./modules/account/accountRoute.js";
 import { attractionsRoute } from "./modules/attractions/attractionsRoute.js";
 import { chatRoute } from "./modules/chat/chatRoute.js";
 import { itinerariesRoute } from "./modules/itineraries/itinerariesRoute.js";
@@ -19,6 +20,7 @@ export function createApp() {
   app.use("/api/itineraries", itinerariesRoute);
   app.use("/api/trips", tripsRoute);
   app.use("/api/chat", chatRoute);
+  app.use("/api/account", accountRoute);
 
   app.get("/test-flight-search", (req, res) => {
     const params = new URLSearchParams(req.query as Record<string, string>);

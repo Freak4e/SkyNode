@@ -5,6 +5,7 @@ import type {
   SaveTripRequest,
   SaveTripResponse,
 } from "../../shared/types.js";
+import { authHeaders } from "./authHeaders.js";
 
 export async function fetchAttractions(destination: string): Promise<Attraction[]> {
   const response = await fetch(`/api/attractions?destination=${encodeURIComponent(destination)}`);
@@ -35,7 +36,7 @@ export async function generateItinerary(input: GenerateItineraryRequest): Promis
 export async function saveTrip(input: SaveTripRequest): Promise<SaveTripResponse> {
   const response = await fetch("/api/trips", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(input),
   });
   const body = await response.json() as SaveTripResponse & { warnings?: string[] };

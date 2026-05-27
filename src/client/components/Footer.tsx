@@ -1,5 +1,5 @@
-import { Plane } from "lucide-react";
 import { Link } from "react-router-dom";
+import logo from "../../../assets/logo_skynode.png";
 
 const columns = [
   {
@@ -22,11 +22,8 @@ export function Footer() {
       <div className="max-w-6xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-10 mb-12">
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
-                <Plane className="w-4 h-4 text-white" strokeWidth={2.5} />
-              </div>
-              <span className="font-bold text-base">SkyNode</span>
+            <div className="mb-3 pl-4">
+              <img src={logo} alt="SkyNode" className="h-32 w-auto max-w-full object-contain brightness-0 invert" />
             </div>
             <p className="text-slate-400 text-sm leading-relaxed">
               The intelligent travel companion. Plan, book and explore the world with AI-powered insight.

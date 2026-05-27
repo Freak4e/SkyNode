@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Bot,
   CalendarDays,
@@ -11,6 +12,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { applyTripChange, listSavedTrips, loadSavedTrip, sendTravelChatMessage } from "../api/assistantApi";
+import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
 import type { ChatMessage, SavedTripDetail, SavedTripSummary, TripChangeProposal } from "../../shared/types.js";
@@ -23,6 +25,7 @@ const quickPrompts = [
 ];
 
 export function AssistantPage() {
+  const { user, loading: authLoading } = useAuth();
   const [trips, setTrips] = useState<SavedTripSummary[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<SavedTripDetail | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -41,6 +44,17 @@ export function AssistantPage() {
 
   useEffect(() => {
     async function loadTrips() {
+      if (authLoading) {
+        return;
+      }
+
+      if (!user) {
+        setTrips([]);
+        setLoadingTrips(false);
+        return;
+      }
+
+      setLoadingTrips(true);
       try {
         setTrips(await listSavedTrips());
       } catch (loadError) {
@@ -51,7 +65,7 @@ export function AssistantPage() {
     }
 
     void loadTrips();
-  }, []);
+  }, [authLoading, user]);
 
   const assistantMode = selectedTrip ? "Trip-aware" : "General travel";
   const tripStats = useMemo(() => {
@@ -212,7 +226,21 @@ export function AssistantPage() {
                 </button>
               </div>
 
-              {loadingTrips && (
+              {!authLoading && !user && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                  <p className="font-bold text-slate-700">Sign in to load saved trips.</p>
+                  <p className="mt-1">General assistant chat still works without an account.</p>
+                  <Link
+                    to="/auth"
+                    state={{ from: "/assistant" }}
+                    className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2 text-xs font-black text-white no-underline transition hover:bg-blue-700"
+                  >
+                    Sign in or register
+                  </Link>
+                </div>
+              )}
+
+              {(loadingTrips || authLoading) && user && (
                 <div className="space-y-3">
                   {[1, 2, 3].map((item) => (
                     <div key={item} className="h-24 animate-pulse rounded-2xl bg-slate-100" />
@@ -220,7 +248,7 @@ export function AssistantPage() {
                 </div>
               )}
 
-              {!loadingTrips && trips.length === 0 && (
+              {!loadingTrips && user && trips.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
                   No saved trips yet. Generate and save an itinerary from the planner first.
                 </div>

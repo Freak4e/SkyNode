@@ -1,0 +1,81 @@
+import { Router } from "express";
+import { geocodeText } from "../attractions/geoapifyProvider.js";
+import type { GeocodeRequest, GeocodeResponse } from "../../../shared/types.js";
+
+export const geocodingRoute = Router();
+
+geocodingRoute.post("/", async (req, res) => {
+  const request = req.body as GeocodeRequest;
+
+  if (!request.destinationName?.trim() || !Array.isArray(request.items)) {
+    return res.status(400).json({
+      points: [],
+      warnings: ["Missing destinationName or items."],
+    } satisfies GeocodeResponse);
+  }
+
+  try {
+    const points: GeocodeResponse["points"] = [];
+    const destinationCenter = await geocodeText(request.destinationName);
+    const radiusMeters = 30000;
+
+    for (const item of request.items.slice(0, 12)) {
+      const query = buildGeocodeQuery(item, request.destinationName);
+      const point = await geocodeText(query, undefined, {
+        center: destinationCenter || undefined,
+        radiusMeters,
+      });
+
+      if (!point) {
+        continue;
+      }
+
+      if (destinationCenter && distanceMeters(destinationCenter, point) > radiusMeters) {
+        continue;
+      }
+
+      points.push({
+        id: item.id,
+        title: point.title || item.attractionName || item.title,
+        address: point.address,
+        lat: point.lat,
+        lon: point.lon,
+        source: "geoapify",
+      });
+    }
+
+    return res.json({ points, warnings: [] } satisfies GeocodeResponse);
+  } catch (error) {
+    return res.status(502).json({
+      points: [],
+      warnings: [error instanceof Error ? error.message : "Failed to geocode itinerary items."],
+    } satisfies GeocodeResponse);
+  }
+});
+
+function buildGeocodeQuery(item: GeocodeRequest["items"][number], destinationName: string): string {
+  const mainText = item.attractionName?.trim() || item.title.trim();
+  return `${mainText}, ${destinationName}`;
+}
+
+function distanceMeters(
+  first: { lat: number; lon: number },
+  second: { lat: number; lon: number },
+): number {
+  const earthRadiusMeters = 6371000;
+  const lat1 = toRadians(first.lat);
+  const lat2 = toRadians(second.lat);
+  const deltaLat = toRadians(second.lat - first.lat);
+  const deltaLon = toRadians(second.lon - first.lon);
+  const haversine =
+    Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) *
+    Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+  const angularDistance = 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+
+  return earthRadiusMeters * angularDistance;
+}
+
+function toRadians(value: number): number {
+  return value * Math.PI / 180;
+}

@@ -54,6 +54,44 @@ Response:
 }
 ```
 
+### POST /api/geocode
+
+Geocodes itinerary items that did not directly match Geoapify attraction coordinates.
+
+Body:
+
+```json
+{
+  "destinationName": "Rome",
+  "items": [
+    {
+      "id": "2-afternoon-colosseum-at-sunset",
+      "title": "Visit the Colosseum at sunset",
+      "description": "Explore the amphitheater in the evening.",
+      "attractionName": "Colosseum"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "points": [
+    {
+      "id": "2-afternoon-colosseum-at-sunset",
+      "title": "Colosseum",
+      "address": "Piazza del Colosseo, Rome, Italy",
+      "lat": 41.8902,
+      "lon": 12.4922,
+      "source": "geoapify"
+    }
+  ],
+  "warnings": []
+}
+```
+
 ### POST /api/itineraries/generate
 
 Generates a structured itinerary from destination, dates, budget, interests, flight context, and attractions.

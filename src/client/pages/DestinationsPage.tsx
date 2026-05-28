@@ -409,8 +409,11 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
 }
 
 function DealBoard({ deal }: { deal: ExploreDeal }) {
-  const name = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
+  const rawName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
+  const name = normalizeDestinationName(rawName, deal.destination);
   const country = deal.destinationPlace?.countryName || "";
+  const coordinates = deal.destinationPlace?.coordinates;
+  const airportName = deal.destinationPlace?.mainAirportName || deal.destinationPlace?.name || "";
   const searchLink = buildInternalSearchLink(deal);
 
   return (
@@ -418,7 +421,13 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
       to={searchLink}
       className="group grid grid-cols-[112px_1fr] overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-xl"
     >
-      <DestinationPhoto placeName={name} country={country} />
+      <DestinationPhoto
+        placeName={name}
+        country={country}
+        code={deal.destination}
+        airportName={airportName}
+        coordinates={coordinates}
+      />
       <div>
         <div className="bg-linear-to-r from-slate-800 to-sky-700 px-4 py-3 text-white">
           <div className="flex items-center justify-between gap-3">
@@ -449,20 +458,37 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
   );
 }
 
-function DestinationPhoto({ placeName, country }: { placeName: string; country: string }) {
+function DestinationPhoto({
+  placeName,
+  country,
+  code,
+  airportName,
+  coordinates,
+}: {
+  placeName: string;
+  country: string;
+  code: string;
+  airportName: string;
+  coordinates?: { lat: number; lon: number };
+}) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [photoUnavailable, setPhotoUnavailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    setImageUrl(null);
+    setPhotoUnavailable(false);
 
-    fetchWikipediaImage(placeName, country).then((url) => {
-      if (!cancelled) setImageUrl(url || null);
+    fetchDestinationImage({ placeName, country, code, airportName, coordinates }).then((url) => {
+      if (cancelled) return;
+      setImageUrl(url || null);
+      setPhotoUnavailable(!url);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [country, placeName]);
+  }, [airportName, code, coordinates, country, placeName]);
 
   return (
     <div className="relative min-h-full overflow-hidden bg-linear-to-br from-stone-100 via-sky-50 to-cyan-100">
@@ -471,8 +497,13 @@ function DestinationPhoto({ placeName, country }: { placeName: string; country: 
           src={imageUrl}
           alt={`${placeName} destination`}
           className="h-full min-h-40 w-full object-cover transition duration-300 group-hover:scale-105"
-          onError={() => setImageUrl(null)}
+          onError={() => {
+            setImageUrl(null);
+            setPhotoUnavailable(true);
+          }}
         />
+      ) : coordinates ? (
+        <CityMapPreview coordinates={coordinates} placeName={placeName} dimmed={!photoUnavailable} />
       ) : (
         <div className="flex h-full min-h-40 items-center justify-center">
           <Plane className="h-8 w-8 text-sky-600/70" />
@@ -481,6 +512,55 @@ function DestinationPhoto({ placeName, country }: { placeName: string; country: 
       <div className="absolute inset-0 bg-linear-to-t from-slate-950/30 to-transparent" />
     </div>
   );
+}
+
+function CityMapPreview({
+  coordinates,
+  placeName,
+  dimmed,
+}: {
+  coordinates: { lat: number; lon: number };
+  placeName: string;
+  dimmed: boolean;
+}) {
+  const tiles = getPreviewTiles(coordinates.lat, coordinates.lon, 10);
+
+  return (
+    <div className={`relative grid h-full min-h-40 grid-cols-2 grid-rows-2 overflow-hidden ${dimmed ? "opacity-70" : ""}`}>
+      {tiles.map((tile) => (
+        <img
+          key={`${tile.x}-${tile.y}`}
+          src={`https://tile.openstreetmap.org/${tile.z}/${tile.x}/${tile.y}.png`}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+        />
+      ))}
+      <div className="absolute inset-0 bg-linear-to-t from-slate-950/40 via-transparent to-white/10" />
+      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white p-1.5 shadow-lg">
+        <span className="h-2.5 w-2.5 rounded-full bg-sky-600" />
+      </div>
+      <span className="absolute bottom-2 left-2 right-2 truncate rounded-full bg-white/85 px-2 py-1 text-center text-[10px] font-black text-slate-700 shadow-sm">
+        {placeName}
+      </span>
+    </div>
+  );
+}
+
+function getPreviewTiles(lat: number, lon: number, z: number): Array<{ z: number; x: number; y: number }> {
+  const n = 2 ** z;
+  const latRad = (lat * Math.PI) / 180;
+  const centerX = Math.floor(((lon + 180) / 360) * n);
+  const centerY = Math.floor(((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2) * n);
+  const x = Math.max(0, Math.min(n - 2, centerX));
+  const y = Math.max(0, Math.min(n - 2, centerY));
+
+  return [
+    { z, x, y },
+    { z, x: x + 1, y },
+    { z, x, y: y + 1 },
+    { z, x: x + 1, y: y + 1 },
+  ];
 }
 
 function LoadingBoards() {
@@ -623,12 +703,34 @@ function buildInternalSearchLink(deal: ExploreDeal): string {
   return `/search?${params.toString()}`;
 }
 
-async function fetchWikipediaImage(placeName: string, country: string): Promise<string | undefined> {
-  const candidates = [
-    placeName,
-    `${placeName} city`,
-    country ? `${placeName} ${country}` : "",
-  ].filter(Boolean);
+async function fetchDestinationImage(input: {
+  placeName: string;
+  country: string;
+  code: string;
+  airportName: string;
+  coordinates?: { lat: number; lon: number };
+}): Promise<string | undefined> {
+  const wikipediaImage = await fetchWikipediaImage(input);
+  if (wikipediaImage) return wikipediaImage;
+
+  const categoryImage = await fetchWikimediaCategoryImage(input);
+  if (categoryImage) return categoryImage;
+
+  if (input.coordinates) {
+    const nearbyImage = await fetchWikimediaNearbyImage(input);
+    if (nearbyImage) return nearbyImage;
+  }
+
+  return fetchWikimediaCommonsImage(input);
+}
+
+async function fetchWikipediaImage(input: {
+  placeName: string;
+  country: string;
+  code: string;
+  airportName: string;
+}): Promise<string | undefined> {
+  const candidates = buildCityImageSearchTerms(input);
 
   for (const candidate of candidates) {
     try {
@@ -642,15 +744,255 @@ async function fetchWikipediaImage(placeName: string, country: string): Promise<
     }
   }
 
-  return fetchWikimediaCommonsImage(placeName, country);
+  const searchImage = await fetchWikipediaSearchImage(candidates);
+  if (searchImage) return searchImage;
+
+  return undefined;
 }
 
-async function fetchWikimediaCommonsImage(placeName: string, country: string): Promise<string | undefined> {
-  const searchTerms = [
-    `${placeName} city skyline`,
-    `${placeName} city view`,
-    country ? `${placeName} ${country} city` : "",
-  ].filter(Boolean);
+function buildCityImageSearchTerms(input: {
+  placeName: string;
+  country: string;
+  code: string;
+  airportName: string;
+}): string[] {
+  const { placeName, country, code, airportName } = input;
+  const cleaned = placeName
+    .replace(/\b(?:airport|international|intl\.?|metropolitan|all airports)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalizedCode = code.trim().toUpperCase();
+  const terms = new Set<string>();
+
+  [cleaned, placeName].filter(Boolean).forEach((term) => {
+    terms.add(term);
+    terms.add(`${term} city`);
+    terms.add(`${term} skyline`);
+    terms.add(`${term} old town`);
+    terms.add(`${term} landmark`);
+    terms.add(`${term} travel`);
+    if (country) terms.add(`${term} ${country}`);
+    if (normalizedCode) {
+      terms.add(`${term} ${normalizedCode} airport city`);
+      terms.add(`${term} ${country} ${normalizedCode}`);
+    }
+  });
+
+  if (airportName) {
+    const cleanedAirport = airportName.replace(/\b(?:airport|international|intl\.?)\b/gi, "").replace(/\s+/g, " ").trim();
+    if (cleanedAirport && cleanedAirport.toLowerCase() !== cleaned.toLowerCase()) {
+      terms.add(`${cleanedAirport} city`);
+      terms.add(`${cleanedAirport} ${country}`);
+    }
+  }
+
+  return Array.from(terms);
+}
+
+async function fetchWikipediaSearchImage(candidates: string[]): Promise<string | undefined> {
+  for (const candidate of candidates.slice(0, 8)) {
+    try {
+      const searchUrl = new URL("https://en.wikipedia.org/w/api.php");
+      searchUrl.searchParams.set("origin", "*");
+      searchUrl.searchParams.set("action", "query");
+      searchUrl.searchParams.set("format", "json");
+      searchUrl.searchParams.set("list", "search");
+      searchUrl.searchParams.set("srlimit", "4");
+      searchUrl.searchParams.set("srsearch", candidate);
+
+      const response = await fetch(searchUrl);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const titles = (data?.query?.search || [])
+        .map((result: { title?: string }) => result.title)
+        .filter((title: unknown): title is string => typeof title === "string" && isLikelyCityPage(title));
+
+      for (const title of titles) {
+        const summary = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`);
+        if (!summary.ok) continue;
+        const summaryData = await summary.json();
+        const imageUrl = summaryData?.originalimage?.source || summaryData?.thumbnail?.source;
+        if (isUsableCityImage(imageUrl)) return imageUrl;
+      }
+    } catch {
+      // Try the next search term.
+    }
+  }
+
+  return undefined;
+}
+
+function isLikelyCityPage(title: string): boolean {
+  const lower = title.toLowerCase();
+  return !["airport", "airline", "province", "region", "flag", "coat of arms", "football", "club"].some((term) =>
+    lower.includes(term),
+  );
+}
+
+type DestinationImageInput = {
+  placeName: string;
+  country: string;
+  code: string;
+  airportName: string;
+  coordinates?: { lat: number; lon: number };
+};
+
+type WikimediaImagePage = {
+  title?: string;
+  imageinfo?: Array<{ thumburl?: string; url?: string }>;
+};
+
+async function fetchWikimediaCategoryImage(input: DestinationImageInput): Promise<string | undefined> {
+  const categoryTitles = await buildWikimediaCategoryTitles(input);
+
+  for (const categoryTitle of categoryTitles) {
+    try {
+      const url = new URL("https://commons.wikimedia.org/w/api.php");
+      url.searchParams.set("origin", "*");
+      url.searchParams.set("action", "query");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("generator", "categorymembers");
+      url.searchParams.set("gcmtitle", categoryTitle);
+      url.searchParams.set("gcmnamespace", "6");
+      url.searchParams.set("gcmtype", "file");
+      url.searchParams.set("gcmlimit", "35");
+      url.searchParams.set("prop", "imageinfo");
+      url.searchParams.set("iiprop", "url");
+      url.searchParams.set("iiurlwidth", "700");
+
+      const response = await fetch(url);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      const image = pickBestDestinationImage(Object.values(data?.query?.pages || {}) as WikimediaImagePage[], input);
+      if (image) return image;
+    } catch {
+      // Try the next category.
+    }
+  }
+
+  return undefined;
+}
+
+async function buildWikimediaCategoryTitles(input: DestinationImageInput): Promise<string[]> {
+  const { placeName, country } = input;
+  const cleaned = cleanPlaceName(placeName);
+  const titles = new Set<string>();
+
+  [
+    cleaned,
+    `${cleaned}, ${country}`,
+    `Views of ${cleaned}`,
+    `Panoramas of ${cleaned}`,
+    `Skylines in ${cleaned}`,
+    `Cityscapes of ${cleaned}`,
+    `Streets in ${cleaned}`,
+    `Squares in ${cleaned}`,
+    `Buildings in ${cleaned}`,
+    `Tourist attractions in ${cleaned}`,
+    `Landmarks in ${cleaned}`,
+  ]
+    .filter((title) => title.replace(/[, ]/g, "").length > 0)
+    .forEach((title) => titles.add(`Category:${title}`));
+
+  const searchedCategories = await searchWikimediaCategories(input);
+  searchedCategories.forEach((title) => titles.add(title));
+
+  return Array.from(titles).slice(0, 18);
+}
+
+async function searchWikimediaCategories(input: DestinationImageInput): Promise<string[]> {
+  const { placeName, country } = input;
+  const cleaned = cleanPlaceName(placeName);
+  const searches = [`${cleaned} city`, `${cleaned} ${country}`, `Views of ${cleaned}`, `Buildings in ${cleaned}`].filter(Boolean);
+  const categories = new Set<string>();
+
+  for (const term of searches) {
+    try {
+      const url = new URL("https://commons.wikimedia.org/w/api.php");
+      url.searchParams.set("origin", "*");
+      url.searchParams.set("action", "query");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("list", "search");
+      url.searchParams.set("srnamespace", "14");
+      url.searchParams.set("srlimit", "5");
+      url.searchParams.set("srsearch", term);
+
+      const response = await fetch(url);
+      if (!response.ok) continue;
+
+      const data = await response.json();
+      (data?.query?.search || [])
+        .map((result: { title?: string }) => result.title)
+        .filter((title: unknown): title is string => typeof title === "string" && isLikelyDestinationCategory(title, input))
+        .forEach((title: string) => categories.add(title));
+    } catch {
+      // Try the next category search.
+    }
+  }
+
+  return Array.from(categories).slice(0, 10);
+}
+
+function isLikelyDestinationCategory(title: string, input: DestinationImageInput): boolean {
+  const lower = title.toLowerCase();
+  const city = cleanPlaceName(input.placeName).toLowerCase();
+  const country = input.country.toLowerCase();
+  const blockedTerms = [
+    "airport",
+    "aircraft",
+    "airline",
+    "maps",
+    "flags",
+    "logos",
+    "football",
+    "sports",
+    "people",
+    "food",
+    "cuisine",
+    "maltesers",
+  ];
+
+  if (blockedTerms.some((term) => lower.includes(term))) return false;
+  return lower.includes(city) || Boolean(country && lower.includes(country));
+}
+
+async function fetchWikimediaNearbyImage(input: DestinationImageInput): Promise<string | undefined> {
+  if (!input.coordinates) return undefined;
+
+  try {
+    const url = new URL("https://commons.wikimedia.org/w/api.php");
+    url.searchParams.set("origin", "*");
+    url.searchParams.set("action", "query");
+    url.searchParams.set("format", "json");
+    url.searchParams.set("generator", "geosearch");
+    url.searchParams.set("ggscoord", `${input.coordinates.lat}|${input.coordinates.lon}`);
+    url.searchParams.set("ggsradius", "15000");
+    url.searchParams.set("ggslimit", "35");
+    url.searchParams.set("prop", "imageinfo");
+    url.searchParams.set("iiprop", "url");
+    url.searchParams.set("iiurlwidth", "700");
+
+    const response = await fetch(url);
+    if (!response.ok) return undefined;
+
+    const data = await response.json();
+    return pickBestDestinationImage(Object.values(data?.query?.pages || {}) as WikimediaImagePage[], input);
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchWikimediaCommonsImage(input: {
+  placeName: string;
+  country: string;
+  code: string;
+  airportName: string;
+}): Promise<string | undefined> {
+  const searchTerms = buildCityImageSearchTerms(input)
+    .flatMap((term) => [`${term} city view`, `${term} panorama`, `${term} skyline`, `${term} old town`, `${term} landmark`])
+    .slice(0, 24);
 
   for (const term of searchTerms) {
     try {
@@ -670,15 +1012,7 @@ async function fetchWikimediaCommonsImage(placeName: string, country: string): P
       if (!response.ok) continue;
 
       const data = await response.json();
-      const pages = Object.values(data?.query?.pages || {}) as Array<{
-        title?: string;
-        imageinfo?: Array<{ thumburl?: string; url?: string }>;
-      }>;
-
-      const image = pages
-        .filter((page) => isUsableCityImage(page.title || ""))
-        .map((page) => page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url)
-        .find(isUsableCityImage);
+      const image = pickBestDestinationImage(Object.values(data?.query?.pages || {}) as WikimediaImagePage[], input);
 
       if (image) return image;
     } catch {
@@ -689,15 +1023,171 @@ async function fetchWikimediaCommonsImage(placeName: string, country: string): P
   return undefined;
 }
 
+function pickBestDestinationImage(pages: WikimediaImagePage[], input: DestinationImageInput): string | undefined {
+  return pages
+    .map((page) => ({
+      title: page.title || "",
+      imageUrl: page.imageinfo?.[0]?.thumburl || page.imageinfo?.[0]?.url,
+      score: scoreDestinationImage(page.title || "", input),
+    }))
+    .filter(
+      (image): image is { title: string; imageUrl: string; score: number } =>
+        isLikelyCityPhotoTitle(image.title, input) && isUsableCityImage(image.imageUrl) && image.score >= 2,
+    )
+    .sort((a, b) => b.score - a.score)
+    .map((image) => image.imageUrl)
+    .find(Boolean);
+}
+
+function scoreDestinationImage(title: string, input: DestinationImageInput): number {
+  const lower = title.toLowerCase();
+  const city = cleanPlaceName(input.placeName).toLowerCase();
+  const country = input.country.toLowerCase();
+  let score = 0;
+
+  if (city && lower.includes(city)) score += 8;
+  if (country && lower.includes(country)) score += 3;
+
+  cityPhotoTerms.forEach((term) => {
+    if (lower.includes(term)) score += 2;
+  });
+
+  blockedImageTerms.forEach((term) => {
+    if (lower.includes(term)) score -= 6;
+  });
+
+  return score;
+}
+
+const cityPhotoTerms = [
+  "city",
+  "town",
+  "view",
+  "panorama",
+  "skyline",
+  "old town",
+  "street",
+  "square",
+  "harbour",
+  "harbor",
+  "waterfront",
+  "landmark",
+  "cathedral",
+  "castle",
+  "aerial",
+  "center",
+  "centre",
+  "downtown",
+  "historic",
+  "architecture",
+  "buildings",
+  "promenade",
+  "port",
+  "marina",
+  "bay",
+  "coast",
+  "beach",
+];
+
+const blockedImageTerms = [
+  "airport",
+  "aircraft",
+  "airplane",
+  "aeroplane",
+  "plane",
+  "terminal",
+  "runway",
+  "logo",
+  "flag",
+  "map",
+  "food",
+  "restaurant",
+  "people",
+  "girl",
+  "woman",
+  "women",
+  "man",
+  "men",
+  "boy",
+  "portrait",
+  "selfie",
+  "model",
+  "fashion",
+  "wedding",
+  "sport",
+  "football",
+  "club",
+  "car",
+  "cars",
+  "automobile",
+  "vehicle",
+  "vehicles",
+  "bus",
+  "taxi",
+  "motorcycle",
+  "scooter",
+  "racing",
+  "traffic",
+  "parking",
+  "candy",
+  "sweet",
+  "sweets",
+  "chocolate",
+  "maltesers",
+  "snack",
+  "confectionery",
+];
+
+function isLikelyCityPhotoTitle(title: string, input: DestinationImageInput): boolean {
+  const lower = title.toLowerCase();
+  const city = cleanPlaceName(input.placeName).toLowerCase();
+  const hasLocationMatch = hasDestinationNameMatch(lower, city);
+  const hasCityPhotoSignal = cityPhotoTerms.some((term) => lower.includes(term));
+
+  if (blockedImageTerms.some((term) => lower.includes(term))) return false;
+  return hasLocationMatch && hasCityPhotoSignal;
+}
+
+function hasDestinationNameMatch(text: string, destinationName: string): boolean {
+  if (!destinationName) return false;
+  if (text.includes(destinationName)) return true;
+
+  const tokens = destinationName
+    .split(/[\s,.'()-]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 4 && !["city", "town", "airport", "international"].includes(token));
+
+  if (tokens.length === 0) return false;
+  return tokens.every((token) => text.includes(token));
+}
+
 function isUsableCityImage(imageUrl: unknown): imageUrl is string {
   if (typeof imageUrl !== "string" || !imageUrl.startsWith("https://")) return false;
 
   const lower = imageUrl.toLowerCase();
-  const blockedTerms = ["flag", "coat_of_arms", "coat-of-arms", "emblem", "seal", "symbol", "logo"];
-
-  if (blockedTerms.some((term) => lower.includes(term))) return false;
+  if (blockedImageTerms.some((term) => lower.includes(term))) return false;
+  if (["coat_of_arms", "coat-of-arms", "emblem", "seal", "symbol"].some((term) => lower.includes(term))) return false;
   if (lower.endsWith(".svg") || lower.includes(".svg/")) return false;
 
   return true;
+}
+
+function cleanPlaceName(placeName: string): string {
+  return placeName
+    .replace(/\b(?:airport|international|intl\.?|metropolitan|all airports)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeDestinationName(name: string, code: string): string {
+  const normalizedCode = code.toUpperCase();
+  const corrections: Record<string, string> = {
+    JMK: "Mykonos",
+  };
+
+  if (corrections[normalizedCode]) return corrections[normalizedCode];
+  if (/^mikonos$/i.test(name)) return "Mykonos";
+
+  return name;
 }
 

@@ -1,6 +1,30 @@
-import { query } from "./client.js";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getDatabasePool, query } from "./client.js";
 
 let schemaReady = false;
+
+type MigrationRow = {
+  id: string;
+};
+
+const migrationsDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), "migrations");
+const sourceMigrationsDirectory = path.join(process.cwd(), "src", "server", "infrastructure", "database", "migrations");
+
+async function readMigrationFiles() {
+  try {
+    return {
+      directory: migrationsDirectory,
+      files: await readdir(migrationsDirectory),
+    };
+  } catch {
+    return {
+      directory: sourceMigrationsDirectory,
+      files: await readdir(sourceMigrationsDirectory),
+    };
+  }
+}
 
 export async function ensureSchema(): Promise<void> {
   if (schemaReady) {
@@ -8,77 +32,41 @@ export async function ensureSchema(): Promise<void> {
   }
 
   await query(`
-    create extension if not exists "pgcrypto";
-
-    create table if not exists trips (
-      id uuid primary key default gen_random_uuid(),
-      title text not null,
-      origin_code text,
-      destination_code text not null,
-      destination_name text not null,
-      start_date date not null,
-      days integer not null,
-      budget text not null,
-      pace text not null,
-      interests text[] not null default '{}',
-      selected_flight jsonb,
-      estimated_total_cost integer not null default 0,
-      created_at timestamptz not null default now(),
-      updated_at timestamptz not null default now()
-    );
-
-    alter table trips
-      add column if not exists user_id uuid;
-
-    alter table trips
-      add column if not exists generation_mode text not null default 'ollama';
-
-    create index if not exists trips_user_created_idx
-      on trips(user_id, created_at desc);
-
-    create table if not exists trip_attractions (
-      id uuid primary key default gen_random_uuid(),
-      trip_id uuid not null references trips(id) on delete cascade,
-      external_id text,
-      name text not null,
-      category text,
-      address text,
-      lat double precision,
-      lon double precision,
-      source text not null,
-      created_at timestamptz not null default now()
-    );
-
-    create table if not exists itinerary_days (
-      id uuid primary key default gen_random_uuid(),
-      trip_id uuid not null references trips(id) on delete cascade,
-      day_number integer not null,
-      title text not null,
-      summary text not null,
-      estimated_cost integer not null default 0,
-      created_at timestamptz not null default now()
-    );
-
-    create table if not exists itinerary_items (
-      id uuid primary key default gen_random_uuid(),
-      itinerary_day_id uuid not null references itinerary_days(id) on delete cascade,
-      time_of_day text not null,
-      title text not null,
-      description text not null,
-      attraction_name text,
-      estimated_cost integer not null default 0,
-      sort_order integer not null,
-      created_at timestamptz not null default now()
-    );
-
-    create table if not exists chat_messages (
-      id uuid primary key default gen_random_uuid(),
-      trip_id uuid references trips(id) on delete cascade,
-      role text not null,
-      content text not null,
-      created_at timestamptz not null default now()
+    create table if not exists schema_migrations (
+      id text primary key,
+      applied_at timestamptz not null default now()
     );
   `);
+
+  const appliedResult = await query<MigrationRow>("select id from schema_migrations");
+  const applied = new Set(appliedResult.rows.map((row) => row.id));
+  const { directory, files } = await readMigrationFiles();
+  const migrationFiles = files
+    .filter((file) => /^\d+_.+\.sql$/i.test(file))
+    .sort();
+
+  const pool = getDatabasePool();
+
+  for (const file of migrationFiles) {
+    if (applied.has(file)) {
+      continue;
+    }
+
+    const sql = await readFile(path.join(directory, file), "utf8");
+    const client = await pool.connect();
+
+    try {
+      await client.query("begin");
+      await client.query(sql);
+      await client.query("insert into schema_migrations (id) values ($1)", [file]);
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 
   schemaReady = true;
 }

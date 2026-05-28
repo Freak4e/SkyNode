@@ -80,7 +80,7 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
         }
 
         const localCenter = getLocalCenter(markerData.matchedMarkers);
-        const nextGeocodedMarkers = body.points.map((point) => {
+        const nextGeocodedMarkers: ItineraryMapMarker[] = body.points.map((point) => {
           const source = markerData.unmappedItems.find((candidate) => candidate.id === point.id);
 
           return {
@@ -98,7 +98,7 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
               address: point.address,
               lat: point.lat,
               lon: point.lon,
-              source: "geoapify",
+              source: "geoapify" as const,
             },
           };
         }).filter((marker) => {
@@ -145,9 +145,9 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
     mapRef.current = map;
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(map);
 
     markersLayerRef.current = L.layerGroup().addTo(map);
@@ -169,10 +169,18 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
 
     layer.clearLayers();
     const bounds = L.latLngBounds([]);
+    const routeGroups = new Map<number, ItineraryMapPin[]>();
 
     pins.forEach((pin) => {
       const position: L.LatLngExpression = [pin.lat, pin.lon];
       bounds.extend(position);
+      pin.markers.forEach((marker) => {
+        const group = routeGroups.get(marker.dayNumber) || [];
+        if (!group.some((candidate) => candidate.id === pin.id)) {
+          group.push(pin);
+          routeGroups.set(marker.dayNumber, group);
+        }
+      });
 
       L.marker(position, {
         icon: L.divIcon({
@@ -194,45 +202,66 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
         .addTo(layer);
     });
 
+    routeGroups.forEach((groupedPins) => {
+      if (groupedPins.length < 2) {
+        return;
+      }
+
+      const positions = groupedPins
+        .sort((first, second) => {
+          const firstTime = first.markers[0]?.timeOfDay || "";
+          const secondTime = second.markers[0]?.timeOfDay || "";
+          return firstTime.localeCompare(secondTime);
+        })
+        .map((pin) => [pin.lat, pin.lon] as L.LatLngExpression);
+
+      L.polyline(positions, {
+        color: "#2563eb",
+        weight: 3,
+        opacity: 0.72,
+        dashArray: "8 10",
+      }).addTo(layer);
+    });
+
     if (bounds.isValid()) {
       map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
     }
   }, [pins]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-950 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 bg-slate-950 px-5 py-4 text-white">
+    <section className="overflow-hidden rounded-3xl bg-white shadow-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-5 py-4 text-slate-900">
         <div>
-          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-cyan-200">
+          <p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-blue-500">
             <MapPin className="h-4 w-4" />
             Itinerary map
           </p>
-          <p className="mt-1 text-sm text-slate-300">
+          <p className="mt-1 text-sm text-slate-500">
             {pins.length > 0
               ? `${pins.length} map pins for ${markers.length} mapped activities.`
               : "No mappable itinerary activities were resolved yet."}
             {geocoding ? " Finding more coordinates..." : ""}
           </p>
         </div>
-        <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-black text-cyan-100">
+        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-600">
           {itinerary.destinationName}
         </span>
       </div>
 
       <div className="relative h-[360px]">
-        <div ref={mapElementRef} className="absolute inset-0 z-0 bg-slate-900" />
+        <div ref={mapElementRef} className="absolute inset-0 z-0 bg-slate-100" />
         {pins.length === 0 && (
-          <div className="absolute inset-0 z-10 grid place-items-center bg-slate-950/80 p-8 text-center text-white">
+          <div className="absolute inset-0 z-10 grid place-items-center bg-white/85 p-8 text-center text-slate-900 backdrop-blur-sm">
             <div>
               <p className="text-lg font-black">Map locations need a match.</p>
-              <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-300">
+              <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-500">
                 The itinerary is ready, but only specific places like restaurants, monuments, museums, venues, parks, or named attractions are mapped.
               </p>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -250,10 +279,6 @@ function buildItineraryMarkerData(itinerary: GeneratedItinerary): {
   itinerary.days.forEach((day) => {
     day.items.forEach((item) => {
       const itemId = `${day.dayNumber}-${item.timeOfDay}-${normalizeSearchText(item.title)}`;
-
-      if (isFoodRelatedItem(item)) {
-        return;
-      }
 
       const attraction = findBestAttraction(item, attractionsWithCoordinates);
 
@@ -317,10 +342,6 @@ function shouldAttemptGeocode(item: ItineraryItem, destinationName: string): boo
   const hasSpecificAttraction = attractionName.length > 2 && attractionName !== destination;
   const mappableSight = /\b(theater|theatre|museum|gallery|monument|memorial|statue|castle|fortress|cathedral|church|mosque|temple|bridge|square|park|garden|viewpoint|beach|harbor|harbour|port|waterfront|promenade)\b/.test(itemText);
   const genericMovement = /\b(walk|walking|stroll|wander|explore|relax|picnic|free time|leisure|by the lake|along the lake)\b/.test(itemText);
-
-  if (isFoodRelatedItem(item)) {
-    return false;
-  }
 
   if (hasSpecificAttraction) {
     return true;

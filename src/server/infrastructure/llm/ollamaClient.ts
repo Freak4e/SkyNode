@@ -101,6 +101,7 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
     startDate: request.startDate,
     days: request.days,
     budget: request.budget,
+    budgetAmount: request.budgetAmount ?? null,
     pace: request.pace,
     planningProfile: profile,
     interests: request.interests,
@@ -121,7 +122,7 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
           estimatedCost: 45,
           items: [
             {
-              timeOfDay: "morning",
+              timeOfDay: "09:00",
               title: "Activity title",
               description: "One practical sentence.",
               attractionName: "Attraction name from provided list when possible",
@@ -137,9 +138,12 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
       `Each day should include at least ${profile.paidActivitiesPerDay} paid activities.`,
       `Each day should include at least ${profile.premiumActivitiesPerDay} premium activities.`,
       `Daily activity cost target: ${profile.dailyCostTarget}.`,
+      request.budgetAmount ? `Total user budget target: about $${request.budgetAmount}.` : "No exact total budget target was provided.",
       profile.styleRule,
-      "Use timeOfDay values from morning, afternoon, evening. Multiple items may share a timeOfDay for packed days.",
+      "Use timeOfDay as a 24-hour local start time like 09:00, 14:30, or 19:00.",
       "Use provided attractions when possible.",
+      "Every item must include a specific attractionName or location name that can be geocoded for the itinerary map.",
+      "For restaurants, cafes, bars, hotels, and transit stops, use a concrete venue or station name in attractionName.",
       "Prefer specific local stops over generic activity titles.",
       "Do not make every item free unless the profile is relaxed low budget.",
       "Premium activities can be guided tours, museum tickets, boat rides, tastings, workshops, performances, rooftop/viewpoint tickets, spa visits, or curated experiences.",
@@ -324,18 +328,18 @@ function planningProfile(request: GenerateItineraryRequest): PlanningProfile {
 
 function itemTimeOfDay(index: number, itemCount: number): ItineraryItem["timeOfDay"] {
   if (itemCount <= 3) {
-    return ["morning", "afternoon", "evening"][index] as ItineraryItem["timeOfDay"];
+    return ["09:00", "14:00", "19:00"][index] as ItineraryItem["timeOfDay"];
   }
 
   if (itemCount === 4) {
-    return ["morning", "afternoon", "afternoon", "evening"][index] as ItineraryItem["timeOfDay"];
+    return ["09:00", "12:30", "16:30", "20:00"][index] as ItineraryItem["timeOfDay"];
   }
 
-  return ["morning", "morning", "afternoon", "afternoon", "evening"][index] as ItineraryItem["timeOfDay"];
+  return ["08:30", "11:00", "14:00", "17:00", "20:00"][index] as ItineraryItem["timeOfDay"];
 }
 
 function isTimeOfDay(value: string | undefined): value is ItineraryItem["timeOfDay"] {
-  return value === "morning" || value === "afternoon" || value === "evening";
+  return typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
 }
 
 function applyBudgetLogic(
@@ -447,12 +451,12 @@ function normalizeCost(context: CostContext): number {
     return Math.round(context.rawCost);
   }
 
-  return context.timeOfDay === "evening" ? budgetAmount(context.budget, 0, 8, 18) : 0;
+  return isEveningTime(context.timeOfDay) ? budgetAmount(context.budget, 0, 8, 18) : 0;
 }
 
 function estimateCostFromContext(text: string, context: CostContext): number | null {
   if (isFoodActivity(text)) {
-    return context.timeOfDay === "evening"
+    return isEveningTime(context.timeOfDay)
       ? budgetAmount(context.budget, 14, 28, 45)
       : budgetAmount(context.budget, 8, 18, 32);
   }
@@ -486,6 +490,15 @@ function estimateCostFromContext(text: string, context: CostContext): number | n
   }
 
   return null;
+}
+
+function isEveningTime(timeOfDay: string): boolean {
+  if (timeOfDay === "evening") {
+    return true;
+  }
+
+  const hour = Number(timeOfDay.slice(0, 2));
+  return Number.isFinite(hour) && hour >= 18;
 }
 
 function isLikelyFree(text: string): boolean {

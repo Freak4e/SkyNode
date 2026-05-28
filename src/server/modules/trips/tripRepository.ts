@@ -36,6 +36,11 @@ type TripSummaryRow = {
   pace: TravelPace;
   interests: string[];
   selected_flight?: FlightOffer | null;
+  selected_flights?: FlightOffer[] | null;
+  budget_amount?: number | null;
+  travelers?: number | null;
+  route_segments?: SavedTripSummary["routeSegments"] | null;
+  expense_breakdown?: SavedTripSummary["expenseBreakdown"] | null;
   estimated_total_cost: number;
   generation_mode?: GeneratedItinerary["generationMode"] | null;
   created_at: string;
@@ -85,11 +90,16 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
         pace,
         interests,
         selected_flight,
+        selected_flights,
+        budget_amount,
+        travelers,
+        route_segments,
+        expense_breakdown,
         estimated_total_cost,
         generation_mode,
         user_id
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       returning id, created_at
     `,
     [
@@ -103,6 +113,11 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
       request.pace,
       request.interests,
       request.selectedFlight ? JSON.stringify(request.selectedFlight) : null,
+      request.selectedFlights ? JSON.stringify(request.selectedFlights) : null,
+      request.budgetAmount ?? null,
+      request.travelers ?? 1,
+      request.routeSegments ? JSON.stringify(request.routeSegments) : null,
+      request.expenseBreakdown ? JSON.stringify(request.expenseBreakdown) : null,
       request.itinerary.estimatedTotalCost,
       request.itinerary.generationMode,
       userId,
@@ -189,6 +204,10 @@ export async function listTrips(userId: string): Promise<SavedTripSummary[]> {
         budget,
         pace,
         interests,
+        budget_amount,
+        travelers,
+        route_segments,
+        expense_breakdown,
         estimated_total_cost,
         created_at::text
       from trips
@@ -219,6 +238,11 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
         pace,
         interests,
         selected_flight,
+        selected_flights,
+        budget_amount,
+        travelers,
+        route_segments,
+        expense_breakdown,
         estimated_total_cost,
         generation_mode,
         created_at::text
@@ -307,6 +331,7 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
   return {
     ...mapTripSummary(trip),
     selectedFlight: trip.selected_flight || undefined,
+    selectedFlights: trip.selected_flights || undefined,
     itinerary,
   };
 }
@@ -410,6 +435,10 @@ function mapTripSummary(row: TripSummaryRow): SavedTripSummary {
     budget: row.budget,
     pace: row.pace,
     interests: row.interests || [],
+    budgetAmount: row.budget_amount || undefined,
+    travelers: row.travelers || undefined,
+    routeSegments: row.route_segments || undefined,
+    expenseBreakdown: row.expense_breakdown || undefined,
     estimatedTotalCost: row.estimated_total_cost,
     createdAt: row.created_at,
   };

@@ -1,13 +1,40 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-accent-400: #22d3ee;
+  --color-accent-500: #06b6d4;
+  --color-ink-950: #020617;
+  --color-ink-900: #0f172a;
+  --shadow-card: 0 18px 50px -28px rgba(15, 23, 42, 0.38);
+  --shadow-card-strong: 0 28px 70px -34px rgba(15, 23, 42, 0.48);
+  --background-image-hero-panel: linear-gradient(135deg, #020617 0%, #172554 58%, #083344 100%);
+}
+
 @layer base {
+  :root {
+    --app-navbar-offset: 7rem;
+    --app-page-x: clamp(1rem, 3vw, 2rem);
+    --app-page-bottom: 4rem;
+    --app-surface: #f8fafc;
+    --app-ink: #0f172a;
+    --app-muted: #64748b;
+  }
+
   * {
     box-sizing: border-box;
   }
+
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
+    background: var(--app-surface);
+    color: var(--app-ink);
   }
 }
 
@@ -60,6 +87,48 @@
 }
 
 @layer components {
+  .app-main {
+    padding: var(--app-navbar-offset) var(--app-page-x) var(--app-page-bottom);
+  }
+
+  .app-main-flush {
+    padding-top: var(--app-navbar-offset);
+  }
+
+  .app-search-header {
+    padding: var(--app-navbar-offset) var(--app-page-x) 1.5rem;
+  }
+
+  .app-container {
+    width: min(100%, 80rem);
+    margin-inline: auto;
+  }
+
+  .surface-card {
+    background: white;
+    border: 1px solid rgba(226, 232, 240, 0.86);
+    border-radius: 1.5rem;
+    box-shadow: var(--shadow-card);
+  }
+
+  .form-field {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    background: white;
+    padding: 0.75rem 1rem;
+    color: #0f172a;
+    font-size: 0.875rem;
+    font-weight: 700;
+    outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .form-field:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 4px #dbeafe;
+  }
+
   .plane-loader-sky__dot {
     width: 7px;
     height: 7px;

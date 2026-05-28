@@ -8,6 +8,7 @@ import { HomePage } from "./pages/HomePage";
 import { LiveFlightsPage } from "./pages/LiveFlightsPage";
 import { PlannerPage } from "./pages/PlannerPage";
 import { SearchResultsPage } from "./pages/SearchResultsPage";
+import { TripsPage } from "./pages/TripsPage";
 import "./styles.css";
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
           <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/live-flights" element={<LiveFlightsPage />} />
           <Route path="/planner" element={<PlannerPage />} />
+          <Route path="/trips" element={<TripsPage />} />
           <Route path="/assistant" element={<AssistantPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>

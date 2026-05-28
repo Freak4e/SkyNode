@@ -16,12 +16,12 @@ export function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const from = typeof location.state === "object" && location.state && "from" in location.state
+  const backTo = typeof location.state === "object" && location.state && "from" in location.state
     ? String(location.state.from)
-    : "/planner";
+    : "/";
 
   if (user) {
-    return <Navigate to={from} replace />;
+    return <Navigate to="/" replace />;
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -33,14 +33,28 @@ export function AuthPage() {
     try {
       if (mode === "signin") {
         await signIn(email, password);
-        navigate(from, { replace: true });
+        navigate("/", { replace: true });
       } else {
-        await signUp(email, password);
-        setMessage("Account created. Check your email if confirmation is enabled, then sign in.");
-        setMode("signin");
+        const signupResult = await signUp(email, password);
+
+        if (signupResult === "already_exists") {
+          window.alert("An account with this email already exists. Please sign in instead.");
+          setMode("signin");
+          return;
+        }
+
+        navigate("/", { replace: true });
       }
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : "Authentication failed.");
+      const message = authError instanceof Error ? authError.message : "Authentication failed.";
+
+      if (mode === "signup" && /already|registered|exists/i.test(message)) {
+        window.alert("An account with this email already exists. Please sign in instead.");
+        setMode("signin");
+        return;
+      }
+
+      setError(message);
     } finally {
       setSubmitting(false);
     }
@@ -52,7 +66,7 @@ export function AuthPage() {
     setMessage("");
 
     try {
-      await signInWithProvider("google", `${window.location.origin}${from}`);
+      await signInWithProvider("google", window.location.origin);
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : "Google sign-in failed.");
       setSubmitting(false);
@@ -85,7 +99,7 @@ export function AuthPage() {
 
           <section className="relative p-6 sm:p-8">
             <Link
-              to={from}
+              to={backTo}
               className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline transition hover:text-blue-600"
             >
               <ArrowLeft className="h-4 w-4" />

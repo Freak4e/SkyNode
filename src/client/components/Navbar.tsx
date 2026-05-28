@@ -10,13 +10,25 @@ const navLinks = [
   { label: "Flights", to: "/search" },
   { label: "Live Flights", to: "/live-flights", accent: true },
   { label: "Trips", to: "/planner" },
-  { label: "All trips", to: "/trips" },
   { label: "Destinations", to: "/destinations" },
   { label: "Assistant", to: "/assistant" },
   { label: "About", to: "/about" },
 ];
 
 type Props = { transparent?: boolean };
+
+function userImage(user: ReturnType<typeof useAuth>["user"]) {
+  const metadata = user?.user_metadata || {};
+  const direct = metadata.avatar_url || metadata.picture;
+  const identityData = user?.identities?.find((identity) => identity.identity_data)?.identity_data || {};
+  const identityImage = identityData.avatar_url || identityData.picture;
+
+  return typeof direct === "string" && direct
+    ? direct
+    : typeof identityImage === "string" && identityImage
+    ? identityImage
+    : "";
+}
 
 export function Navbar({ transparent = false }: Props) {
   const location = useLocation();
@@ -45,15 +57,11 @@ export function Navbar({ transparent = false }: Props) {
     storeCurrency(nextCurrency);
   }
 
-  const avatarUrl = typeof user?.user_metadata?.avatar_url === "string"
-    ? user.user_metadata.avatar_url
-    : typeof user?.user_metadata?.picture === "string"
-    ? user.user_metadata.picture
-    : "";
+  const avatarUrl = userImage(user);
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 transition-all duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3 transition-all duration-300 md:px-8 ${
         overlay ? "bg-transparent" : "bg-white/90 backdrop-blur-md border-b border-slate-100 shadow-sm"
       }`}
     >
@@ -61,7 +69,7 @@ export function Navbar({ transparent = false }: Props) {
         <img
           src={logo}
           alt="SkyNode"
-          className={`h-16 w-auto object-contain transition duration-300 ${overlay ? "brightness-0 invert" : ""}`}
+          className={`h-14 w-auto object-contain transition duration-300 ${overlay ? "brightness-0 invert" : ""}`}
         />
       </Link>
 

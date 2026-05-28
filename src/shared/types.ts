@@ -104,7 +104,7 @@ export type GeocodeResponse = {
 };
 
 export type ItineraryItem = {
-  timeOfDay: "morning" | "afternoon" | "evening";
+  timeOfDay: string;
   title: string;
   description: string;
   attractionName?: string;
@@ -125,10 +125,33 @@ export type GenerateItineraryRequest = {
   startDate: string;
   days: number;
   budget: BudgetLevel;
+  budgetAmount?: number;
+  travelers?: number;
   pace: TravelPace;
   interests: string[];
   selectedFlight?: FlightOffer;
+  selectedFlights?: FlightOffer[];
+  routeSegments?: TripRouteSegment[];
+  expenseBreakdown?: TripExpenseBreakdown;
   originCode?: string;
+};
+
+export type TripRouteSegment = {
+  id: string;
+  type: "flight" | "train" | "bus" | "car" | "ferry" | "other";
+  from: string;
+  to: string;
+  date: string;
+  label?: string;
+  details?: FlightOffer;
+};
+
+export type TripExpenseBreakdown = {
+  flights?: number;
+  hotels?: number;
+  activities?: number;
+  food?: number;
+  other?: number;
 };
 
 export type GeneratedItinerary = {
@@ -161,12 +184,17 @@ export type SavedTripSummary = {
   budget: BudgetLevel;
   pace: TravelPace;
   interests: string[];
+  budgetAmount?: number;
+  travelers?: number;
+  routeSegments?: TripRouteSegment[];
+  expenseBreakdown?: TripExpenseBreakdown;
   estimatedTotalCost: number;
   createdAt: string;
 };
 
 export type SavedTripDetail = SavedTripSummary & {
   selectedFlight?: FlightOffer;
+  selectedFlights?: FlightOffer[];
   itinerary: GeneratedItinerary;
 };
 

@@ -177,7 +177,7 @@ export function AssistantPage() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
 
-      <main className="px-6 pb-16 pt-24">
+      <main className="app-main">
         <div className="mx-auto max-w-7xl">
           <section className="mb-6 overflow-hidden rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
             <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-end">

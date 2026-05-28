@@ -131,7 +131,7 @@ export function LiveFlightsPage() {
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
 
-      <main className="pt-24">
+      <main className="app-main-flush">
         <section className="relative overflow-hidden px-6 py-10 sm:px-8 lg:px-12">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.28),transparent_34%),radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.22),transparent_32%),linear-gradient(135deg,#020617,#0f172a_55%,#042f2e)]" />
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] bg-size-[48px_48px] opacity-20" />

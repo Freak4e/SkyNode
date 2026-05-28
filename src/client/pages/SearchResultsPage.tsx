@@ -1136,7 +1136,7 @@ export function SearchResultsPage() {
     <div className="min-h-screen bg-slate-100">
       <Navbar />
 
-      <div className="border-b border-slate-200 bg-white px-6 pb-6 pt-20">
+      <div className="app-search-header border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-7xl">
           <form onSubmit={handleSearch}>
             <div className="mb-3 flex flex-wrap items-center gap-4 text-sm font-bold text-slate-900">

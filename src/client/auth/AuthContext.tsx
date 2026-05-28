@@ -7,7 +7,7 @@ type AuthContextValue = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<"created" | "already_exists">;
   signInWithProvider: (provider: Provider, redirectTo: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -56,11 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     async signUp(email: string, password: string) {
-      const { error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({ email, password });
 
       if (error) {
         throw error;
       }
+
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        return "already_exists";
+      }
+
+      return "created";
     },
     async signInWithProvider(provider: Provider, redirectTo: string) {
       const { error } = await supabase.auth.signInWithOAuth({

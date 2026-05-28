@@ -233,9 +233,9 @@ function normalizeDay(rawDay: unknown, fallbackDay: ItineraryDay | undefined, da
 
 function normalizeItem(rawItem: unknown, fallbackItem: ItineraryItem | undefined): ItineraryItem {
   const item = rawItem as Partial<ItineraryItem>;
-  const fallbackTime = fallbackItem?.timeOfDay || "morning";
-  const timeOfDay = item.timeOfDay === "morning" || item.timeOfDay === "afternoon" || item.timeOfDay === "evening"
-    ? item.timeOfDay
+  const fallbackTime = fallbackItem?.timeOfDay || "09:00";
+  const timeOfDay = typeof item.timeOfDay === "string" && item.timeOfDay.trim()
+    ? item.timeOfDay.trim()
     : fallbackTime;
 
   return {
@@ -296,7 +296,7 @@ function buildFallbackProposal(trip: SavedTripDetail, message: string): TripChan
         };
       }
 
-      if (wantsFood && item.timeOfDay === "evening") {
+      if (wantsFood && isEveningTime(item.timeOfDay)) {
         return {
           ...item,
           title: `Local food stop: ${item.title}`,
@@ -332,7 +332,7 @@ function buildFallbackProposal(trip: SavedTripDetail, message: string): TripChan
       items = [
         ...items,
         {
-          timeOfDay: "evening",
+          timeOfDay: "20:00",
           title: `Extra ${trip.destinationName} walk`,
           description: "Add one flexible self-guided walk so the day feels fuller without needing a booking.",
           attractionName: trip.destinationName,
@@ -438,15 +438,24 @@ function pickUpgradeDayIndex(days: ItineraryDay[]): number {
 function pickExtraTimeOfDay(items: ItineraryItem[]): ItineraryItem["timeOfDay"] {
   const usedTimes = new Set(items.map((item) => item.timeOfDay));
 
-  if (!usedTimes.has("evening")) {
-    return "evening";
+  if (!usedTimes.has("20:00")) {
+    return "20:00";
   }
 
-  if (!usedTimes.has("afternoon")) {
-    return "afternoon";
+  if (!usedTimes.has("16:00")) {
+    return "16:00";
   }
 
-  return "morning";
+  return "10:00";
+}
+
+function isEveningTime(timeOfDay: string): boolean {
+  if (timeOfDay === "evening") {
+    return true;
+  }
+
+  const hour = Number(timeOfDay.slice(0, 2));
+  return Number.isFinite(hour) && hour >= 18;
 }
 
 function pickPremiumActivityCost(budget: SavedTripDetail["budget"]): number {

@@ -91,7 +91,7 @@ export async function proposeTripChangeWithGemini(
     systemPrompt: [
       "You create safe itinerary update proposals for SkyNode.",
       "Return compact valid JSON only. No markdown. No commentary.",
-      "Keep the same destination, dates, day count, and timeOfDay values.",
+      "Keep the same destination, dates, day count, and activity timeOfDay values unless the user asks to retime activities.",
       "Preserve unchanged days and activities unless the user request requires changing them.",
       "Change only itinerary day titles, summaries, items, descriptions, attractionName, and estimatedCost.",
       "Use realistic costs. Free activities must be 0. The total must equal the sum of day costs.",

@@ -4,6 +4,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import { AccountPage } from "./pages/AccountPage";
 import { AssistantPage } from "./pages/AssistantPage";
 import { AuthPage } from "./pages/AuthPage";
+import { DestinationsPage } from "./pages/DestinationsPage";
 import { HomePage } from "./pages/HomePage";
 import { LiveFlightsPage } from "./pages/LiveFlightsPage";
 import { PlannerPage } from "./pages/PlannerPage";
@@ -21,6 +22,7 @@ function App() {
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/live-flights" element={<LiveFlightsPage />} />
+          <Route path="/destinations" element={<DestinationsPage />} />
           <Route path="/planner" element={<PlannerPage />} />
           <Route path="/trips" element={<TripsPage />} />
           <Route path="/assistant" element={<AssistantPage />} />

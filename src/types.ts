@@ -1,4 +1,6 @@
 export type {
+  ExploreDeal,
+  ExploreResponse,
   FlightLayover,
   FlightSegment,
   FlightOffer,

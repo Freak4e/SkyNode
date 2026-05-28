@@ -51,6 +51,25 @@ export type FlightSearchResponse = {
   source: FlightSource;
 };
 
+export type ExploreDeal = {
+  origin: string;
+  destination: string;
+  price: number;
+  currency: CurrencyCode;
+  departDate?: string;
+  returnDate?: string;
+  airline?: string;
+  flightNumber?: string;
+  stopsText?: string;
+  link?: string;
+  destinationPlace?: Place | null;
+};
+
+export type ExploreResponse = {
+  deals: ExploreDeal[];
+  warnings: string[];
+};
+
 export type Place = {
   code: string;
   name: string;

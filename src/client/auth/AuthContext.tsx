@@ -7,7 +7,16 @@ type AuthContextValue = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<"created" | "already_exists" | "confirmation_required">;
+  signUp: (
+    email: string,
+    password: string,
+    profile?: {
+      firstName: string;
+      lastName: string;
+      birthDate: string;
+      avatarUrl?: string;
+    },
+  ) => Promise<"created" | "already_exists" | "confirmation_required">;
   signInWithProvider: (provider: Provider, redirectTo: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -63,9 +72,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     },
-    async signUp(email: string, password: string) {
+    async signUp(email: string, password: string, profile) {
       if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const fullName = profile ? `${profile.firstName} ${profile.lastName}`.trim() : undefined;
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: profile
+          ? {
+            data: {
+              first_name: profile.firstName,
+              last_name: profile.lastName,
+              full_name: fullName,
+              birth_date: profile.birthDate,
+              avatar_url: profile.avatarUrl,
+            },
+          }
+          : undefined,
+      });
 
       if (error) {
         throw error;

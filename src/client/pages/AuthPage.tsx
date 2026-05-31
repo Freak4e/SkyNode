@@ -1,11 +1,75 @@
 import { FormEvent, useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, CheckCircle2, Info, Loader2, LockKeyhole, Mail } from "lucide-react";
+import { AlertCircle, ArrowLeft, Camera, CheckCircle2, Info, Loader2, LockKeyhole, Mail, UserRound } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import logo from "../../../assets/logo_skynode_horizontal.png";
 
 type AuthMode = "signin" | "signup";
 type Notice = { kind: "error" | "success" | "info"; text: string };
+
+function ageFromBirthDate(value: string): number {
+  const birthDate = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return 0;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+function passwordStrength(password: string): { score: number; label: string; valid: boolean } {
+  const checks = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ];
+  const score = checks.filter(Boolean).length;
+
+  if (score >= 5) return { score, label: "Strong password", valid: true };
+  if (score >= 4) return { score, label: "Good password", valid: true };
+  if (score >= 3) return { score, label: "Add more character types", valid: false };
+  return { score, label: "Password is too weak", valid: false };
+}
+
+function resizeAvatar(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      image.src = String(reader.result || "");
+    };
+    reader.onerror = () => reject(new Error("Could not read profile image."));
+    image.onload = () => {
+      const size = 180;
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) {
+        reject(new Error("Could not prepare profile image."));
+        return;
+      }
+
+      canvas.width = size;
+      canvas.height = size;
+      const scale = Math.max(size / image.width, size / image.height);
+      const width = image.width * scale;
+      const height = image.height * scale;
+      const x = (size - width) / 2;
+      const y = (size - height) / 2;
+      context.drawImage(image, x, y, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    image.onerror = () => reject(new Error("Unsupported profile image."));
+    reader.readAsDataURL(file);
+  });
+}
 
 function authMessage(error: unknown, mode: AuthMode): string {
   const message = error instanceof Error ? error.message : "Authentication failed.";
@@ -28,8 +92,13 @@ export function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<AuthMode>("signup");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const searchParams = new URLSearchParams(location.search);
@@ -64,7 +133,35 @@ export function AuthPage() {
         await signIn(email, password);
         navigate("/", { replace: true });
       } else {
-        const signupResult = await signUp(email, password);
+        const age = ageFromBirthDate(birthDate);
+        const strength = passwordStrength(password);
+
+        if (!firstName.trim() || !lastName.trim()) {
+          setNotice({ kind: "error", text: "Please enter your first and last name." });
+          return;
+        }
+
+        if (age < 18) {
+          setNotice({ kind: "error", text: "You must be at least 18 years old to create a SkyNode account." });
+          return;
+        }
+
+        if (!strength.valid) {
+          setNotice({ kind: "error", text: "Use a stronger password with at least 8 characters, uppercase, lowercase, number, and symbol." });
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          setNotice({ kind: "error", text: "Passwords do not match." });
+          return;
+        }
+
+        const signupResult = await signUp(email, password, {
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          birthDate,
+          avatarUrl: avatarUrl || undefined,
+        });
 
         if (signupResult === "already_exists") {
           setNotice({ kind: "info", text: "An account with this email already exists. Please sign in instead." });
@@ -76,6 +173,7 @@ export function AuthPage() {
           setNotice({ kind: "success", text: "Account created. Check your email to confirm your account, then sign in." });
           setMode("signin");
           setPassword("");
+          setConfirmPassword("");
           return;
         }
 
@@ -96,6 +194,20 @@ export function AuthPage() {
     }
   }
 
+  async function handleAvatarChange(file: File | undefined) {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setNotice({ kind: "error", text: "Please choose an image file for your profile picture." });
+      return;
+    }
+
+    try {
+      setAvatarUrl(await resizeAvatar(file));
+    } catch (error) {
+      setNotice({ kind: "error", text: error instanceof Error ? error.message : "Could not prepare profile image." });
+    }
+  }
+
   async function handleGoogleSignIn() {
     setSubmitting(true);
     setNotice({ kind: "info", text: "Opening Google sign-in..." });
@@ -112,6 +224,8 @@ export function AuthPage() {
     setMode(nextMode);
     setNotice(null);
   }
+
+  const strength = passwordStrength(password);
 
   return (
     <div className="min-h-screen bg-slate-100 px-5 py-8">
@@ -175,6 +289,67 @@ export function AuthPage() {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-4">
+                {mode === "signup" && (
+                  <>
+                    <div className="flex flex-col items-center rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="relative">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white" />
+                        ) : (
+                          <div className="grid h-20 w-20 place-items-center rounded-full bg-white text-slate-400 ring-4 ring-white">
+                            <UserRound className="h-9 w-9" />
+                          </div>
+                        )}
+                        <label className="absolute -bottom-1 -right-1 grid h-8 w-8 cursor-pointer place-items-center rounded-full bg-blue-600 text-white shadow-lg transition hover:bg-blue-700">
+                          <Camera className="h-4 w-4" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(event) => void handleAvatarChange(event.target.files?.[0])}
+                            className="sr-only"
+                          />
+                        </label>
+                      </div>
+                      <p className="mt-3 text-xs font-bold text-slate-500">Optional profile picture</p>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-400">Name</span>
+                        <input
+                          value={firstName}
+                          onChange={(event) => setFirstName(event.target.value)}
+                          required
+                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                          placeholder="First name"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-400">Surname</span>
+                        <input
+                          value={lastName}
+                          onChange={(event) => setLastName(event.target.value)}
+                          required
+                          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                          placeholder="Last name"
+                        />
+                      </label>
+                    </div>
+
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-400">Date of birth</span>
+                      <input
+                        type="date"
+                        value={birthDate}
+                        onChange={(event) => setBirthDate(event.target.value)}
+                        required
+                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                      />
+                      <span className="mt-1 block text-xs font-semibold text-slate-500">You must be 18 or older to create an account.</span>
+                    </label>
+                  </>
+                )}
+
                 <label className="block">
                   <span className="sr-only">Email address</span>
                   <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
@@ -199,12 +374,42 @@ export function AuthPage() {
                       value={password}
                       onChange={(event) => setPassword(event.target.value)}
                       required
-                      minLength={6}
+                      minLength={mode === "signup" ? 8 : 6}
                       className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
                       placeholder="Password"
                     />
                   </div>
                 </label>
+
+                {mode === "signup" && (
+                  <>
+                    <div>
+                      <div className="mb-1 flex h-2 overflow-hidden rounded-full bg-slate-100">
+                        <span
+                          className={`transition-all ${strength.valid ? "bg-emerald-500" : "bg-amber-500"}`}
+                          style={{ width: `${Math.max(12, strength.score * 20)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs font-bold text-slate-500">{strength.label}</p>
+                    </div>
+
+                    <label className="block">
+                      <span className="sr-only">Confirm password</span>
+                      <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
+                        <LockKeyhole className="h-4 w-4 text-slate-400" />
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          required
+                          minLength={8}
+                          className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                          placeholder="Repeat password"
+                        />
+                      </div>
+                    </label>
+                  </>
+                )}
 
                 {notice && <AuthNotice notice={notice} />}
 

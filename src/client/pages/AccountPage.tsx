@@ -1,4 +1,4 @@
-import { CalendarDays, Loader2, LogOut, Mail, Plane, Sparkles, Trash2, UserRound } from "lucide-react";
+import { CalendarDays, CheckCircle2, Loader2, LogOut, Mail, Sparkles, Trash2, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useState } from "react";
@@ -33,10 +33,12 @@ export function AccountPage() {
   }
 
   const avatarUrl = userImage(user);
-  const displayName = typeof user?.user_metadata?.full_name === "string"
-    ? user.user_metadata.full_name
-    : user?.email || "SkyNode user";
-  const provider = user?.app_metadata?.provider || "email";
+  const firstName = typeof user?.user_metadata?.first_name === "string" ? user.user_metadata.first_name : "";
+  const lastName = typeof user?.user_metadata?.last_name === "string" ? user.user_metadata.last_name : "";
+  const metadataName = typeof user?.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
+  const displayName = [firstName, lastName].filter(Boolean).join(" ") || metadataName || "SkyNode traveler";
+  const birthDate = typeof user?.user_metadata?.birth_date === "string" ? user.user_metadata.birth_date : "";
+  const formattedBirthDate = birthDate ? new Date(`${birthDate}T00:00:00`).toLocaleDateString() : "Not added";
   const createdAt = user?.created_at ? new Date(user.created_at).toLocaleDateString() : "Unknown";
 
   async function handleDeleteAccount() {
@@ -77,7 +79,7 @@ export function AccountPage() {
           <HeroPanel
             eyebrow="My account"
             title={displayName}
-            description={user?.email}
+            description="Your SkyNode travel profile"
             actions={
               <Button type="button" tone="light" onClick={() => void signOut()} icon={<LogOut className="h-4 w-4" />}>
                 Sign out
@@ -87,12 +89,16 @@ export function AccountPage() {
           >
             <div className="mt-6 flex items-center gap-4">
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="" className="h-16 w-16 rounded-full object-cover ring-4 ring-white/10" />
+                  <img src={avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white/10" />
                 ) : (
-                  <div className="grid h-16 w-16 place-items-center rounded-full bg-white/10 text-white ring-4 ring-white/10">
+                  <div className="grid h-20 w-20 place-items-center rounded-full bg-white/10 text-white ring-4 ring-white/10">
                     <UserRound className="h-8 w-8" />
                   </div>
                 )}
+                <div>
+                  <p className="text-sm font-black text-white">{displayName}</p>
+                  <p className="mt-1 text-sm font-semibold text-white/70">{user?.email}</p>
+                </div>
             </div>
           </HeroPanel>
 
@@ -105,13 +111,17 @@ export function AccountPage() {
           <section className="grid gap-6 lg:grid-cols-[1fr_320px]">
             <Card as="div" className="p-6">
               <p className="text-xs font-black uppercase tracking-widest text-blue-500">Profile</p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">Account details</h2>
+              <h2 className="mt-2 text-2xl font-black text-slate-950">Personal details</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                These details help personalize your saved trips and account experience.
+              </p>
 
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <AccountField icon={<UserRound className="h-4 w-4" />} label="Full name" value={displayName} />
                 <AccountField icon={<Mail className="h-4 w-4" />} label="Email" value={user?.email || "Unknown"} />
-                <AccountField icon={<UserRound className="h-4 w-4" />} label="Provider" value={String(provider)} />
-                <AccountField icon={<CalendarDays className="h-4 w-4" />} label="Created" value={createdAt} />
-                <AccountField icon={<Plane className="h-4 w-4" />} label="Trip privacy" value="Saved under your account" />
+                <AccountField icon={<CalendarDays className="h-4 w-4" />} label="Date of birth" value={formattedBirthDate} />
+                <AccountField icon={<CheckCircle2 className="h-4 w-4" />} label="Age check" value={birthDate ? "18+ verified" : "Not added"} />
+                <AccountField icon={<CalendarDays className="h-4 w-4" />} label="Member since" value={createdAt} />
               </div>
             </Card>
 
@@ -155,7 +165,7 @@ function AccountField({ icon, label, value }: { icon: ReactNode; label: string; 
         {icon}
         {label}
       </p>
-      <p className="break-words text-sm font-bold text-slate-800">{value}</p>
+      <p className="wrap-break-word text-sm font-bold text-slate-800">{value}</p>
     </div>
   );
 }

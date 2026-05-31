@@ -42,11 +42,12 @@ export async function searchPlaces(term: string): Promise<Place[]> {
       "https://autocomplete.travelpayouts.com/places2",
       {
         timeout: 8000,
-        params: {
-          locale: "en",
-          term: normalizedTerm,
-          "types[]": ["city", "airport"],
-        },
+        params: new URLSearchParams([
+          ["locale", "en"],
+          ["term", normalizedTerm],
+          ["types[]", "city"],
+          ["types[]", "airport"],
+        ]),
       },
     );
 

@@ -1,9 +1,9 @@
 import { extractFlightOffers } from "../../extract.js";
 import { buildTargetUrl, fetchWithScrapingBee } from "../../scrapingbee.js";
-import type { FlightOffer, FlightSearchInput } from "../../shared/types.js";
+import type { FlightOffer, NormalizedFlightSearchInput } from "../../shared/types.js";
 
 export async function searchKayakWithScrapingBee(
-  input: Required<Pick<FlightSearchInput, "from" | "to" | "date">>,
+  input: Pick<NormalizedFlightSearchInput, "from" | "to" | "date">,
 ) {
   const targetUrl = buildTargetUrl(input.from, input.to, input.date);
 

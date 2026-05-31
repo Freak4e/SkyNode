@@ -1,10 +1,10 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeftRight, Search, ChevronDown,
+  ArrowLeftRight, CalendarDays, Search, ChevronDown,
   Zap, Globe, Shield, MessageCircle, CreditCard, Map,
   Star, Plane, Mountain, Waves, Sparkles as Aurora,
-  User,
+  Check, User,
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
@@ -13,8 +13,8 @@ import type { Place } from "../../shared/types.js";
 import heroBanner from "../../../assets/hero_banner.jpg";
 
 const today = new Date().toISOString().slice(0, 10);
-const defaultFrom: Place = { code: "JFK", name: "New York", cityName: "New York", countryName: "USA", type: "city" };
-const defaultTo: Place = { code: "HND", name: "Tokyo", cityName: "Tokyo", countryName: "Japan", type: "city" };
+const defaultFrom: Place = { code: "NYC", name: "New York", cityName: "New York", countryName: "USA", type: "city" };
+const defaultTo: Place = { code: "TYO", name: "Tokyo", cityName: "Tokyo", countryName: "Japan", type: "city" };
 type TripType = "one-way" | "return";
 
 const features = [
@@ -37,6 +37,230 @@ const itineraryDays = [
   { day: 2, title: "Mt. Fuji day trip + Hakone onsen", sub: "3 activities · 2 meals · transit included", price: "$162" },
   { day: 3, title: "Ghibli Museum & Shinjuku jazz bars", sub: "3 activities · 2 meals · transit included", price: "$70" },
 ];
+
+function useOutsideClose<T extends HTMLElement>(onClose: () => void) {
+  const ref = useRef<T>(null);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  return ref;
+}
+
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function toDateValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatHomeDate(value: string): string {
+  const date = parseLocalDate(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en", { month: "2-digit", day: "2-digit", year: "numeric" }).format(date);
+}
+
+function SearchDropdown({
+  value,
+  icon,
+  children,
+}: {
+  value: string;
+  icon?: ReactNode;
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-white/70"
+      >
+        {icon}
+        <span>{value}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-60 mt-2 max-h-56 w-48 overflow-y-auto rounded-2xl border border-white/70 bg-white p-1 shadow-2xl shadow-slate-900/15">
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TripTypeDropdown({ value, onChange }: { value: TripType; onChange: (value: TripType) => void }) {
+  const options: Array<{ value: TripType; label: string; description: string }> = [
+    { value: "return", label: "Return", description: "Fly out and back" },
+    { value: "one-way", label: "One way", description: "Single direction" },
+  ];
+
+  return (
+    <SearchDropdown value={value === "return" ? "Return" : "One way"}>
+      {(close) => options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => { onChange(option.value); close(); }}
+          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-blue-50"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black text-slate-950">{option.label}</span>
+            <span className="block text-[11px] font-semibold text-slate-500">{option.description}</span>
+          </span>
+          {value === option.value && <Check className="h-4 w-4 text-blue-600" />}
+        </button>
+      ))}
+    </SearchDropdown>
+  );
+}
+
+function PassengerDropdown({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <SearchDropdown
+      value={`${value} ${value === 1 ? "Passenger" : "Passengers"}`}
+      icon={<User className="h-3.5 w-3.5 text-slate-400" />}
+    >
+      {(close) => Array.from({ length: 9 }, (_, index) => index + 1).map((count) => (
+        <button
+          key={count}
+          type="button"
+          onClick={() => { onChange(count); close(); }}
+          className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-blue-50"
+        >
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-xs font-black text-slate-700">{count}</span>
+          <span className="flex-1 text-sm font-black text-slate-950">{count === 1 ? "Passenger" : "Passengers"}</span>
+          {value === count && <Check className="h-4 w-4 text-blue-600" />}
+        </button>
+      ))}
+    </SearchDropdown>
+  );
+}
+
+function HomeDatePicker({
+  label,
+  value,
+  min,
+  disabled,
+  disabledText,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  disabled?: boolean;
+  disabledText?: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => parseLocalDate(value));
+  const ref = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+  const minDate = min ? parseLocalDate(min) : null;
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [
+    ...Array.from({ length: startOffset }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => new Date(year, month, index + 1)),
+  ];
+
+  function moveMonth(step: number) {
+    setVisibleMonth(new Date(year, month + step, 1));
+  }
+
+  function pickDate(date: Date) {
+    onChange(toDateValue(date));
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative shrink-0 border-slate-200 px-2 py-2 lg:border-r lg:px-4 lg:py-0">
+      <p className="text-xs text-slate-400 font-medium mb-1">{label}</p>
+      {disabled ? (
+        <p className="text-slate-400 text-sm font-medium">{disabledText || "Disabled"}</p>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setVisibleMonth(parseLocalDate(value));
+            setOpen((current) => !current);
+          }}
+          className="flex items-center gap-3 text-slate-800 font-semibold text-sm"
+        >
+          <span>{formatHomeDate(value)}</span>
+          <CalendarDays className="h-4 w-4 text-slate-900" />
+        </button>
+      )}
+
+      {open && !disabled && (
+        <div className="absolute right-0 top-full z-60 mt-3 w-64 rounded-2xl border border-white/70 bg-white p-3 shadow-2xl shadow-slate-900/15 max-[640px]:right-auto max-[640px]:left-0 max-[640px]:w-[calc(100vw-2rem)]">
+          <div className="mb-4 flex items-center justify-between">
+            <button type="button" onClick={() => moveMonth(-1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
+              ‹
+            </button>
+            <p className="text-sm font-black text-slate-950">
+              {new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(visibleMonth)}
+            </p>
+            <button type="button" onClick={() => moveMonth(1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
+              ›
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
+            {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => <span key={day}>{day}</span>)}
+          </div>
+          <div className="mt-2 grid grid-cols-7 gap-1">
+            {cells.map((date, index) => {
+              if (!date) return <span key={`empty-${index}`} />;
+
+              const dateValue = toDateValue(date);
+              const isSelected = dateValue === value;
+              const isDisabled = Boolean(minDate && date < minDate);
+
+              return (
+                <button
+                  key={dateValue}
+                  type="button"
+                  onClick={() => pickDate(date)}
+                  disabled={isDisabled}
+                  className={`h-8 rounded-lg text-sm font-black transition ${
+                    isSelected
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                      : isDisabled
+                      ? "cursor-not-allowed text-slate-300"
+                      : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                  }`}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -84,7 +308,7 @@ export function HomePage() {
       <Navbar transparent />
 
       {/* ── HERO ── */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center overflow-visible px-3">
         {/* Hero image */}
         <img
           src={heroBanner}
@@ -94,7 +318,7 @@ export function HomePage() {
         {/* Semi-transparent overlay so text stays readable */}
         <div className="absolute inset-0 bg-slate-900/40" />
         {/* Bottom fade to blend into next section */}
-        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-slate-50 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-linear-to-t from-slate-50 to-transparent" />
 
         {/* Floating label chips */}
         <div className="absolute top-36 left-[6%] glass rounded-2xl px-4 py-2.5 flex items-center gap-2 shadow-lg">
@@ -117,7 +341,7 @@ export function HomePage() {
         {/* Headline */}
         <h1 className="relative z-10 text-center font-black leading-none tracking-tight text-white px-6 mb-4" style={{ fontSize: "clamp(2.5rem, 7vw, 5.5rem)" }}>
           Travel,{" "}
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-200 to-sky-100">
+          <span className="text-transparent bg-clip-text bg-linear-to-r from-cyan-200 to-sky-100">
             reimagined
           </span>
           <br />
@@ -131,46 +355,19 @@ export function HomePage() {
         {/* Search box */}
         <form
           onSubmit={handleSearch}
-          className="relative z-10 w-full max-w-4xl mx-auto px-4"
+          className="relative z-10 w-full max-w-4xl mx-auto px-0 sm:px-4"
         >
           <div className="glass rounded-2xl shadow-2xl border border-white/50 overflow-visible">
             {/* Top options row */}
-            <div className="flex items-center gap-1 px-4 pt-3 pb-2 border-b border-slate-200/60">
-              <label className="relative flex items-center gap-1 px-3 py-1.5 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-100 transition-colors">
-                <select
-                  value={tripType}
-                  onChange={(event) => setTripType(event.target.value as TripType)}
-                  className="appearance-none bg-transparent pr-5 outline-none cursor-pointer font-medium"
-                  aria-label="Trip type"
-                >
-                  <option value="return">Return</option>
-                  <option value="one-way">One way</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2 w-3.5 h-3.5 text-slate-400" />
-              </label>
-
-              <label className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-slate-600 text-sm font-medium hover:bg-slate-100 transition-colors">
-                <User className="w-3.5 h-3.5 text-slate-400" />
-                <select
-                  value={passengers}
-                  onChange={(event) => setPassengers(Number(event.target.value))}
-                  className="appearance-none bg-transparent pr-5 outline-none cursor-pointer font-medium"
-                  aria-label="Passengers"
-                >
-                  {Array.from({ length: 9 }, (_, index) => index + 1).map((count) => (
-                    <option key={count} value={count}>
-                      {count} {count === 1 ? "Passenger" : "Passengers"}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2 w-3.5 h-3.5 text-slate-400" />
-              </label>
+            <div className="flex flex-wrap items-center gap-1 px-4 pt-3 pb-2 border-b border-slate-200/60">
+              <TripTypeDropdown value={tripType} onChange={setTripType} />
+              <PassengerDropdown value={passengers} onChange={setPassengers} />
             </div>
 
             {/* Main search row */}
-            <div className="flex items-center gap-0 px-3 py-3">
+            <div className="flex flex-col gap-2 px-3 py-3 lg:flex-row lg:items-center lg:gap-0">
               {/* FROM */}
-              <div className="flex-1 min-w-0 px-2">
+              <div className="min-w-0 px-2 lg:flex-1">
                 <ChipPlacePicker
                   label="From"
                   value={from}
@@ -183,13 +380,13 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={() => { const tmp = from; setFrom(to); setTo(tmp); }}
-                className="shrink-0 w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-colors mx-1"
+                className="mx-auto shrink-0 w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-colors lg:mx-1"
               >
                 <ArrowLeftRight className="w-3.5 h-3.5" />
               </button>
 
               {/* TO */}
-              <div className="flex-1 min-w-0 px-2 border-r border-slate-200">
+              <div className="min-w-0 border-slate-200 px-2 lg:flex-1 lg:border-r">
                 <ChipPlacePicker
                   label="To"
                   value={to}
@@ -199,44 +396,31 @@ export function HomePage() {
               </div>
 
               {/* DEPARTURE */}
-              <div className="px-4 border-r border-slate-200 shrink-0">
-                <p className="text-xs text-slate-400 font-medium mb-1">Departure</p>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => {
-                    const nextDate = e.target.value;
-                    setDate(nextDate);
-                    if (returnDate < nextDate) {
-                      setReturnDate(nextDate);
-                    }
-                  }}
-                  required
-                  className="text-slate-800 font-semibold text-sm bg-transparent outline-none"
-                />
-              </div>
+              <HomeDatePicker
+                label="Departure"
+                value={date}
+                onChange={(nextDate) => {
+                  setDate(nextDate);
+                  if (returnDate < nextDate) {
+                    setReturnDate(nextDate);
+                  }
+                }}
+              />
 
               {/* RETURN */}
-              <div className="px-4 border-r border-slate-200 shrink-0">
-                <p className="text-xs text-slate-400 font-medium mb-1">Return</p>
-                {tripType === "return" ? (
-                  <input
-                    type="date"
-                    value={returnDate}
-                    min={date}
-                    onChange={(e) => setReturnDate(e.target.value)}
-                    required
-                    className="text-slate-800 font-semibold text-sm bg-transparent outline-none"
-                  />
-                ) : (
-                  <p className="text-slate-400 text-sm font-medium">One way</p>
-                )}
-              </div>
+              <HomeDatePicker
+                label="Return"
+                value={returnDate}
+                min={date}
+                disabled={tripType !== "return"}
+                disabledText="One way"
+                onChange={setReturnDate}
+              />
 
               {/* SEARCH */}
               <button
                 type="submit"
-                className="shrink-0 ml-2 flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold text-sm shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+                className="ml-0 flex shrink-0 items-center justify-center gap-2 rounded-xl bg-linear-to-r from-blue-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:scale-105 hover:shadow-lg lg:ml-2"
               >
                 <Search className="w-4 h-4" />
                 Search
@@ -270,7 +454,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={openPlanner}
-                className="px-6 py-3 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400 text-white font-semibold text-sm shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
+                className="px-6 py-3 rounded-full bg-linear-to-r from-blue-500 to-cyan-400 text-white font-semibold text-sm shadow-md hover:shadow-lg hover:scale-105 transition-all duration-200"
               >
                 Try the planner →
               </button>
@@ -289,7 +473,7 @@ export function HomePage() {
             <div className="space-y-3">
               {itineraryDays.map((d) => (
                 <div key={d.day} className="flex items-center gap-4 p-4 rounded-2xl hover:bg-slate-50 transition-colors">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
                     Day {d.day}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -345,7 +529,7 @@ export function HomePage() {
                 </div>
                 <p className="text-slate-700 font-medium leading-relaxed mb-5">"{t.quote}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-sm font-bold">
+                  <div className="w-9 h-9 rounded-full bg-linear-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-sm font-bold">
                     {t.name[0]}
                   </div>
                   <div>
@@ -362,7 +546,7 @@ export function HomePage() {
       {/* ── CTA ── */}
       <section className="py-20 px-6 bg-white">
         <div className="max-w-4xl mx-auto">
-          <div className="rounded-3xl bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-8 py-16 text-center">
+          <div className="rounded-3xl bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 px-8 py-16 text-center">
             <h2 className="text-3xl md:text-4xl font-black text-white mb-3">
               Your next trip starts now.
             </h2>

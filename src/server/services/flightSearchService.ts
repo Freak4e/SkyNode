@@ -1,6 +1,6 @@
 import { searchKayakWithScrapingBee } from "../providers/scrapingBeeProvider.js";
 import { searchTravelpayoutsCachedData } from "../providers/travelpayoutsDataProvider.js";
-import type { CurrencyCode, FlightSearchInput, FlightSearchResponse, ProviderId } from "../../shared/types.js";
+import type { CurrencyCode, FlightSearchInput, FlightSearchResponse, NormalizedFlightSearchInput, ProviderId } from "../../shared/types.js";
 
 export async function searchFlights(input: FlightSearchInput): Promise<FlightSearchResponse> {
   const fromCodes = normalizeCodes(input.from);
@@ -98,7 +98,7 @@ async function searchFlightCombinations(input: FlightSearchInput & { from: strin
   };
 }
 
-function normalizeInput(input: FlightSearchInput): Required<FlightSearchInput> {
+function normalizeInput(input: FlightSearchInput): NormalizedFlightSearchInput {
   return {
     from: normalizeCodes(input.from)[0] || "",
     to: normalizeCodes(input.to)[0] || "",

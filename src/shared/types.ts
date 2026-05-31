@@ -9,6 +9,14 @@ export type FlightSearchInput = {
   currency?: CurrencyCode;
 };
 
+export type NormalizedFlightSearchInput = {
+  from: string;
+  to: string;
+  date: string;
+  provider: ProviderId;
+  currency: CurrencyCode;
+};
+
 export type FlightSource = "scrapingbee" | "travelpayouts" | "none";
 
 export type FlightLayover = {

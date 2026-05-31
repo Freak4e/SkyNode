@@ -1,8 +1,8 @@
 import { fetchTravelpayoutsOffers } from "../../travelpayouts.js";
-import type { FlightSearchInput } from "../../shared/types.js";
+import type { NormalizedFlightSearchInput } from "../../shared/types.js";
 
 export async function searchTravelpayoutsCachedData(
-  input: Required<Pick<FlightSearchInput, "from" | "to" | "date" | "currency">>,
+  input: Pick<NormalizedFlightSearchInput, "from" | "to" | "date" | "currency">,
 ) {
   console.log(`[provider:travelpayouts-data] ${input.from}-${input.to} on ${input.date}`);
 

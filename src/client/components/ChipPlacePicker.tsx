@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, MapPin, Plane } from "lucide-react";
+import { Building2, ChevronDown, MapPin, Plane } from "lucide-react";
 import { searchPlaces } from "../api/flightsApi";
 import type { Place } from "../../shared/types.js";
 
@@ -17,7 +17,9 @@ type PlaceGroup = {
 };
 
 function formatPlace(place: Place): string {
-  return place.cityName || place.name;
+  return place.type === "airport"
+    ? place.cityName || place.name
+    : place.cityName || place.name;
 }
 
 function distanceKm(a?: { lat: number; lon: number }, b?: { lat: number; lon: number }): number | undefined {
@@ -34,11 +36,38 @@ function distanceKm(a?: { lat: number; lon: number }, b?: { lat: number; lon: nu
   return Math.round(2 * R * Math.asin(Math.sqrt(h)));
 }
 
-function groupPlaces(places: Place[]): PlaceGroup[] {
+function normalizeSearchText(value: string): string {
+  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function textMatchScore(place: Place | undefined | null, query: string): number {
+  if (!place) return 0;
+
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return 0;
+
+  const cityName = normalizeSearchText(place.cityName || "");
+  const name = normalizeSearchText(place.name || "");
+  const code = normalizeSearchText(place.code || "");
+  const country = normalizeSearchText(place.countryName || "");
+
+  if (cityName === normalizedQuery || name === normalizedQuery || code === normalizedQuery) return 100;
+  if (cityName.startsWith(normalizedQuery) || name.startsWith(normalizedQuery)) return 80;
+  if (cityName.includes(normalizedQuery) || name.includes(normalizedQuery)) return 60;
+  if (country === normalizedQuery) return 20;
+
+  return 0;
+}
+
+function groupMatchScore(group: PlaceGroup, query: string): number {
+  return Math.max(textMatchScore(group.city, query), ...group.airports.map((airport) => textMatchScore(airport, query)));
+}
+
+function groupPlaces(places: Place[], query: string): PlaceGroup[] {
   const groups = new Map<string, PlaceGroup>();
 
   for (const place of places) {
-    const key = (place.cityCode || place.cityName || place.code || place.name).toUpperCase();
+    const key = (place.type === "city" ? place.code : place.cityCode || place.cityName || place.code || place.name).toUpperCase();
 
     if (!groups.has(key)) {
       groups.set(key, { cityKey: key, city: null, airports: [] });
@@ -61,13 +90,18 @@ function groupPlaces(places: Place[]): PlaceGroup[] {
       }));
     }
 
-    group.airports.sort((a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9));
+    group.airports.sort((a, b) => (a.distanceKm ?? 1e9) - (b.distanceKm ?? 1e9) || a.code.localeCompare(b.code));
   }
 
   return Array.from(groups.values()).sort((a, b) => {
+    const scoreDiff = groupMatchScore(b, query) - groupMatchScore(a, query);
+    if (scoreDiff !== 0) return scoreDiff;
+
     if (a.city && !b.city) return -1;
     if (!a.city && b.city) return 1;
-    return 0;
+    const aName = a.city?.cityName || a.city?.name || a.airports[0]?.cityName || a.airports[0]?.name || "";
+    const bName = b.city?.cityName || b.city?.name || b.airports[0]?.cityName || b.airports[0]?.name || "";
+    return aName.localeCompare(bName);
   });
 }
 
@@ -78,7 +112,7 @@ export function ChipPlacePicker({ label, value, onChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const grouped = useMemo(() => groupPlaces(places), [places]);
+  const grouped = useMemo(() => groupPlaces(places, query), [places, query]);
 
   useEffect(() => {
     setQuery(formatPlace(value));
@@ -137,10 +171,10 @@ export function ChipPlacePicker({ label, value, onChange }: Props) {
               event.currentTarget.select();
             }}
             placeholder={`${label} city or airport`}
-            className="min-w-0 flex-1 text-slate-800 font-semibold text-sm bg-transparent outline-none placeholder:text-slate-400"
+            className="w-28 min-w-0 text-sm font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 sm:w-36"
             required
           />
-          <span className="rounded-md bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">
+          <span className="shrink-0 rounded-lg bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
             {value.code}
           </span>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -149,32 +183,32 @@ export function ChipPlacePicker({ label, value, onChange }: Props) {
 
       {open && grouped.length > 0 && (
         <div
-          className="absolute left-0 right-0 z-50 mt-2 max-h-96 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
-          style={{ top: "100%", minWidth: 340 }}
+          className="absolute left-0 z-50 mt-2 max-h-64 w-[min(360px,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-white/70 bg-white p-1.5 shadow-2xl shadow-slate-900/15"
+          style={{ top: "100%" }}
         >
           {grouped.map((group) => (
-            <div key={group.cityKey} className="border-b border-slate-100 last:border-b-0">
+            <div key={group.cityKey} className="mb-1.5 overflow-hidden rounded-2xl border border-slate-100 last:mb-0">
               {group.city && (
                 <button
                   type="button"
                   onClick={() => selectPlace(group.city!)}
-                  className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-blue-50"
+                  className="flex w-full items-start gap-2.5 bg-white px-3 py-2 text-left transition-colors hover:bg-blue-50"
                 >
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                    <MapPin className="h-3.5 w-3.5" />
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+                    <Building2 className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-black text-slate-950">
+                    <span className="block text-sm font-black leading-tight text-slate-950">
                       {group.city.cityName || group.city.name}
                       {group.city.countryName && (
                         <span className="ml-1 font-semibold text-slate-500">, {group.city.countryName}</span>
                       )}
                     </span>
-                    <span className="mt-0.5 block text-xs font-semibold text-slate-500">
-                      All airports{group.airports.length > 0 ? ` · ${group.airports.length}` : ""}
+                    <span className="mt-0.5 block text-[11px] font-semibold text-slate-500">
+                      City search · all airports{group.airports.length > 0 ? ` · ${group.airports.length} airport${group.airports.length === 1 ? "" : "s"}` : ""}
                     </span>
                   </span>
-                  <span className="ml-2 rounded-md bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">
+                  <span className="ml-2 rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-black text-white">
                     {group.city.code}
                   </span>
                 </button>
@@ -185,22 +219,19 @@ export function ChipPlacePicker({ label, value, onChange }: Props) {
                   type="button"
                   key={`${group.cityKey}-${airport.code}`}
                   onClick={() => selectPlace(airport)}
-                  className="flex w-full items-start gap-3 px-4 py-2.5 pl-12 text-left transition-colors hover:bg-blue-50"
+                  className="flex w-full items-start gap-2.5 border-t border-slate-100 px-3 py-2 pl-8 text-left transition-colors hover:bg-slate-50"
                 >
-                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
                     <Plane className="h-3 w-3" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-bold text-slate-800">
-                      <span className="font-black text-slate-950">{airport.code}</span>
-                      <span className="ml-2">{airport.name}</span>
+                    <span className="block truncate text-sm font-bold leading-tight text-slate-900">{airport.name}</span>
+                    <span className="mt-0.5 block text-[11px] text-slate-500">
+                      Airport in {airport.cityName || group.city?.cityName || group.cityKey}
+                      {typeof airport.distanceKm === "number" ? ` · ${airport.distanceKm} km from center` : ""}
                     </span>
-                    {typeof airport.distanceKm === "number" && (
-                      <span className="mt-0.5 block text-xs text-slate-500">
-                        {airport.distanceKm} km from the city center
-                      </span>
-                    )}
                   </span>
+                  <span className="ml-2 rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{airport.code}</span>
                 </button>
               ))}
             </div>

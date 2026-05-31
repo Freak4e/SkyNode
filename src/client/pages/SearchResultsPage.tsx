@@ -1,9 +1,12 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  ArrowLeftRight,
   ArrowRight,
   Briefcase,
   Bus,
+  CalendarDays,
+  Check,
   ChevronDown,
   Clock,
   Luggage,
@@ -15,8 +18,8 @@ import {
   X,
 } from "lucide-react";
 import { searchFlights } from "../api/flightsApi";
+import { ChipPlacePicker } from "../components/ChipPlacePicker";
 import { Footer } from "../components/Footer";
-import { MultiPlacePicker } from "../components/MultiPlacePicker";
 import { Navbar } from "../components/Navbar";
 import type { CurrencyCode, FlightOffer, Place } from "../../shared/types.js";
 import {
@@ -963,14 +966,244 @@ function FlightSegment({
   );
 }
 
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, (month || 1) - 1, day || 1);
+}
+
+function toDateValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatDateLabel(value: string): string {
+  const date = parseLocalDate(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(date);
+}
+
+function DatePickerField({
+  label,
+  value,
+  min,
+  disabled,
+  disabledText,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  min?: string;
+  disabled?: boolean;
+  disabledText?: string;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [visibleMonth, setVisibleMonth] = useState(() => parseLocalDate(value));
+  const minDate = min ? parseLocalDate(min) : null;
+  const year = visibleMonth.getFullYear();
+  const month = visibleMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [
+    ...Array.from({ length: startOffset }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => new Date(year, month, index + 1)),
+  ];
+
+  function moveMonth(step: number) {
+    setVisibleMonth(new Date(year, month + step, 1));
+  }
+
+  function pickDate(date: Date) {
+    onChange(toDateValue(date));
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
+      <span className="block text-xs font-black uppercase tracking-[0.16em] text-slate-400">{label}</span>
+      {disabled ? (
+        <span className="mt-1 block py-1 text-sm font-bold text-slate-400">{disabledText || "Disabled"}</span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setVisibleMonth(parseLocalDate(value));
+            setOpen((current) => !current);
+          }}
+          className="mt-1 flex w-full items-center justify-between gap-3 text-left text-sm font-black text-slate-900"
+        >
+          <span>{formatDateLabel(value)}</span>
+          <CalendarDays className="h-4 w-4 text-blue-600" />
+        </button>
+      )}
+
+      {open && !disabled && (
+        <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl shadow-slate-900/12">
+          <div className="mb-4 flex items-center justify-between">
+            <button type="button" onClick={() => moveMonth(-1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
+              ‹
+            </button>
+            <p className="text-sm font-black text-slate-950">
+              {new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(visibleMonth)}
+            </p>
+            <button type="button" onClick={() => moveMonth(1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
+              ›
+            </button>
+          </div>
+
+          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
+            {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => <span key={day}>{day}</span>)}
+          </div>
+          <div className="mt-2 grid grid-cols-7 gap-1">
+            {cells.map((date, index) => {
+              if (!date) return <span key={`empty-${index}`} />;
+
+              const dateValue = toDateValue(date);
+              const isSelected = dateValue === value;
+              const isDisabled = Boolean(minDate && date < minDate);
+
+              return (
+                <button
+                  key={dateValue}
+                  type="button"
+                  onClick={() => pickDate(date)}
+                  disabled={isDisabled}
+                  className={`h-9 rounded-xl text-sm font-black transition ${
+                    isSelected
+                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                      : isDisabled
+                      ? "cursor-not-allowed text-slate-300"
+                      : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+                  }`}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function useOutsideClose<T extends HTMLElement>(onClose: () => void) {
+  const ref = useRef<T>(null);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        onClose();
+      }
+    }
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [onClose]);
+
+  return ref;
+}
+
+function CompactDropdown({
+  value,
+  icon,
+  children,
+}: {
+  value: string;
+  icon?: ReactNode;
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-800 shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+      >
+        {icon}
+        <span>{value}</span>
+        <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="absolute left-0 top-full z-60 mt-2 max-h-56 w-48 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl shadow-slate-900/12">
+          {children(() => setOpen(false))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TripTypeControl({ value, onChange }: { value: TripType; onChange: (value: TripType) => void }) {
+  const options: Array<{ value: TripType; label: string; description: string }> = [
+    { value: "return", label: "Return", description: "Round trip" },
+    { value: "one-way", label: "One way", description: "Single trip" },
+  ];
+
+  return (
+    <CompactDropdown value={value === "return" ? "Return" : "One way"}>
+      {(close) => options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => {
+            onChange(option.value);
+            close();
+          }}
+          className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-blue-50"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-black leading-tight text-slate-950">{option.label}</span>
+            <span className="block text-[11px] font-semibold text-slate-500">{option.description}</span>
+          </span>
+          {value === option.value && <Check className="h-4 w-4 text-blue-600" />}
+        </button>
+      ))}
+    </CompactDropdown>
+  );
+}
+
+function PassengerControl({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <CompactDropdown
+      value={`${value} ${value === 1 ? "Passenger" : "Passengers"}`}
+      icon={<User className="h-4 w-4 text-slate-400" />}
+    >
+      {(close) => Array.from({ length: 9 }, (_, index) => index + 1).map((count) => (
+        <button
+          key={count}
+          type="button"
+          onClick={() => {
+            onChange(count);
+            close();
+          }}
+          className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-blue-50"
+        >
+          <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-xs font-black text-slate-700">{count}</span>
+          <span className="flex-1 text-sm font-black text-slate-950">{count === 1 ? "Passenger" : "Passengers"}</span>
+          {value === count && <Check className="h-4 w-4 text-blue-600" />}
+        </button>
+      ))}
+    </CompactDropdown>
+  );
+}
+
 export function SearchResultsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
-  const initialFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "JFK");
-  const initialToCodes = parseCodeParam(params.get("toAll") || params.get("to") || "HND");
-  const initialFromCode = initialFromCodes[0] ?? "JFK";
-  const initialToCode = initialToCodes[0] ?? "HND";
+  const hasInitialSearch = Boolean((params.has("fromAll") || params.has("from")) && (params.has("toAll") || params.has("to")));
+  const initialFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "NYC");
+  const initialToCodes = parseCodeParam(params.get("toAll") || params.get("to") || "TYO");
+  const initialFromCode = initialFromCodes[0] ?? "NYC";
+  const initialToCode = initialToCodes[0] ?? "TYO";
   const initialDate = params.get("date") ?? today;
   const initialReturnDate = params.get("returnDate") ?? initialDate;
   const initialTripType = params.get("tripType") === "one-way" ? "one-way" : "return";
@@ -992,7 +1225,8 @@ export function SearchResultsPage() {
 
   const [offers, setOffers] = useState<FlightOffer[]>([]);
   const [returnOffers, setReturnOffers] = useState<FlightOffer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [hasSearched, setHasSearched] = useState(hasInitialSearch);
+  const [loading, setLoading] = useState(hasInitialSearch);
   const [error, setError] = useState("");
   const [sort, setSort] = useState<SortMode>("best");
   const [currency, setCurrency] = useState<CurrencyCode>(() => {
@@ -1007,19 +1241,23 @@ export function SearchResultsPage() {
   const [maxDuration, setMaxDuration] = useState(24);
 
   useEffect(() => {
-    doSearch(initialFromCodes, initialToCodes, initialDate, initialTripType, initialReturnDate);
+    if (hasInitialSearch) {
+      doSearch(initialFromCodes, initialToCodes, initialDate, initialTripType, initialReturnDate);
+    }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleCurrencyChange = (event: Event) => {
       const nextCurrency = normalizeCurrency((event as CustomEvent<CurrencyCode>).detail);
       setCurrency(nextCurrency);
-      doSearch(fromPlaces.map((place) => place.code), toPlaces.map((place) => place.code), date, tripType, returnDate, nextCurrency);
+      if (hasSearched) {
+        doSearch([from.code], [to.code], date, tripType, returnDate, nextCurrency);
+      }
     };
 
     window.addEventListener(currencyChangedEvent, handleCurrencyChange);
     return () => window.removeEventListener(currencyChangedEvent, handleCurrencyChange);
-  }, [fromPlaces, toPlaces, date, tripType, returnDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [from.code, to.code, date, tripType, returnDate, hasSearched]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function doSearch(
     fromCodes: string[],
@@ -1029,6 +1267,7 @@ export function SearchResultsPage() {
     inboundDate: string,
     searchCurrency = currency,
   ) {
+    setHasSearched(true);
     setLoading(true);
     setError("");
     setOffers([]);
@@ -1054,8 +1293,8 @@ export function SearchResultsPage() {
     e.preventDefault();
 
     const searchParams = new URLSearchParams({
-      from: fromPlaces.map((place) => place.code).join(","),
-      to: toPlaces.map((place) => place.code).join(","),
+      from: from.code,
+      to: to.code,
       date,
       fromName: from.cityName || from.name,
       toName: to.cityName || to.name,
@@ -1069,7 +1308,12 @@ export function SearchResultsPage() {
     }
 
     navigate(`/search?${searchParams.toString()}`);
-    doSearch(fromPlaces.map((place) => place.code), toPlaces.map((place) => place.code), date, tripType, returnDate);
+    doSearch([from.code], [to.code], date, tripType, returnDate);
+  }
+
+  function swapPlaces() {
+    setFromPlaces([to]);
+    setToPlaces([from]);
   }
 
   function openPlanner(pair: FlightPair) {
@@ -1145,89 +1389,56 @@ export function SearchResultsPage() {
       <div className="app-search-header border-b border-slate-200 bg-white">
         <div className="mx-auto max-w-7xl">
           <form onSubmit={handleSearch}>
-            <div className="mb-3 flex flex-wrap items-center gap-4 text-sm font-bold text-slate-900">
-              <label className="relative flex items-center">
-                <select
-                  value={tripType}
-                  onChange={(event) => setTripType(event.target.value as TripType)}
-                  className="appearance-none bg-transparent pr-6 outline-none"
-                  aria-label="Trip type"
-                >
-                  <option value="return">Return</option>
-                  <option value="one-way">One way</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 h-4 w-4 text-slate-500" />
-              </label>
-
-              <span>Economy</span>
-
-              <label className="relative flex items-center gap-2">
-                <User className="h-4 w-4" />
-                <select
-                  value={passengers}
-                  onChange={(event) => setPassengers(Number(event.target.value))}
-                  className="appearance-none bg-transparent pr-6 outline-none"
-                  aria-label="Passengers"
-                >
-                  {Array.from({ length: 9 }, (_, index) => index + 1).map((count) => (
-                    <option key={count} value={count}>
-                      {count} {count === 1 ? "Passenger" : "Passengers"}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-0 h-4 w-4 text-slate-500" />
-              </label>
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm font-bold text-slate-900">
+              <TripTypeControl value={tripType} onChange={setTripType} />
+              <PassengerControl value={passengers} onChange={setPassengers} />
             </div>
 
-            <div className="grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_180px_180px_auto]">
-              <div className="rounded border border-slate-300 bg-white px-3 py-2">
+            <div className="grid gap-2 lg:grid-cols-[minmax(210px,0.95fr)_44px_minmax(210px,0.95fr)_170px_170px_auto]">
+              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-slate-400" />
-                  <MultiPlacePicker label="From" values={fromPlaces} onChange={setFromPlaces} placeholder="Add departure" />
+                  <ChipPlacePicker label="From" value={from} onChange={(place) => setFromPlaces([place])} />
                 </div>
               </div>
 
-              <div className="rounded border border-slate-300 bg-white px-3 py-2">
+              <button
+                type="button"
+                onClick={swapPlaces}
+                className="flex h-full min-h-14 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                aria-label="Swap origin and destination"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+              </button>
+
+              <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
                 <div className="flex items-center gap-2">
                   <ArrowRight className="h-4 w-4 text-slate-400" />
-                  <MultiPlacePicker label="To" values={toPlaces} onChange={setToPlaces} placeholder="Add destination" />
+                  <ChipPlacePicker label="To" value={to} onChange={(place) => setToPlaces([place])} />
                 </div>
               </div>
 
-              <label className="rounded border border-slate-300 bg-white px-3 py-2">
-                <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">Departure</span>
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => {
-                    const nextDate = event.target.value;
-                    setDate(nextDate);
-                    if (returnDate < nextDate) setReturnDate(nextDate);
-                  }}
-                  className="w-full bg-transparent text-sm font-bold text-slate-900 outline-none"
-                  required
-                />
-              </label>
+              <DatePickerField
+                label="Departure"
+                value={date}
+                onChange={(nextDate) => {
+                  setDate(nextDate);
+                  if (returnDate < nextDate) setReturnDate(nextDate);
+                }}
+              />
 
-              <label className="rounded border border-slate-300 bg-white px-3 py-2">
-                <span className="block text-xs font-bold uppercase tracking-wider text-slate-400">Return</span>
-                {tripType === "return" ? (
-                  <input
-                    type="date"
-                    value={returnDate}
-                    min={date}
-                    onChange={(event) => setReturnDate(event.target.value)}
-                    className="w-full bg-transparent text-sm font-bold text-slate-900 outline-none"
-                    required
-                  />
-                ) : (
-                  <span className="block py-0.5 text-sm font-bold text-slate-400">One way</span>
-                )}
-              </label>
+              <DatePickerField
+                label="Return"
+                value={returnDate}
+                min={date}
+                disabled={tripType !== "return"}
+                disabledText="One way"
+                onChange={setReturnDate}
+              />
 
               <button
                 type="submit"
-                className="rounded bg-blue-600 px-7 py-3 text-sm font-black text-white transition-colors hover:bg-blue-700"
+                className="rounded-2xl bg-blue-600 px-7 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700"
               >
                 <Search className="mr-2 inline h-4 w-4" />
                 Search
@@ -1334,37 +1545,39 @@ export function SearchResultsPage() {
         </aside>
 
         <main className="min-w-0">
-          <div className="mb-4 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4">
-            {(["best", "price", "duration", "earliest"] as SortMode[]).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setSort(mode)}
-                className={`px-5 py-4 text-left text-sm font-black capitalize transition-colors ${
-                  sort === mode ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-900 hover:bg-slate-50"
-                }`}
-              >
-                {mode === "price" ? "Cheapest" : mode === "duration" ? "Fastest" : mode === "earliest" ? "Earliest" : "Best"}
-                <span className="mt-1 block text-xs font-semibold text-slate-500">
-                  {mode === "duration"
-                    ? "Shortest route"
-                    : mode === "earliest"
-                      ? "First departure"
-                      : sorted[0]
-                        ? formatDisplayPrice(sorted[0], currency)
-                        : "No price"}
-                </span>
-              </button>
-            ))}
-          </div>
+          {hasSearched && (
+            <div className="mb-4 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm md:grid-cols-4">
+              {(["best", "price", "duration", "earliest"] as SortMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setSort(mode)}
+                  className={`px-5 py-4 text-left text-sm font-black capitalize transition-colors ${
+                    sort === mode ? "border-b-2 border-blue-600 text-blue-700" : "text-slate-900 hover:bg-slate-50"
+                  }`}
+                >
+                  {mode === "price" ? "Cheapest" : mode === "duration" ? "Fastest" : mode === "earliest" ? "Earliest" : "Best"}
+                  <span className="mt-1 block text-xs font-semibold text-slate-500">
+                    {mode === "duration"
+                      ? "Shortest route"
+                      : mode === "earliest"
+                        ? "First departure"
+                        : sorted[0]
+                          ? formatDisplayPrice(sorted[0], currency)
+                          : "No price"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {loading && <FlightSearchLoader from={from} to={to} />}
 
-          {!loading && error && (
+          {!loading && hasSearched && error && (
             <div className="rounded-lg border border-red-100 bg-red-50 p-6 text-center">
               <p className="mb-1 font-black text-red-600">Search failed</p>
               <p className="text-sm text-red-500">{error}</p>
               <button
-                onClick={() => doSearch(fromPlaces.map((place) => place.code), toPlaces.map((place) => place.code), date, tripType, returnDate)}
+                onClick={() => doSearch([from.code], [to.code], date, tripType, returnDate)}
                 className="mt-4 rounded-full bg-red-500 px-5 py-2 text-sm font-bold text-white hover:bg-red-600"
               >
                 Try again
@@ -1372,7 +1585,17 @@ export function SearchResultsPage() {
             </div>
           )}
 
-          {!loading && !error && sorted.length === 0 && (
+          {!loading && !hasSearched && (
+            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <Search className="mx-auto mb-4 h-12 w-12 text-blue-100" />
+              <p className="mb-2 text-xl font-black text-slate-900">Start your flight search</p>
+              <p className="mx-auto max-w-md text-sm leading-6 text-slate-500">
+                Choose your departure, destination, and dates above. We will search flights only after you click Search.
+              </p>
+            </div>
+          )}
+
+          {!loading && hasSearched && !error && sorted.length === 0 && (
             <div className="rounded-lg border border-slate-200 bg-white p-12 text-center">
               <Plane className="mx-auto mb-4 h-12 w-12 text-slate-200" />
               <p className="mb-2 text-lg font-black text-slate-900">No flights found</p>

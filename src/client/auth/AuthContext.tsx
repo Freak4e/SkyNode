@@ -1,6 +1,6 @@
 import type { Provider, Session, User } from "@supabase/supabase-js";
 import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { isSupabaseConfigured, supabase } from "../lib/supabaseClient";
 
 type AuthContextValue = {
   user: User | null;
@@ -20,6 +20,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+
+    if (!isSupabaseConfigured || !supabase) {
+      setLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
 
     supabase.auth.getSession()
       .then(({ data }) => {
@@ -49,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     session,
     loading,
     async signIn(email: string, password: string) {
+      if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
       const { error } = await supabase.auth.signInWithPassword({ email, password });
 
       if (error) {
@@ -56,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     async signUp(email: string, password: string) {
+      if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
       const { data, error } = await supabase.auth.signUp({ email, password });
 
       if (error) {
@@ -73,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return "created";
     },
     async signInWithProvider(provider: Provider, redirectTo: string) {
+      if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
@@ -85,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     async signOut() {
+      if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
       const { error } = await supabase.auth.signOut();
 
       if (error) {

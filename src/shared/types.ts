@@ -2,8 +2,8 @@ export type ProviderId = "scrapingbee" | "travelpayouts" | "auto";
 export type CurrencyCode = "USD" | "EUR" | "GBP" | "JPY" | "CHF" | "CAD" | "AUD" | "CNY";
 
 export type FlightSearchInput = {
-  from: string;
-  to: string;
+  from: string | string[];
+  to: string | string[];
   date: string;
   provider?: ProviderId;
   currency?: CurrencyCode;
@@ -41,6 +41,8 @@ export type FlightOffer = {
   bookingLink: string;
   source?: Exclude<FlightSource, "none">;
   expiresAt?: string;
+  searchFrom?: string;
+  searchTo?: string;
   layovers?: FlightLayover[];
   segments?: FlightSegment[];
 };
@@ -49,6 +51,7 @@ export type FlightSearchResponse = {
   offers: FlightOffer[];
   warnings: string[];
   source: FlightSource;
+  searchedRoutes?: Array<{ from: string; to: string }>;
 };
 
 export type Place = {
@@ -104,10 +107,15 @@ export type GeocodeResponse = {
 };
 
 export type ItineraryItem = {
+  order?: number;
   timeOfDay: string;
   title: string;
   description: string;
   attractionName?: string;
+  category?: string;
+  location?: TripLocation;
+  notes?: string;
+  tags?: string[];
   estimatedCost: number;
 };
 
@@ -133,7 +141,49 @@ export type GenerateItineraryRequest = {
   selectedFlights?: FlightOffer[];
   routeSegments?: TripRouteSegment[];
   expenseBreakdown?: TripExpenseBreakdown;
+  cities?: TripCity[];
+  hotels?: TripHotel[];
+  budgetCategories?: TripBudgetCategory[];
+  notes?: string;
+  tags?: string[];
   originCode?: string;
+};
+
+export type TripLocation = {
+  name: string;
+  address?: string;
+  city?: string;
+  lat?: number;
+  lon?: number;
+  source?: "user" | "ai" | "geoapify" | "openrouteservice" | "manual";
+  verified?: boolean;
+};
+
+export type TripPlace = TripLocation & {
+  id: string;
+  type: "airport" | "hotel" | "attraction" | "restaurant" | "station" | "other";
+};
+
+export type TripCity = {
+  id: string;
+  name: string;
+  country?: string;
+  arrivalDate?: string;
+  departureDate?: string;
+  nights?: number;
+  notes?: string;
+};
+
+export type TripHotel = {
+  id: string;
+  cityName: string;
+  name: string;
+  location?: TripLocation;
+  checkIn?: string;
+  checkOut?: string;
+  address?: string;
+  priceEstimate?: number;
+  bookingReference?: string;
 };
 
 export type TripRouteSegment = {
@@ -142,6 +192,8 @@ export type TripRouteSegment = {
   from: string;
   to: string;
   date: string;
+  fromLocation?: TripLocation;
+  toLocation?: TripLocation;
   label?: string;
   details?: FlightOffer;
 };
@@ -152,6 +204,13 @@ export type TripExpenseBreakdown = {
   activities?: number;
   food?: number;
   other?: number;
+};
+
+export type TripBudgetCategory = {
+  id: string;
+  label: string;
+  amount: number;
+  spent?: number;
 };
 
 export type GeneratedItinerary = {
@@ -188,6 +247,11 @@ export type SavedTripSummary = {
   travelers?: number;
   routeSegments?: TripRouteSegment[];
   expenseBreakdown?: TripExpenseBreakdown;
+  cities?: TripCity[];
+  hotels?: TripHotel[];
+  budgetCategories?: TripBudgetCategory[];
+  notes?: string;
+  tags?: string[];
   estimatedTotalCost: number;
   createdAt: string;
 };

@@ -7,7 +7,7 @@ type AuthContextValue = {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<"created" | "already_exists">;
+  signUp: (email: string, password: string) => Promise<"created" | "already_exists" | "confirmation_required">;
   signInWithProvider: (provider: Provider, redirectTo: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -64,6 +64,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
         return "already_exists";
+      }
+
+      if (!data.session) {
+        return "confirmation_required";
       }
 
       return "created";

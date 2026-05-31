@@ -98,7 +98,7 @@ export function TripsPage() {
                   <div className="space-y-2 text-sm font-bold text-slate-500">
                     <p className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 text-blue-500" />
-                      {trip.originCode ? `${trip.originCode} to ` : ""}{trip.destinationName}
+                      {trip.cities?.length ? trip.cities.map((city) => city.name).join(" -> ") : `${trip.originCode ? `${trip.originCode} to ` : ""}${trip.destinationName}`}
                     </p>
                     <p className="flex items-center gap-2">
                       <CalendarDays className="h-4 w-4 text-blue-500" />
@@ -111,7 +111,7 @@ export function TripsPage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {[trip.budget, trip.pace, ...trip.interests].slice(0, 7).map((tag) => (
+                    {[trip.budget, trip.pace, ...(trip.tags?.length ? trip.tags : trip.interests)].slice(0, 7).map((tag) => (
                       <span key={tag} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-black capitalize text-slate-600">
                         <Tags className="h-3 w-3" />
                         {tag}

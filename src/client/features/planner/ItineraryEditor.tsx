@@ -23,11 +23,13 @@ export function ItineraryEditor(props: ItineraryEditorProps) {
           </div>
           <div className="mt-3 space-y-2">
             {day.items.map((item, itemIndex) => (
-              <div key={`${day.dayNumber}-${itemIndex}`} className="grid gap-2 rounded-xl bg-white p-3 lg:grid-cols-[110px_1fr_1.4fr_1fr_100px_40px]">
+              <div key={`${day.dayNumber}-${itemIndex}`} className="grid gap-2 rounded-xl bg-white p-3 lg:grid-cols-[110px_1fr_1fr_130px_1fr_1fr_100px_40px]">
                 <input type="time" value={cleanTime(item.timeOfDay)} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { timeOfDay: event.target.value })} className="rounded-lg border border-slate-200 px-2 py-2 text-xs font-bold outline-none" />
                 <input value={item.title} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { title: event.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold outline-none" placeholder="Activity" />
                 <input value={item.description} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { description: event.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Notes" />
-                <input value={item.attractionName || ""} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { attractionName: event.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Location" />
+                <input value={item.category || ""} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { category: event.target.value })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Category" />
+                <input value={item.location?.name || item.attractionName || ""} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { attractionName: event.target.value, location: { ...item.location, name: event.target.value } })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Location" />
+                <input value={item.location?.address || ""} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { location: { name: item.location?.name || item.attractionName || item.title, ...item.location, address: event.target.value } })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none" placeholder="Address/area" />
                 <input type="number" min={0} value={item.estimatedCost} onChange={(event) => props.updateActivity(dayIndex, itemIndex, { estimatedCost: Number(event.target.value || 0) })} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold outline-none" placeholder="Cost" />
                 <button type="button" onClick={() => props.removeActivity(dayIndex, itemIndex)} className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-600"><X className="h-4 w-4" /></button>
               </div>

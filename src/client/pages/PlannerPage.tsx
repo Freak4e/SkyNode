@@ -28,6 +28,9 @@ import type {
   SavedTripSummary,
   TravelPace,
   TripChangeProposal,
+  TripHotel,
+  TripLocation,
+  TripRouteSegment,
 } from "../../shared/types.js";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -48,18 +51,16 @@ export function PlannerPage() {
   const [days, setDays] = useState(3);
   const [travelers, setTravelers] = useState(2);
   const [budgetAmount, setBudgetAmount] = useState(1800);
+  const [tripCities, setTripCities] = useState(initialDestination);
+  const [hotelName, setHotelName] = useState("");
+  const [tripNotes, setTripNotes] = useState("");
+  const [tripTags, setTripTags] = useState("");
+  const [loadedHotels, setLoadedHotels] = useState<TripHotel[] | undefined>();
+  const [loadedRouteSegments, setLoadedRouteSegments] = useState<TripRouteSegment[] | undefined>();
   const budget = useMemo<BudgetLevel>(() => budgetLevelFromAmount(budgetAmount), [budgetAmount]);
   const [pace, setPace] = useState<TravelPace>("balanced");
   const [selectedInterests, setSelectedInterests] = useState<string[]>(["culture", "food", "nature"]);
-  const [selectedFlight] = useState<FlightOffer | undefined>(() => {
-    const raw = sessionStorage.getItem("skynode:selectedFlight");
-    if (!raw) return undefined;
-    try {
-      return JSON.parse(raw) as FlightOffer;
-    } catch {
-      return undefined;
-    }
-  });
+  const [selectedFlight, setSelectedFlight] = useState<FlightOffer | undefined>(() => readSelectedFlightFromSession());
 
   const [itinerary, setItinerary] = useState<GeneratedItinerary | null>(null);
   const [draftDays, setDraftDays] = useState<ItineraryDay[]>(emptyDays(3));
@@ -89,17 +90,46 @@ export function PlannerPage() {
     interests: selectedInterests,
     selectedFlight,
     selectedFlights: selectedFlight ? [selectedFlight] : undefined,
-    routeSegments: selectedFlight ? [{
+    routeSegments: loadedRouteSegments || (selectedFlight ? [{
       id: "selected-outbound",
       type: "flight",
       from: originCode || "ANY",
       to: destinationCode,
       date: startDate,
       label: selectedFlight.carrier,
+      fromLocation: buildFlightLocation(
+        selectedFlight.segments?.[0]?.originAirport,
+        selectedFlight.segments?.[0]?.originCode || originCode,
+      ),
+      toLocation: buildFlightLocation(
+        selectedFlight.segments?.[selectedFlight.segments.length - 1]?.destinationAirport,
+        selectedFlight.segments?.[selectedFlight.segments.length - 1]?.destinationCode || destinationCode,
+        destinationName,
+      ),
       details: selectedFlight,
-    }] : undefined,
+    }] : undefined),
+    cities: tripCities.split(",").map((city) => city.trim()).filter(Boolean).map((city, index) => ({
+      id: `city-${index + 1}`,
+      name: city,
+      notes: index === 0 ? "Primary destination" : undefined,
+    })),
+    hotels: loadedHotels || (hotelName.trim() ? [{
+      id: "hotel-1",
+      cityName: destinationName,
+      name: hotelName.trim(),
+      location: { name: hotelName.trim(), city: destinationName, source: "user" },
+      checkIn: startDate,
+    }] : undefined),
+    budgetCategories: [
+      { id: "flights", label: "Flights", amount: selectedFlight ? Number((selectedFlight.priceText || "").replace(/[^0-9]/g, "")) || 0 : 0 },
+      { id: "hotels", label: "Hotels", amount: Math.round(budgetAmount * 0.35) },
+      { id: "activities", label: "Activities", amount: Math.round(budgetAmount * 0.25) },
+      { id: "food", label: "Food", amount: Math.round(budgetAmount * 0.2) },
+    ],
+    notes: tripNotes.trim() || undefined,
+    tags: tripTags.split(",").map((tag) => tag.trim()).filter(Boolean),
     originCode: originCode || undefined,
-  }), [budget, budgetAmount, days, destinationCode, destinationName, originCode, pace, selectedFlight, selectedInterests, startDate, travelers]);
+  }), [budget, budgetAmount, days, destinationCode, destinationName, hotelName, loadedHotels, loadedRouteSegments, originCode, pace, selectedFlight, selectedInterests, startDate, travelers, tripCities, tripNotes, tripTags]);
 
   const title = tripTitle.trim() || itinerary?.destinationName || destinationName;
   const filteredTrips = savedTrips.filter((trip) => {
@@ -138,6 +168,13 @@ export function PlannerPage() {
       setStartDate(trip.startDate);
       setDays(trip.days);
       setBudgetAmount(trip.estimatedTotalCost || 1800);
+      setTripCities(trip.cities?.map((city) => city.name).join(", ") || trip.destinationName);
+      setHotelName(trip.hotels?.[0]?.name || "");
+      setLoadedHotels(trip.hotels);
+      setLoadedRouteSegments(trip.routeSegments);
+      setTripNotes(trip.notes || "");
+      setTripTags(trip.tags?.join(", ") || "");
+      setSelectedFlight(trip.selectedFlight);
       setPace(trip.pace);
       setSelectedInterests(trip.interests);
       setItinerary(trip.itinerary);
@@ -164,6 +201,8 @@ export function PlannerPage() {
       setItinerary(generated);
       setDraftDays(generated.days);
       setSelectedTripId("");
+      setLoadedHotels(undefined);
+      setLoadedRouteSegments(undefined);
       setEditing(false);
       setTab("itinerary");
     } catch (generateError) {
@@ -269,8 +308,15 @@ export function PlannerPage() {
     setDays(3);
     setTravelers(2);
     setBudgetAmount(1800);
+    setTripCities(initialDestination);
+    setHotelName("");
+    setLoadedHotels(undefined);
+    setLoadedRouteSegments(undefined);
+    setTripNotes("");
+    setTripTags("");
     setPace("balanced");
     setSelectedInterests(["culture", "food", "nature"]);
+    setSelectedFlight(readSelectedFlightFromSession());
     setDraftDays(emptyDays(3));
     setItinerary(null);
     setManual(false);
@@ -330,8 +376,10 @@ export function PlannerPage() {
             destinationCode={destinationCode}
             destinationName={destinationName}
             draftDays={draftDays}
+            hotelName={hotelName}
             loading={loading}
             manual={manual}
+            notes={tripNotes}
             originCode={originCode}
             pace={pace}
             removeActivity={removeActivity}
@@ -339,14 +387,20 @@ export function PlannerPage() {
             selectedInterests={selectedInterests}
             setBudgetAmount={setBudgetAmount}
             setDestinationName={setDestinationName}
+            setHotelName={setHotelName}
             setManual={setManual}
+            setNotes={setTripNotes}
             setPace={setPace}
             setStartDate={setStartDate}
+            setTripCities={setTripCities}
+            setTripTags={setTripTags}
             setTravelers={setTravelers}
             setTripTitle={setTripTitle}
             startDate={startDate}
             toggleInterest={toggleInterest}
             travelers={travelers}
+            tripCities={tripCities}
+            tripTags={tripTags}
             tripTitle={tripTitle}
             updateActivity={updateActivity}
             updateDay={updateDay}
@@ -383,11 +437,11 @@ export function PlannerPage() {
                   updateActivity={updateActivity}
                   updateDay={updateDay}
                 />
-                <PlannerRail itinerary={itinerary} plannedBudget={budgetAmount} selectedFlight={selectedFlight} travelers={travelers} />
+                <PlannerRail itinerary={itinerary} plannedBudget={budgetAmount} selectedFlight={selectedFlight} travelers={travelers} hotels={request.hotels} routeSegments={request.routeSegments} />
               </div>
             )}
             {tab === "calendar" && <CalendarView itinerary={itinerary} />}
-            {tab === "map" && <ItineraryMap itinerary={itinerary} />}
+            {tab === "map" && <ItineraryMap itinerary={itinerary} hotels={request.hotels} routeSegments={request.routeSegments} />}
           </>
         )}
       </PageShell>
@@ -411,7 +465,31 @@ export function PlannerPage() {
   );
 }
 
+function readSelectedFlightFromSession(): FlightOffer | undefined {
+  const raw = sessionStorage.getItem("skynode:selectedFlight");
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as FlightOffer;
+  } catch {
+    return undefined;
+  }
+}
+
 function Banner({ kind, text }: { kind: "error" | "success"; text: string }) {
   if (kind === "error") return <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-600">{text}</div>;
   return <div className="mb-6 flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700"><CheckCircle2 className="h-4 w-4" />{text}</div>;
+}
+
+function buildFlightLocation(airportName?: string, airportCode?: string, city?: string): TripLocation | undefined {
+  const name = [airportName, airportCode ? `(${airportCode})` : ""].filter(Boolean).join(" ").trim();
+
+  if (!name) {
+    return undefined;
+  }
+
+  return {
+    name,
+    city,
+    source: "user",
+  };
 }

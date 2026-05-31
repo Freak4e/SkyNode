@@ -41,6 +41,11 @@ type TripSummaryRow = {
   travelers?: number | null;
   route_segments?: SavedTripSummary["routeSegments"] | null;
   expense_breakdown?: SavedTripSummary["expenseBreakdown"] | null;
+  cities?: SavedTripSummary["cities"] | null;
+  hotels?: SavedTripSummary["hotels"] | null;
+  budget_categories?: SavedTripSummary["budgetCategories"] | null;
+  notes?: string | null;
+  tags?: string[] | null;
   estimated_total_cost: number;
   generation_mode?: GeneratedItinerary["generationMode"] | null;
   created_at: string;
@@ -70,7 +75,16 @@ type ItineraryItemRow = {
   title: string;
   description: string;
   attraction_name: string | null;
+  category: string | null;
+  location_name: string | null;
+  location_address: string | null;
+  location_city: string | null;
+  location_lat: number | null;
+  location_lon: number | null;
+  notes: string | null;
+  tags: string[] | null;
   estimated_cost: number;
+  item_order: number | null;
   sort_order: number;
 };
 
@@ -95,11 +109,16 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
         travelers,
         route_segments,
         expense_breakdown,
+        cities,
+        hotels,
+        budget_categories,
+        notes,
+        tags,
         estimated_total_cost,
         generation_mode,
         user_id
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
       returning id, created_at
     `,
     [
@@ -118,6 +137,11 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
       request.travelers ?? 1,
       request.routeSegments ? JSON.stringify(request.routeSegments) : null,
       request.expenseBreakdown ? JSON.stringify(request.expenseBreakdown) : null,
+      request.cities ? JSON.stringify(request.cities) : null,
+      request.hotels ? JSON.stringify(request.hotels) : null,
+      request.budgetCategories ? JSON.stringify(request.budgetCategories) : null,
+      request.notes || null,
+      request.tags || [],
       request.itinerary.estimatedTotalCost,
       request.itinerary.generationMode,
       userId,
@@ -164,10 +188,19 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
             title,
             description,
             attraction_name,
+            category,
+            location_name,
+            location_address,
+            location_city,
+            location_lat,
+            location_lon,
+            notes,
+            tags,
             estimated_cost,
+            item_order,
             sort_order
           )
-          values ($1, $2, $3, $4, $5, $6, $7)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         `,
         [
           savedDay.id,
@@ -175,7 +208,16 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
           item.title,
           item.description,
           item.attractionName || null,
+          item.category || null,
+          item.location?.name || item.attractionName || null,
+          item.location?.address || null,
+          item.location?.city || null,
+          item.location?.lat ?? null,
+          item.location?.lon ?? null,
+          item.notes || null,
+          item.tags || [],
           item.estimatedCost,
+          item.order ?? index,
           index,
         ],
       );
@@ -208,6 +250,11 @@ export async function listTrips(userId: string): Promise<SavedTripSummary[]> {
         travelers,
         route_segments,
         expense_breakdown,
+        cities,
+        hotels,
+        budget_categories,
+        notes,
+        tags,
         estimated_total_cost,
         created_at::text
       from trips
@@ -243,6 +290,11 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
         travelers,
         route_segments,
         expense_breakdown,
+        cities,
+        hotels,
+        budget_categories,
+        notes,
+        tags,
         estimated_total_cost,
         generation_mode,
         created_at::text
@@ -285,7 +337,16 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
           title,
           description,
           attraction_name,
+          category,
+          location_name,
+          location_address,
+          location_city,
+          location_lat,
+          location_lon,
+          notes,
+          tags,
           estimated_cost,
+          item_order,
           sort_order
         from itinerary_items
         where itinerary_day_id in (
@@ -307,6 +368,17 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
       title: item.title,
       description: item.description,
       attractionName: item.attraction_name || undefined,
+      category: item.category || undefined,
+      location: item.location_name ? {
+        name: item.location_name,
+        address: item.location_address || undefined,
+        city: item.location_city || undefined,
+        lat: item.location_lat ?? undefined,
+        lon: item.location_lon ?? undefined,
+      } : undefined,
+      notes: item.notes || undefined,
+      tags: item.tags || undefined,
+      order: item.item_order ?? item.sort_order,
       estimatedCost: item.estimated_cost,
     });
     itemsByDay.set(item.itinerary_day_id, items);
@@ -394,10 +466,19 @@ export async function applyTripChangeProposal(
               title,
               description,
               attraction_name,
-              estimated_cost,
-              sort_order
+              category,
+              location_name,
+              location_address,
+              location_city,
+              location_lat,
+              location_lon,
+              notes,
+             tags,
+             estimated_cost,
+              item_order,
+             sort_order
             )
-            values ($1, $2, $3, $4, $5, $6, $7)
+            values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
           `,
           [
             savedDay.id,
@@ -405,7 +486,16 @@ export async function applyTripChangeProposal(
             item.title,
             item.description,
             item.attractionName || null,
+            item.category || null,
+            item.location?.name || item.attractionName || null,
+            item.location?.address || null,
+            item.location?.city || null,
+            item.location?.lat ?? null,
+            item.location?.lon ?? null,
+            item.notes || null,
+            item.tags || [],
             item.estimatedCost,
+            item.order ?? index,
             index,
           ],
         );
@@ -439,6 +529,11 @@ function mapTripSummary(row: TripSummaryRow): SavedTripSummary {
     travelers: row.travelers || undefined,
     routeSegments: row.route_segments || undefined,
     expenseBreakdown: row.expense_breakdown || undefined,
+    cities: row.cities || undefined,
+    hotels: row.hotels || undefined,
+    budgetCategories: row.budget_categories || undefined,
+    notes: row.notes || undefined,
+    tags: row.tags || undefined,
     estimatedTotalCost: row.estimated_total_cost,
     createdAt: row.created_at,
   };

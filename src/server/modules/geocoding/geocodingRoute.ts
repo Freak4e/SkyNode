@@ -17,9 +17,9 @@ geocodingRoute.post("/", async (req, res) => {
   try {
     const points: GeocodeResponse["points"] = [];
     const destinationCenter = await geocodeText(request.destinationName);
-    const radiusMeters = 30000;
+    const radiusMeters = 80000;
 
-    for (const item of request.items.slice(0, 12)) {
+    for (const item of request.items.slice(0, 24)) {
       const query = buildGeocodeQuery(item, request.destinationName);
       const point = await geocodeText(query, undefined, {
         center: destinationCenter || undefined,

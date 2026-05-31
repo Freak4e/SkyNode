@@ -16,8 +16,10 @@ type TripSetupFormProps = {
   destinationCode: string;
   destinationName: string;
   draftDays: ItineraryDay[];
+  hotelName: string;
   loading: boolean;
   manual: boolean;
+  notes: string;
   originCode: string;
   pace: TravelPace;
   removeActivity: (dayIndex: number, itemIndex: number) => void;
@@ -25,14 +27,20 @@ type TripSetupFormProps = {
   selectedInterests: string[];
   setBudgetAmount: (value: number) => void;
   setDestinationName: (value: string) => void;
+  setHotelName: (value: string) => void;
   setManual: (value: boolean) => void;
+  setNotes: (value: string) => void;
   setPace: (value: TravelPace) => void;
   setStartDate: (value: string) => void;
+  setTripCities: (value: string) => void;
+  setTripTags: (value: string) => void;
   setTravelers: (value: number) => void;
   setTripTitle: (value: string) => void;
   startDate: string;
   toggleInterest: (interest: string) => void;
   travelers: number;
+  tripCities: string;
+  tripTags: string;
   tripTitle: string;
   updateActivity: (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => void;
   updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "title" | "summary">>) => void;
@@ -78,6 +86,12 @@ export function TripSetupForm(props: TripSetupFormProps) {
               ))}
             </div>
           </div>
+        </div>
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
+          <FormField label="Cities" value={props.tripCities} onValueChange={props.setTripCities} placeholder="Porto, Valencia" />
+          <FormField label="Hotel" value={props.hotelName} onValueChange={props.setHotelName} placeholder="Optional hotel or area" />
+          <FormField label="Trip tags" value={props.tripTags} onValueChange={props.setTripTags} placeholder="family, beaches, food" />
+          <FormField label="Notes" value={props.notes} onValueChange={props.setNotes} placeholder="Must-do places, accessibility, return flight..." />
         </div>
         <Card tone="muted" className="mt-5 rounded-2xl shadow-none">
           <div className="flex flex-wrap items-center justify-between gap-3">

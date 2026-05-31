@@ -1,24 +1,54 @@
-import { FormEvent, useState } from "react";
-import { ArrowLeft, Loader2, LockKeyhole, Mail } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Info, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import logo from "../../../assets/logo_skynode_horizontal.png";
 
 type AuthMode = "signin" | "signup";
+type Notice = { kind: "error" | "success" | "info"; text: string };
+
+function authMessage(error: unknown, mode: AuthMode): string {
+  const message = error instanceof Error ? error.message : "Authentication failed.";
+
+  if (/invalid login credentials|invalid credentials|email not confirmed/i.test(message)) {
+    return mode === "signin"
+      ? "Email or password is incorrect. If you just registered, confirm your email first."
+      : "That email could not be registered.";
+  }
+
+  if (/already|registered|exists/i.test(message)) {
+    return "An account with this email already exists. Please sign in instead.";
+  }
+
+  return message;
+}
 
 export function AuthPage() {
-  const { user, signIn, signUp, signInWithProvider } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<AuthMode>("signup");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const searchParams = new URLSearchParams(location.search);
+  const callbackMode = searchParams.get("callback") === "oauth";
   const backTo = typeof location.state === "object" && location.state && "from" in location.state
     ? String(location.state.from)
     : "/";
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error_description") || searchParams.get("error");
+
+    if (oauthError) {
+      setNotice({ kind: "error", text: decodeURIComponent(oauthError.replace(/\+/g, " ")) });
+    }
+  }, [location.search]);
+
+  if (callbackMode && authLoading) {
+    return <AuthLoadingScreen text="Finishing secure sign-in..." />;
+  }
 
   if (user) {
     return <Navigate to="/" replace />;
@@ -27,8 +57,7 @@ export function AuthPage() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setSubmitting(true);
-    setError("");
-    setMessage("");
+    setNotice(null);
 
     try {
       if (mode === "signin") {
@@ -38,23 +67,30 @@ export function AuthPage() {
         const signupResult = await signUp(email, password);
 
         if (signupResult === "already_exists") {
-          window.alert("An account with this email already exists. Please sign in instead.");
+          setNotice({ kind: "info", text: "An account with this email already exists. Please sign in instead." });
           setMode("signin");
+          return;
+        }
+
+        if (signupResult === "confirmation_required") {
+          setNotice({ kind: "success", text: "Account created. Check your email to confirm your account, then sign in." });
+          setMode("signin");
+          setPassword("");
           return;
         }
 
         navigate("/", { replace: true });
       }
     } catch (authError) {
-      const message = authError instanceof Error ? authError.message : "Authentication failed.";
+      const message = authMessage(authError, mode);
 
-      if (mode === "signup" && /already|registered|exists/i.test(message)) {
-        window.alert("An account with this email already exists. Please sign in instead.");
+      if (mode === "signup" && /already exists/i.test(message)) {
+        setNotice({ kind: "info", text: message });
         setMode("signin");
         return;
       }
 
-      setError(message);
+      setNotice({ kind: "error", text: message });
     } finally {
       setSubmitting(false);
     }
@@ -62,21 +98,19 @@ export function AuthPage() {
 
   async function handleGoogleSignIn() {
     setSubmitting(true);
-    setError("");
-    setMessage("");
+    setNotice({ kind: "info", text: "Opening Google sign-in..." });
 
     try {
-      await signInWithProvider("google", window.location.origin);
+      await signInWithProvider("google", `${window.location.origin}/auth?callback=oauth`);
     } catch (authError) {
-      setError(authError instanceof Error ? authError.message : "Google sign-in failed.");
+      setNotice({ kind: "error", text: authError instanceof Error ? authError.message : "Google sign-in failed." });
       setSubmitting(false);
     }
   }
 
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
-    setError("");
-    setMessage("");
+    setNotice(null);
   }
 
   return (
@@ -172,8 +206,7 @@ export function AuthPage() {
                   </div>
                 </label>
 
-                {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600">{error}</div>}
-                {message && <div className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">{message}</div>}
+                {notice && <AuthNotice notice={notice} />}
 
                 <button
                   type="submit"
@@ -191,6 +224,34 @@ export function AuthPage() {
             </div>
           </section>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthNotice({ notice }: { notice: Notice }) {
+  const Icon = notice.kind === "error" ? AlertCircle : notice.kind === "success" ? CheckCircle2 : Info;
+  const className = notice.kind === "error"
+    ? "border-red-100 bg-red-50 text-red-700"
+    : notice.kind === "success"
+    ? "border-emerald-100 bg-emerald-50 text-emerald-700"
+    : "border-blue-100 bg-blue-50 text-blue-700";
+
+  return (
+    <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm font-bold ${className}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{notice.text}</span>
+    </div>
+  );
+}
+
+function AuthLoadingScreen({ text }: { text: string }) {
+  return (
+    <div className="grid min-h-screen place-items-center bg-slate-100 px-5">
+      <div className="w-full max-w-sm rounded-3xl bg-white p-8 text-center shadow-2xl ring-1 ring-slate-200">
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-blue-600" />
+        <p className="mt-4 text-xl font-black text-slate-950">{text}</p>
+        <p className="mt-2 text-sm font-semibold text-slate-500">You will be redirected automatically.</p>
       </div>
     </div>
   );

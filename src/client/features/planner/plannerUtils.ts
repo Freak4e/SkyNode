@@ -49,15 +49,30 @@ export function dateRange(startDate: string, dayCount: number): string {
 export function normalizeDays(days: ItineraryDay[]): ItineraryDay[] {
   return days.map((day, index) => {
     const items = day.items
-      .map((item) => ({
+      .map((item, itemIndex) => ({
         ...item,
+        order: item.order ?? itemIndex + 1,
         timeOfDay: cleanTime(item.timeOfDay),
         title: item.title.trim() || "Activity",
         description: item.description.trim() || "Activity notes.",
         attractionName: item.attractionName?.trim() || undefined,
+        category: item.category?.trim() || undefined,
+        location: item.location?.name?.trim()
+          ? {
+              ...item.location,
+              name: item.location.name.trim(),
+              address: item.location.address?.trim() || undefined,
+              city: item.location.city?.trim() || undefined,
+            }
+          : item.attractionName?.trim()
+          ? { name: item.attractionName.trim() }
+          : undefined,
+        notes: item.notes?.trim() || undefined,
+        tags: item.tags?.map((tag) => tag.trim()).filter(Boolean),
         estimatedCost: Math.max(0, Number(item.estimatedCost) || 0),
       }))
-      .sort((a, b) => cleanTime(a.timeOfDay).localeCompare(cleanTime(b.timeOfDay)));
+      .sort((a, b) => cleanTime(a.timeOfDay).localeCompare(cleanTime(b.timeOfDay)))
+      .map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }));
 
     return {
       ...day,

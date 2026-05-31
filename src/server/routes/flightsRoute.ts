@@ -5,13 +5,13 @@ import type { CurrencyCode, FlightSearchResponse, ProviderId } from "../../share
 export const flightsRoute = Router();
 
 flightsRoute.get("/", async (req, res) => {
-  const from = String(req.query.from || "").trim();
-  const to = String(req.query.to || "").trim();
+  const from = parseCodes(req.query.from);
+  const to = parseCodes(req.query.to);
   const date = String(req.query.date || "").trim();
   const provider = String(req.query.provider || "scrapingbee").trim() as ProviderId;
   const currency = String(req.query.currency || "USD").trim().toUpperCase() as CurrencyCode;
 
-  if (!from || !to || !date) {
+  if (from.length === 0 || to.length === 0 || !date) {
     return res.status(400).json({
       offers: [],
       warnings: ["Missing required query params: from, to, date."],
@@ -31,3 +31,14 @@ flightsRoute.get("/", async (req, res) => {
     } satisfies FlightSearchResponse);
   }
 });
+
+function parseCodes(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value.join(",") : String(value || "");
+
+  return raw
+    .split(",")
+    .map((code) => code.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((code, index, all) => all.indexOf(code) === index)
+    .slice(0, 6);
+}

@@ -15,8 +15,8 @@ import {
   X,
 } from "lucide-react";
 import { searchFlights } from "../api/flightsApi";
-import { ChipPlacePicker } from "../components/ChipPlacePicker";
 import { Footer } from "../components/Footer";
+import { MultiPlacePicker } from "../components/MultiPlacePicker";
 import { Navbar } from "../components/Navbar";
 import type { CurrencyCode, FlightOffer, Place } from "../../shared/types.js";
 import {
@@ -967,8 +967,10 @@ export function SearchResultsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
-  const initialFromCode = params.get("from") ?? "JFK";
-  const initialToCode = params.get("to") ?? "HND";
+  const initialFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "JFK");
+  const initialToCodes = parseCodeParam(params.get("toAll") || params.get("to") || "HND");
+  const initialFromCode = initialFromCodes[0] ?? "JFK";
+  const initialToCode = initialToCodes[0] ?? "HND";
   const initialDate = params.get("date") ?? today;
   const initialReturnDate = params.get("returnDate") ?? initialDate;
   const initialTripType = params.get("tripType") === "one-way" ? "one-way" : "return";
@@ -979,8 +981,10 @@ export function SearchResultsPage() {
   const initialFromName = params.get("fromName") ?? "New York";
   const initialToName = params.get("toName") ?? "Tokyo";
 
-  const [from, setFrom] = useState<Place>({ code: initialFromCode, name: initialFromName, cityName: initialFromName, countryName: "", type: "city" });
-  const [to, setTo] = useState<Place>({ code: initialToCode, name: initialToName, cityName: initialToName, countryName: "", type: "city" });
+  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => initialFromCodes.map((code, index) => ({ code, name: index === 0 ? initialFromName : code, cityName: index === 0 ? initialFromName : code, countryName: "", type: "city" })));
+  const [toPlaces, setToPlaces] = useState<Place[]>(() => initialToCodes.map((code, index) => ({ code, name: index === 0 ? initialToName : code, cityName: index === 0 ? initialToName : code, countryName: "", type: "city" })));
+  const from = fromPlaces[0];
+  const to = toPlaces[0];
   const [date, setDate] = useState(initialDate);
   const [returnDate, setReturnDate] = useState(initialReturnDate);
   const [tripType, setTripType] = useState<TripType>(initialTripType);
@@ -1003,23 +1007,23 @@ export function SearchResultsPage() {
   const [maxDuration, setMaxDuration] = useState(24);
 
   useEffect(() => {
-    doSearch(initialFromCode, initialToCode, initialDate, initialTripType, initialReturnDate);
+    doSearch(initialFromCodes, initialToCodes, initialDate, initialTripType, initialReturnDate);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleCurrencyChange = (event: Event) => {
       const nextCurrency = normalizeCurrency((event as CustomEvent<CurrencyCode>).detail);
       setCurrency(nextCurrency);
-      doSearch(from.code, to.code, date, tripType, returnDate, nextCurrency);
+      doSearch(fromPlaces.map((place) => place.code), toPlaces.map((place) => place.code), date, tripType, returnDate, nextCurrency);
     };
 
     window.addEventListener(currencyChangedEvent, handleCurrencyChange);
     return () => window.removeEventListener(currencyChangedEvent, handleCurrencyChange);
-  }, [from.code, to.code, date, tripType, returnDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fromPlaces, toPlaces, date, tripType, returnDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function doSearch(
-    fromCode: string,
-    toCode: string,
+    fromCodes: string[],
+    toCodes: string[],
     searchDate: string,
     mode: TripType,
     inboundDate: string,
@@ -1031,9 +1035,9 @@ export function SearchResultsPage() {
     setReturnOffers([]);
 
     try {
-      const outboundPromise = searchFlights({ from: fromCode, to: toCode, date: searchDate, provider: "auto", currency: searchCurrency });
+      const outboundPromise = searchFlights({ from: fromCodes, to: toCodes, date: searchDate, provider: "auto", currency: searchCurrency });
       const inboundPromise = mode === "return"
-        ? searchFlights({ from: toCode, to: fromCode, date: inboundDate, provider: "auto", currency: searchCurrency })
+        ? searchFlights({ from: toCodes, to: fromCodes, date: inboundDate, provider: "auto", currency: searchCurrency })
         : Promise.resolve(null);
       const [outboundResult, inboundResult] = await Promise.all([outboundPromise, inboundPromise]);
 
@@ -1050,8 +1054,8 @@ export function SearchResultsPage() {
     e.preventDefault();
 
     const searchParams = new URLSearchParams({
-      from: from.code,
-      to: to.code,
+      from: fromPlaces.map((place) => place.code).join(","),
+      to: toPlaces.map((place) => place.code).join(","),
       date,
       fromName: from.cityName || from.name,
       toName: to.cityName || to.name,
@@ -1065,17 +1069,19 @@ export function SearchResultsPage() {
     }
 
     navigate(`/search?${searchParams.toString()}`);
-    doSearch(from.code, to.code, date, tripType, returnDate);
+    doSearch(fromPlaces.map((place) => place.code), toPlaces.map((place) => place.code), date, tripType, returnDate);
   }
 
   function openPlanner(pair: FlightPair) {
+    const outboundFrom = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
+    const outboundTo = placeByCode(toPlaces, pair.outbound.searchTo) || to;
     const plannerParams = new URLSearchParams({
-      from: from.code,
-      to: to.code,
+      from: outboundFrom.code,
+      to: outboundTo.code,
       date,
-      fromName: from.cityName || from.name,
-      toName: to.cityName || to.name,
-      destination: to.cityName || to.name,
+      fromName: outboundFrom.cityName || outboundFrom.name,
+      toName: outboundTo.cityName || outboundTo.name,
+      destination: outboundTo.cityName || outboundTo.name,
     });
 
     sessionStorage.setItem("skynode:selectedFlight", JSON.stringify(pair.outbound));
@@ -1173,18 +1179,18 @@ export function SearchResultsPage() {
               </label>
             </div>
 
-            <div className="grid gap-2 lg:grid-cols-[1fr_1fr_220px_220px_auto]">
+            <div className="grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_180px_180px_auto]">
               <div className="rounded border border-slate-300 bg-white px-3 py-2">
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-slate-400" />
-                  <ChipPlacePicker label="From" value={from} onChange={setFrom} />
+                  <MultiPlacePicker label="From" values={fromPlaces} onChange={setFromPlaces} placeholder="Add departure" />
                 </div>
               </div>
 
               <div className="rounded border border-slate-300 bg-white px-3 py-2">
                 <div className="flex items-center gap-2">
                   <ArrowRight className="h-4 w-4 text-slate-400" />
-                  <ChipPlacePicker label="To" value={to} onChange={setTo} />
+                  <MultiPlacePicker label="To" values={toPlaces} onChange={setToPlaces} placeholder="Add destination" />
                 </div>
               </div>
 
@@ -1358,7 +1364,7 @@ export function SearchResultsPage() {
               <p className="mb-1 font-black text-red-600">Search failed</p>
               <p className="text-sm text-red-500">{error}</p>
               <button
-                onClick={() => doSearch(from.code, to.code, date, tripType, returnDate)}
+                onClick={() => doSearch(fromPlaces.map((place) => place.code), toPlaces.map((place) => place.code), date, tripType, returnDate)}
                 className="mt-4 rounded-full bg-red-500 px-5 py-2 text-sm font-bold text-white hover:bg-red-600"
               >
                 Try again
@@ -1378,15 +1384,19 @@ export function SearchResultsPage() {
             <div className="space-y-4">
               {flightPairs.map((pair, index) => {
                 const displayPrice = formatDisplayPrice(pair, currency);
+                const outboundOrigin = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
+                const outboundDestination = placeByCode(toPlaces, pair.outbound.searchTo) || to;
+                const inboundOrigin = placeByCode(toPlaces, pair.inbound?.searchFrom) || outboundDestination;
+                const inboundDestination = placeByCode(fromPlaces, pair.inbound?.searchTo) || outboundOrigin;
                 return (
                   <div
                     key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
                     className="grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px]"
                   >
                     <div className="divide-y divide-dashed divide-slate-200 px-4">
-                      <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={from} destination={to} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
+                      <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={outboundOrigin} destination={outboundDestination} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
                       {tripType === "return" && (
-                        <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={to} destination={from} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
+                        <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={inboundOrigin} destination={inboundDestination} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
                       )}
                       <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
                         <span className="flex items-center gap-1"><Plane className="h-3.5 w-3.5" /> 1 carry-on</span>
@@ -1421,15 +1431,19 @@ export function SearchResultsPage() {
 
                   {groundTransportPairs.map((pair, index) => {
                     const displayPrice = formatDisplayPrice(pair, currency);
+                    const outboundOrigin = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
+                    const outboundDestination = placeByCode(toPlaces, pair.outbound.searchTo) || to;
+                    const inboundOrigin = placeByCode(toPlaces, pair.inbound?.searchFrom) || outboundDestination;
+                    const inboundDestination = placeByCode(fromPlaces, pair.inbound?.searchTo) || outboundOrigin;
                     return (
                       <div
                         key={`ground-${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
                         className="grid overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px]"
                       >
                         <div className="divide-y divide-dashed divide-slate-200 px-4">
-                          <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={from} destination={to} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
+                          <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={outboundOrigin} destination={outboundDestination} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
                           {tripType === "return" && (
-                            <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={to} destination={from} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
+                            <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={inboundOrigin} destination={inboundDestination} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
                           )}
                           <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
                             <span className="flex items-center gap-1"><Bus className="h-3.5 w-3.5" /> Ground transport</span>
@@ -1467,8 +1481,8 @@ export function SearchResultsPage() {
           tripType={tripType}
           outboundDate={date}
           inboundDate={returnDate}
-          from={from}
-          to={to}
+          from={placeByCode(fromPlaces, detailsPair.outbound.searchFrom) || from}
+          to={placeByCode(toPlaces, detailsPair.outbound.searchTo) || to}
           passengers={passengers}
           onClose={() => setDetailsPair(null)}
         />
@@ -1477,4 +1491,20 @@ export function SearchResultsPage() {
       <Footer />
     </div>
   );
+}
+
+function parseCodeParam(value: string): string[] {
+  return value
+    .split(",")
+    .map((code) => code.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((code, index, all) => all.indexOf(code) === index);
+}
+
+function placeByCode(places: Place[], code?: string): Place | undefined {
+  if (!code) {
+    return undefined;
+  }
+
+  return places.find((place) => place.code.toUpperCase() === code.toUpperCase());
 }

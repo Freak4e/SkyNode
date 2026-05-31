@@ -89,7 +89,10 @@ export function ItineraryTimeline(props: ItineraryTimelineProps) {
                         <p className="font-black text-slate-900">{item.title}</p>
                       </div>
                       <p className="mt-1 text-sm leading-relaxed text-slate-500">{item.description}</p>
-                      {item.attractionName && <p className="mt-2 text-xs font-bold text-blue-600">{item.attractionName}</p>}
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
+                        {(item.location?.name || item.attractionName) && <span className="text-blue-600">{item.location?.name || item.attractionName}</span>}
+                        {item.category && <span className="rounded-full bg-white px-2 py-0.5 text-slate-500 ring-1 ring-slate-200">{item.category}</span>}
+                      </div>
                     </div>
                     <span className="text-sm font-black text-slate-900">{item.estimatedCost > 0 ? `$${item.estimatedCost}` : "Free"}</span>
                   </div>

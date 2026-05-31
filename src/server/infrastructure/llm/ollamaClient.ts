@@ -27,10 +27,21 @@ type RawDay = {
 };
 
 type RawItem = {
+  order?: number;
   timeOfDay?: string;
   title?: string;
   description?: string;
   attractionName?: string;
+  category?: string;
+  location?: {
+    name?: string;
+    address?: string;
+    city?: string;
+    lat?: number;
+    lon?: number;
+  };
+  notes?: string;
+  tags?: string[];
   estimatedCost?: number;
 };
 
@@ -103,6 +114,11 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
     budget: request.budget,
     budgetAmount: request.budgetAmount ?? null,
     pace: request.pace,
+    cities: request.cities || [],
+    hotels: request.hotels || [],
+    routeSegments: request.routeSegments || [],
+    budgetCategories: request.budgetCategories || [],
+    tripNotes: request.notes || null,
     planningProfile: profile,
     interests: request.interests,
     selectedFlight: request.selectedFlight
@@ -123,9 +139,18 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
           items: [
             {
               timeOfDay: "09:00",
+              order: 1,
               title: "Activity title",
               description: "One practical sentence.",
               attractionName: "Attraction name from provided list when possible",
+              category: "sight",
+              location: {
+                name: "Specific venue/place name",
+                address: "Street or area if known",
+                city: "Relevant trip city",
+              },
+              notes: "Optional user-facing planning note.",
+              tags: ["culture"],
               estimatedCost: 0,
             },
           ],
@@ -141,8 +166,14 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
       request.budgetAmount ? `Total user budget target: about $${request.budgetAmount}.` : "No exact total budget target was provided.",
       profile.styleRule,
       "Use timeOfDay as a 24-hour local start time like 09:00, 14:30, or 19:00.",
+      "Use order as the visit order within the day, starting at 1.",
       "Use provided attractions when possible.",
       "Every item must include a specific attractionName or location name that can be geocoded for the itinerary map.",
+      "Every item must include category and location.name. Use categories like flight, hotel, food, sight, museum, nature, nightlife, transport, shopping, experience, rest.",
+      "Use location.city to support multi-city trips. If cities are provided, assign each day to the most logical city and keep that day's places in that city unless it is a transfer day.",
+      "If routeSegments are provided, account for arrival/departure timing and avoid impossible plans immediately after long transport.",
+      "Respect hotels when provided; add check-in/check-out style items when timing matters, but do not overfill days with admin tasks.",
+      "Return only trip itinerary items, not budget summaries or explanations.",
       "For restaurants, cafes, bars, hotels, and transit stops, use a concrete venue or station name in attractionName.",
       "Prefer specific local stops over generic activity titles.",
       "Do not make every item free unless the profile is relaxed low budget.",
@@ -206,13 +237,13 @@ function normalizeDay(
   const rawItems = Array.isArray(rawDay?.items) ? rawDay.items : [];
   const itemCount = profile.itemsPerDay;
   const items = applyBudgetLogic(Array.from({ length: itemCount }, (_, index) =>
-    normalizeItem(rawItems[index], itemTimeOfDay(index, itemCount), request, attractions, index),
+    normalizeItem(rawItems[index], itemTimeOfDay(index, itemCount), request, attractions, index, dayNumber),
   ), request, attractions);
   const estimatedCost = items.reduce((sum, item) => sum + item.estimatedCost, 0);
 
   return {
     dayNumber,
-    title: rawDay?.title || `Day ${dayNumber}: City highlights`,
+    title: rawDay?.title || `Day ${dayNumber}: ${cityForDay(request, dayNumber)} highlights`,
     summary: rawDay?.summary || profile.styleRule,
     estimatedCost,
     items,
@@ -225,6 +256,7 @@ function normalizeItem(
   request: GenerateItineraryRequest,
   attractions: Attraction[],
   index: number,
+  dayNumber: number,
 ): ItineraryItem {
   const fallback = fallbackItem(index, timeOfDay, request, attractions);
   const title = rawItem?.title || fallback.title;
@@ -232,12 +264,24 @@ function normalizeItem(
   const attractionName = rawItem?.attractionName || fallback.attractionName;
   const matchedAttraction = findAttraction(attractions, attractionName || title);
   const normalizedTimeOfDay = isTimeOfDay(rawItem?.timeOfDay) ? rawItem.timeOfDay : timeOfDay;
+  const locationName = rawItem?.location?.name || attractionName || matchedAttraction?.name;
 
   return {
     timeOfDay: normalizedTimeOfDay,
+    order: typeof rawItem?.order === "number" ? rawItem.order : index + 1,
     title,
     description,
     attractionName,
+    category: rawItem?.category || matchedAttraction?.category || categoryFromText(`${title} ${description}`),
+    location: locationName ? {
+      name: locationName,
+      address: rawItem?.location?.address || matchedAttraction?.address,
+      city: rawItem?.location?.city || cityForDay(request, dayNumber),
+      lat: typeof rawItem?.location?.lat === "number" ? rawItem.location.lat : matchedAttraction?.lat,
+      lon: typeof rawItem?.location?.lon === "number" ? rawItem.location.lon : matchedAttraction?.lon,
+    } : undefined,
+    notes: rawItem?.notes,
+    tags: Array.isArray(rawItem?.tags) ? rawItem.tags.slice(0, 4) : undefined,
     estimatedCost: normalizeCost({
       rawCost: rawItem?.estimatedCost,
       title,
@@ -248,6 +292,31 @@ function normalizeItem(
       attraction: matchedAttraction,
     }),
   };
+}
+
+function cityForDay(request: GenerateItineraryRequest, dayNumber: number): string {
+  const cities = request.cities?.map((city) => city.name.trim()).filter(Boolean) || [];
+
+  if (cities.length === 0) {
+    return request.destinationName;
+  }
+
+  const dayIndex = Math.min(dayNumber - 1, request.days - 1);
+  const cityIndex = Math.min(cities.length - 1, Math.floor(dayIndex * cities.length / Math.max(request.days, 1)));
+  return cities[cityIndex] || request.destinationName;
+}
+
+function categoryFromText(text: string): string {
+  const normalized = text.toLowerCase();
+  if (/\b(flight|airport|plane)\b/.test(normalized)) return "flight";
+  if (/\b(hotel|check.?in|check.?out|luggage)\b/.test(normalized)) return "hotel";
+  if (/\b(train|bus|metro|tram|ferry|transfer|station)\b/.test(normalized)) return "transport";
+  if (/\b(food|restaurant|dinner|lunch|breakfast|cafe|market|tasting)\b/.test(normalized)) return "food";
+  if (/\b(museum|gallery)\b/.test(normalized)) return "museum";
+  if (/\b(bar|club|nightlife|music)\b/.test(normalized)) return "nightlife";
+  if (/\b(park|beach|hike|nature|garden)\b/.test(normalized)) return "nature";
+  if (/\b(shop|shopping|boutique)\b/.test(normalized)) return "shopping";
+  return "sight";
 }
 
 function planningProfile(request: GenerateItineraryRequest): PlanningProfile {

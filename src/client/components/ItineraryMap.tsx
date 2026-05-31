@@ -1,25 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { MapPin } from "lucide-react";
+import { MapPin, Maximize2, X } from "lucide-react";
 import type {
   Attraction,
   GeocodeResponse,
   GeneratedItinerary,
   ItineraryDay,
   ItineraryItem,
+  TripHotel,
+  TripRouteSegment,
 } from "../../shared/types.js";
 
 type ItineraryMapMarker = {
   id: string;
   label: string;
   dayNumber: number;
+  order: number;
   timeOfDay: ItineraryItem["timeOfDay"];
   title: string;
   description: string;
   estimatedCost: number;
+  category?: string;
   attraction: Attraction;
   contextOnly?: boolean;
+  routeRole?: "activity" | "hotel" | "airport";
 };
 
 type ItineraryMapPin = {
@@ -30,22 +35,44 @@ type ItineraryMapPin = {
   markers: ItineraryMapMarker[];
 };
 
-type ItineraryMapProps = {
-  itinerary: GeneratedItinerary;
+type DayRoute = {
+  dayNumber: number;
+  points: Array<{ lat: number; lon: number }>;
+  source: "openrouteservice" | "fallback" | "none";
 };
 
-export function ItineraryMap({ itinerary }: ItineraryMapProps) {
+type ItineraryMapProps = {
+  itinerary: GeneratedItinerary;
+  hotels?: TripHotel[];
+  routeSegments?: TripRouteSegment[];
+};
+
+export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: ItineraryMapProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const [geocodedMarkers, setGeocodedMarkers] = useState<ItineraryMapMarker[]>([]);
   const [geocoding, setGeocoding] = useState(false);
-  const markerData = useMemo(() => buildItineraryMarkerData(itinerary), [itinerary]);
+  const [expanded, setExpanded] = useState(false);
+  const [selectedDay, setSelectedDay] = useState<number | "all">("all");
+  const [routes, setRoutes] = useState<DayRoute[]>([]);
+  const markerData = useMemo(() => buildItineraryMarkerData(itinerary, hotels, routeSegments), [hotels, itinerary, routeSegments]);
   const markers = useMemo(
     () => [...markerData.matchedMarkers, ...geocodedMarkers],
     [geocodedMarkers, markerData.matchedMarkers],
   );
   const pins = useMemo(() => buildMapPins(markers), [markers]);
+  const dayPins = useMemo(() => buildDayPins(pins), [pins]);
+  const visiblePins = useMemo(() => (
+    selectedDay === "all"
+      ? pins
+      : pins.filter((pin) => pin.markers.some((marker) => marker.dayNumber === selectedDay))
+  ), [pins, selectedDay]);
+  const visibleRoutes = useMemo(() => (
+    selectedDay === "all"
+      ? routes
+      : routes.filter((route) => route.dayNumber === selectedDay)
+  ), [routes, selectedDay]);
 
   useEffect(() => {
     if (markerData.unmappedItems.length === 0) {
@@ -68,7 +95,7 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
               id,
               title: item.title,
               description: item.description,
-              attractionName: item.attractionName,
+              attractionName: item.location?.name || item.attractionName,
             })),
           }),
           signal: controller.signal,
@@ -87,10 +114,12 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
             id: `geocoded-${point.id}`,
             label: source ? String(source.day.dayNumber) : "G",
             dayNumber: source?.day.dayNumber || 0,
+            order: source?.item.order ?? 0,
             timeOfDay: source?.item.timeOfDay || "morning",
             title: source?.item.title || point.title,
             description: source?.item.description || point.address,
             estimatedCost: source?.item.estimatedCost || 0,
+            category: source?.item.category,
             attraction: {
               id: `geocoded-${point.id}`,
               name: point.title,
@@ -109,7 +138,7 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
           return distanceMeters(localCenter, {
             lat: marker.attraction.lat!,
             lon: marker.attraction.lon!,
-          }) <= 30000;
+          }) <= 80000;
         });
 
         setGeocodedMarkers(nextGeocodedMarkers);
@@ -161,6 +190,59 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
 
   useEffect(() => {
     const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    window.setTimeout(() => map.invalidateSize(), 80);
+  }, [expanded]);
+
+  useEffect(() => {
+    if (dayPins.length === 0) {
+      setRoutes([]);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadDirections() {
+      try {
+        const response = await fetch("/api/directions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            days: dayPins.map((day) => ({
+              dayNumber: day.dayNumber,
+              points: day.pins.map((pin) => ({ lat: pin.lat, lon: pin.lon })),
+            })),
+          }),
+          signal: controller.signal,
+        });
+        const body = await response.json() as { routes?: DayRoute[] };
+
+        if (!response.ok) {
+          throw new Error("Directions request failed.");
+        }
+
+        setRoutes(body.routes || []);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          console.warn("[itinerary-map] directions failed", error);
+          setRoutes(dayPins.map((day) => ({
+            dayNumber: day.dayNumber,
+            points: day.pins.map((pin) => ({ lat: pin.lat, lon: pin.lon })),
+            source: "fallback",
+          })));
+        }
+      }
+    }
+
+    void loadDirections();
+    return () => controller.abort();
+  }, [dayPins]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     const layer = markersLayerRef.current;
 
     if (!map || !layer) {
@@ -169,18 +251,9 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
 
     layer.clearLayers();
     const bounds = L.latLngBounds([]);
-    const routeGroups = new Map<number, ItineraryMapPin[]>();
-
-    pins.forEach((pin) => {
+    visiblePins.forEach((pin) => {
       const position: L.LatLngExpression = [pin.lat, pin.lon];
       bounds.extend(position);
-      pin.markers.forEach((marker) => {
-        const group = routeGroups.get(marker.dayNumber) || [];
-        if (!group.some((candidate) => candidate.id === pin.id)) {
-          group.push(pin);
-          routeGroups.set(marker.dayNumber, group);
-        }
-      });
 
       L.marker(position, {
         icon: L.divIcon({
@@ -202,34 +275,28 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
         .addTo(layer);
     });
 
-    routeGroups.forEach((groupedPins) => {
-      if (groupedPins.length < 2) {
+    visibleRoutes.forEach((route) => {
+      if (route.points.length < 2) {
         return;
       }
 
-      const positions = groupedPins
-        .sort((first, second) => {
-          const firstTime = first.markers[0]?.timeOfDay || "";
-          const secondTime = second.markers[0]?.timeOfDay || "";
-          return firstTime.localeCompare(secondTime);
-        })
-        .map((pin) => [pin.lat, pin.lon] as L.LatLngExpression);
-
-      L.polyline(positions, {
-        color: "#2563eb",
+      L.polyline(route.points.map((point) => [point.lat, point.lon] as L.LatLngExpression), {
+        color: dayColor(route.dayNumber),
         weight: 3,
         opacity: 0.72,
-        dashArray: "8 10",
+        dashArray: route.source === "fallback" ? "8 10" : undefined,
       }).addTo(layer);
     });
 
     if (bounds.isValid()) {
       map.fitBounds(bounds.pad(0.25), { maxZoom: 15 });
     }
-  }, [pins]);
+  }, [visiblePins, visibleRoutes]);
 
   return (
-    <section className="overflow-hidden rounded-3xl bg-white shadow-xl">
+    <>
+    {expanded && <div className="fixed inset-0 z-80 bg-slate-950/55 backdrop-blur-sm" onClick={() => setExpanded(false)} />}
+    <section className={`overflow-hidden bg-white shadow-xl ${expanded ? "fixed inset-4 z-90 rounded-3xl" : "rounded-3xl"}`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-5 py-4 text-slate-900">
         <div>
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-blue-500">
@@ -243,12 +310,28 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
             {geocoding ? " Finding more coordinates..." : ""}
           </p>
         </div>
-        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-600">
-          {itinerary.destinationName}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-600">
+            {itinerary.destinationName}
+          </span>
+          <button type="button" onClick={() => setExpanded((current) => !current)} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600" aria-label={expanded ? "Close map" : "Open map"}>
+            {expanded ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
 
-      <div className="relative h-[360px]">
+      <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+        <div className="flex gap-2 overflow-x-auto">
+          <button type="button" onClick={() => setSelectedDay("all")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${selectedDay === "all" ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>All days</button>
+          {dayPins.map((day) => (
+            <button key={day.dayNumber} type="button" onClick={() => setSelectedDay(day.dayNumber)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${selectedDay === day.dayNumber ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>
+              D{day.dayNumber} - {day.pins.length}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={`relative ${expanded ? "h-[calc(100vh-260px)]" : "h-[320px]"}`}>
         <div ref={mapElementRef} className="absolute inset-0 z-0 bg-slate-100" />
         {pins.length === 0 && (
           <div className="absolute inset-0 z-10 grid place-items-center bg-white/85 p-8 text-center text-slate-900 backdrop-blur-sm">
@@ -261,11 +344,46 @@ export function ItineraryMap({ itinerary }: ItineraryMapProps) {
           </div>
         )}
       </div>
+      <div className={`${expanded ? "max-h-44" : "max-h-48"} overflow-y-auto border-t border-slate-100 p-4`}>
+        <div className="space-y-3">
+          {dayPins
+            .filter((day) => selectedDay === "all" || selectedDay === day.dayNumber)
+            .map((day) => (
+              <div key={day.dayNumber}>
+                <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Day {day.dayNumber}</p>
+                <div className="grid gap-2">
+                  {day.pins.map((pin, index) => {
+                    const marker = pin.markers[0];
+                    return (
+                      <button key={`${day.dayNumber}-${pin.id}`} type="button" onClick={() => focusPin(pin)} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 text-left hover:bg-blue-50">
+                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black text-white" style={{ backgroundColor: dayColor(day.dayNumber) }}>{index + 1}</span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-black text-slate-900">{marker.title}</span>
+                          <span className="block truncate text-xs font-bold text-slate-500">{marker.timeOfDay} - {pin.markers.map((item) => item.attraction.name).join(", ")}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+        </div>
+      </div>
     </section>
+    </>
   );
+
+  function focusPin(pin: ItineraryMapPin) {
+    const map = mapRef.current;
+    if (!map) {
+      return;
+    }
+
+    map.flyTo([pin.lat, pin.lon], Math.max(map.getZoom(), 15), { duration: 0.6 });
+  }
 }
 
-function buildItineraryMarkerData(itinerary: GeneratedItinerary): {
+function buildItineraryMarkerData(itinerary: GeneratedItinerary, hotels: TripHotel[], routeSegments: TripRouteSegment[]): {
   matchedMarkers: ItineraryMapMarker[];
   unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>;
 } {
@@ -276,11 +394,14 @@ function buildItineraryMarkerData(itinerary: GeneratedItinerary): {
   const unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }> = [];
   const usedKeys = new Set<string>();
 
-  itinerary.days.forEach((day) => {
-    day.items.forEach((item) => {
-      const itemId = `${day.dayNumber}-${item.timeOfDay}-${normalizeSearchText(item.title)}`;
+  addTripContextMarkers(itinerary, hotels, routeSegments, matchedMarkers, unmappedItems);
 
-      const attraction = findBestAttraction(item, attractionsWithCoordinates);
+  itinerary.days.forEach((day) => {
+    day.items.forEach((item, itemIndex) => {
+      const order = item.order ?? itemIndex + 1;
+      const itemId = `${day.dayNumber}-${order}-${item.timeOfDay}-${normalizeSearchText(item.location?.name || item.title)}`;
+
+      const attraction = attractionFromItemLocation(item, itemId) || findBestAttraction(item, attractionsWithCoordinates);
 
       if (!attraction) {
         if (shouldAttemptGeocode(item, itinerary.destinationName)) {
@@ -290,7 +411,7 @@ function buildItineraryMarkerData(itinerary: GeneratedItinerary): {
         return;
       }
 
-      const key = `${day.dayNumber}-${item.timeOfDay}-${attraction.id}`;
+      const key = `${day.dayNumber}-${order}-${item.timeOfDay}-${attraction.id}`;
 
       if (usedKeys.has(key)) {
         return;
@@ -301,10 +422,12 @@ function buildItineraryMarkerData(itinerary: GeneratedItinerary): {
         id: key,
         label: String(day.dayNumber),
         dayNumber: day.dayNumber,
+        order,
         timeOfDay: item.timeOfDay,
         title: item.title,
         description: item.description,
         estimatedCost: item.estimatedCost,
+        category: item.category,
         attraction,
       });
     });
@@ -313,9 +436,127 @@ function buildItineraryMarkerData(itinerary: GeneratedItinerary): {
   return { matchedMarkers, unmappedItems };
 }
 
+function addTripContextMarkers(
+  itinerary: GeneratedItinerary,
+  hotels: TripHotel[],
+  routeSegments: TripRouteSegment[],
+  matchedMarkers: ItineraryMapMarker[],
+  unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>,
+) {
+  const firstDay = itinerary.days[0];
+  const lastDay = itinerary.days[itinerary.days.length - 1];
+
+  if (!firstDay) {
+    return;
+  }
+
+  hotels.forEach((hotel) => {
+    const item: ItineraryItem = {
+      order: -10,
+      timeOfDay: "08:00",
+      title: hotel.name,
+      description: "Hotel base for this trip.",
+      attractionName: hotel.location?.name || hotel.name,
+      category: "hotel",
+      location: hotel.location || { name: hotel.name, address: hotel.address, city: hotel.cityName },
+      estimatedCost: hotel.priceEstimate || 0,
+    };
+
+    itinerary.days.forEach((day) => addContextMarker(`hotel-${hotel.id}-day-${day.dayNumber}`, day, item, "hotel", matchedMarkers, unmappedItems));
+  });
+
+  routeSegments.forEach((segment, index) => {
+    const targetDay = index === 0 ? firstDay : lastDay || firstDay;
+
+    if (segment.fromLocation && index > 0) {
+      addContextMarker(`segment-${segment.id}-from`, targetDay, {
+        order: -20,
+        timeOfDay: "07:00",
+        title: segment.from,
+        description: `${segment.type} departure point.`,
+        category: segment.type === "flight" ? "airport" : "transport",
+        location: segment.fromLocation,
+        estimatedCost: 0,
+      }, "airport", matchedMarkers, unmappedItems);
+    }
+
+    if (segment.toLocation) {
+      const isReturnOrLaterArrival = segment.type === "flight" && index > 0 && index === routeSegments.length - 1;
+
+      addContextMarker(`segment-${segment.id}-to`, targetDay, {
+        order: isReturnOrLaterArrival ? 999 : -15,
+        timeOfDay: isReturnOrLaterArrival ? "22:00" : "08:30",
+        title: segment.to,
+        description: `${segment.type} arrival point.`,
+        category: segment.type === "flight" ? "airport" : "transport",
+        location: segment.toLocation,
+        estimatedCost: 0,
+      }, "airport", matchedMarkers, unmappedItems);
+    }
+  });
+}
+
+function addContextMarker(
+  id: string,
+  day: ItineraryDay,
+  item: ItineraryItem,
+  routeRole: ItineraryMapMarker["routeRole"],
+  matchedMarkers: ItineraryMapMarker[],
+  unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>,
+) {
+  const location = item.location;
+
+  if (typeof location?.lat === "number" && typeof location.lon === "number") {
+    matchedMarkers.push({
+      id,
+      label: String(day.dayNumber),
+      dayNumber: day.dayNumber,
+      order: item.order ?? 0,
+      timeOfDay: item.timeOfDay,
+      title: item.title,
+      description: item.description,
+      estimatedCost: item.estimatedCost,
+      category: item.category,
+      contextOnly: true,
+      routeRole,
+      attraction: {
+        id,
+        name: location.name,
+        category: item.category || routeRole || "place",
+        address: location.address || "",
+        lat: location.lat,
+        lon: location.lon,
+        source: location.source === "geoapify" ? "geoapify" : "mock",
+      },
+    });
+    return;
+  }
+
+  unmappedItems.push({ id, day, item });
+}
+
+function attractionFromItemLocation(item: ItineraryItem, id: string): Attraction | undefined {
+  const location = item.location;
+
+  if (typeof location?.lat !== "number" || typeof location.lon !== "number") {
+    return undefined;
+  }
+
+  return {
+    id,
+    name: location.name,
+    category: item.category || "place",
+    address: location.address || location.city || "",
+    lat: location.lat,
+    lon: location.lon,
+    source: location.source === "geoapify" ? "geoapify" : "mock",
+  };
+}
+
 function findBestAttraction(item: ItineraryItem, attractions: Attraction[]): Attraction | undefined {
   const itemTerms = [
     normalizeSearchText(item.attractionName || ""),
+    normalizeSearchText(item.location?.name || ""),
     normalizeSearchText(item.title),
     normalizeSearchText(item.description),
   ].filter(Boolean);
@@ -337,9 +578,10 @@ function normalizeSearchText(value: string): string {
 
 function shouldAttemptGeocode(item: ItineraryItem, destinationName: string): boolean {
   const attractionName = normalizeSearchText(item.attractionName || "");
+  const locationName = normalizeSearchText(item.location?.name || "");
   const destination = normalizeSearchText(destinationName);
-  const itemText = normalizeSearchText(`${item.title} ${item.description} ${item.attractionName || ""}`);
-  const hasSpecificAttraction = attractionName.length > 2 && attractionName !== destination;
+  const itemText = normalizeSearchText(`${item.title} ${item.description} ${item.attractionName || ""} ${item.location?.name || ""}`);
+  const hasSpecificAttraction = (attractionName.length > 2 && attractionName !== destination) || (locationName.length > 2 && locationName !== destination);
   const mappableSight = /\b(theater|theatre|museum|gallery|monument|memorial|statue|castle|fortress|cathedral|church|mosque|temple|bridge|square|park|garden|viewpoint|beach|harbor|harbour|port|waterfront|promenade)\b/.test(itemText);
   const genericMovement = /\b(walk|walking|stroll|wander|explore|relax|picnic|free time|leisure|by the lake|along the lake)\b/.test(itemText);
 
@@ -355,7 +597,7 @@ function shouldAttemptGeocode(item: ItineraryItem, destinationName: string): boo
 }
 
 function isFoodRelatedItem(item: ItineraryItem): boolean {
-  const itemText = normalizeSearchText(`${item.title} ${item.description} ${item.attractionName || ""}`);
+  const itemText = normalizeSearchText(`${item.title} ${item.description} ${item.attractionName || ""} ${item.location?.name || ""}`);
 
   return /\b(dinner|lunch|breakfast|brunch|restaurant|cafe|coffee|bar|bistro|tavern|food|meal|eat|eating|tasting|winery|wine|beer|cocktail|bakery|street food|snack|market food)\b/.test(itemText);
 }
@@ -381,6 +623,61 @@ function buildMapPins(markers: ItineraryMapMarker[]): ItineraryMapPin[] {
       markers: groupedMarkers,
     };
   });
+}
+
+function buildDayPins(pins: ItineraryMapPin[]): Array<{ dayNumber: number; pins: ItineraryMapPin[] }> {
+  const groups = new Map<number, ItineraryMapPin[]>();
+
+  pins.forEach((pin) => {
+    const days = Array.from(new Set(pin.markers.map((marker) => marker.dayNumber))).sort((first, second) => first - second);
+
+    days.forEach((dayNumber) => {
+      const group = groups.get(dayNumber) || [];
+      group.push(pin);
+      groups.set(dayNumber, group);
+    });
+  });
+
+  return Array.from(groups.entries()).map(([dayNumber, groupedPins]) => ({
+    dayNumber,
+    pins: groupedPins.sort((first, second) => {
+      const firstMarker = first.markers.find((marker) => marker.dayNumber === dayNumber);
+      const secondMarker = second.markers.find((marker) => marker.dayNumber === dayNumber);
+      const firstOrder = firstMarker?.order ?? Number.MAX_SAFE_INTEGER;
+      const secondOrder = secondMarker?.order ?? Number.MAX_SAFE_INTEGER;
+
+      if (firstOrder !== secondOrder) {
+        return firstOrder - secondOrder;
+      }
+
+      return normalizeTimeForSort(firstMarker?.timeOfDay).localeCompare(normalizeTimeForSort(secondMarker?.timeOfDay));
+    }),
+  })).sort((first, second) => first.dayNumber - second.dayNumber);
+}
+
+function normalizeTimeForSort(value?: string): string {
+  if (!value) {
+    return "99:99";
+  }
+
+  if (/^\d{1,2}:\d{2}$/.test(value)) {
+    return value.padStart(5, "0");
+  }
+
+  const buckets: Record<string, string> = {
+    morning: "08:00",
+    noon: "12:00",
+    afternoon: "15:00",
+    evening: "19:00",
+    night: "22:00",
+  };
+
+  return buckets[value.toLowerCase()] || value;
+}
+
+function dayColor(dayNumber: number): string {
+  const colors = ["#2563eb", "#0891b2", "#7c3aed", "#059669", "#ea580c", "#dc2626"];
+  return colors[(dayNumber - 1) % colors.length];
 }
 
 function getLocalCenter(markers: ItineraryMapMarker[]): { lat: number; lon: number } | undefined {

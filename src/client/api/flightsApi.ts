@@ -1,9 +1,11 @@
 import type { FlightSearchInput, FlightSearchResponse, Place } from "../../shared/types.js";
 
 export async function searchFlights(input: FlightSearchInput & Required<Pick<FlightSearchInput, "from" | "to" | "date" | "provider">>): Promise<FlightSearchResponse> {
+  const from = Array.isArray(input.from) ? input.from.join(",") : input.from;
+  const to = Array.isArray(input.to) ? input.to.join(",") : input.to;
   const params = new URLSearchParams({
-    from: input.from,
-    to: input.to,
+    from,
+    to,
     date: input.date,
     provider: input.provider,
   });

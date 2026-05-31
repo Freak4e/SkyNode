@@ -20,6 +20,12 @@ export const config = {
     apiKey: process.env.GEOAPIFY_API_KEY,
     timeoutMs: Number(process.env.GEOAPIFY_TIMEOUT_MS || 12000),
   },
+  openRouteService: {
+    apiUrl: process.env.OPENROUTESERVICE_API_URL || "https://api.openrouteservice.org",
+    apiKey: process.env.OPENROUTESERVICE_API_KEY,
+    timeoutMs: Number(process.env.OPENROUTESERVICE_TIMEOUT_MS || 15000),
+    profile: process.env.OPENROUTESERVICE_PROFILE || "foot-walking",
+  },
   ollama: {
     baseUrl: process.env.OLLAMA_BASE_URL || "http://localhost:11434",
     model: process.env.OLLAMA_MODEL || "llama3:latest",
@@ -85,6 +91,14 @@ export function requireGeoapifyApiKey(): string {
   }
 
   return config.geoapify.apiKey;
+}
+
+export function requireOpenRouteServiceApiKey(): string {
+  if (!config.openRouteService.apiKey) {
+    throw new Error("Missing OPENROUTESERVICE_API_KEY. Add your OpenRouteService API key to server .env.");
+  }
+
+  return config.openRouteService.apiKey;
 }
 
 export function requireGeminiApiKey(): string {

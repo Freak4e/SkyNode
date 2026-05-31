@@ -6,14 +6,16 @@ import { useAuth } from "../auth/AuthContext";
 import { currencyOptions, getStoredCurrency, storeCurrency } from "../utils/currency.js";
 import logo from "../../../assets/logo_skynode_horizontal.png";
 
-const navLinks = [
+const baseNavLinks: Array<{ label: string; to: string; accent?: boolean }> = [
   { label: "Flights", to: "/search" },
   { label: "Live Flights", to: "/live-flights", accent: true },
   { label: "Trips", to: "/planner" },
   { label: "Destinations", to: "/destinations" },
   { label: "Assistant", to: "/assistant" },
-  { label: "About", to: "/about" },
 ];
+
+const guestNavLink: { label: string; to: string; accent?: boolean } = { label: "About", to: "/about" };
+const communityNavLink: { label: string; to: string; accent?: boolean } = { label: "Community", to: "/explore-trips" };
 
 type Props = { transparent?: boolean };
 
@@ -72,6 +74,7 @@ export function Navbar({ transparent = false }: Props) {
   }, []);
 
   const avatarUrl = userImage(user);
+  const navLinks = [...baseNavLinks, user ? communityNavLink : guestNavLink];
 
   return (
     <nav

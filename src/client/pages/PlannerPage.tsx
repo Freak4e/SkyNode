@@ -1,9 +1,10 @@
 import type { FormEvent } from "react";
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, List } from "lucide-react";
+import { ArrowLeft, CheckCircle2, List, Loader2, Trash2 } from "lucide-react";
 import { applyTripChange, loadSavedTrip, listSavedTrips } from "../api/assistantApi";
 import { generateItinerary, saveTrip } from "../api/plannerApi";
+import { profileFromUser, deleteTrip } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { ItineraryMap } from "../components/ItineraryMap";
@@ -15,6 +16,7 @@ import { PlannerHero } from "../features/planner/PlannerHero";
 import { PlannerRail } from "../features/planner/PlannerRail";
 import { TripSetupForm } from "../features/planner/TripSetupForm";
 import { TripsDrawer } from "../features/planner/TripsDrawer";
+import { SaveTripModal } from "../features/trip-community/SaveTripModal";
 import type { PlannerTab } from "../features/planner/plannerTypes";
 import { budgetLevelFromAmount, emptyDays, normalizeDays } from "../features/planner/plannerUtils";
 import type {
@@ -31,6 +33,7 @@ import type {
   TripHotel,
   TripLocation,
   TripRouteSegment,
+  TripVisibility,
 } from "../../shared/types.js";
 
 const today = new Date().toISOString().slice(0, 10);
@@ -77,6 +80,9 @@ export function PlannerPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedTrip, setSavedTrip] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const request = useMemo<GenerateItineraryRequest>(() => ({
     destinationCode,
@@ -230,13 +236,19 @@ export function PlannerPage() {
     setSavedTrip(false);
   }
 
-  async function saveTripNow() {
+  function openSaveModal() {
     if (!itinerary) return;
 
     if (!user) {
       navigate("/auth", { state: { from: `${location.pathname}${location.search}` } });
       return;
     }
+
+    setSaveModalOpen(true);
+  }
+
+  async function saveTripNow(options: { visibility: TripVisibility; description: string; maxMembers: number }) {
+    if (!itinerary) return;
 
     setSaving(true);
     setError("");
@@ -248,18 +260,24 @@ export function PlannerPage() {
         days: cleanDays,
         estimatedTotalCost: cleanDays.reduce((sum, day) => sum + day.estimatedCost, 0),
       };
-      await saveTrip({
+      const response = await saveTrip({
         ...request,
         destinationName: cleanItinerary.destinationName,
         startDate: cleanItinerary.startDate,
         days: cleanDays.length,
         title: tripTitle.trim() || `${cleanItinerary.destinationName} trip`,
         itinerary: cleanItinerary,
+        visibility: options.visibility,
+        description: options.description || undefined,
+        maxMembers: options.maxMembers,
+        ownerProfile: profileFromUser(user),
       });
       setItinerary(cleanItinerary);
       setDraftDays(cleanDays);
       setSavedTrip(true);
+      setSaveModalOpen(false);
       await loadTrips();
+      navigate(`/trips/${response.tripId}`);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save trip.");
     } finally {
@@ -302,6 +320,7 @@ export function PlannerPage() {
 
   function startNewTrip() {
     setSelectedTripId("");
+    setDeleteOpen(false);
     setTripTitle("");
     setDestinationName(initialDestination);
     setStartDate(initialStartDate);
@@ -333,6 +352,27 @@ export function PlannerPage() {
 
   function updateDay(dayIndex: number, patch: Partial<Pick<ItineraryDay, "title" | "summary">>) {
     setDraftDays((current) => current.map((day, index) => index === dayIndex ? { ...day, ...patch } : day));
+  }
+
+  async function confirmDeleteTrip() {
+    if (!selectedTripId) {
+      return;
+    }
+
+    setDeleting(true);
+    setError("");
+
+    try {
+      await deleteTrip(selectedTripId);
+      setDeleteOpen(false);
+      startNewTrip();
+      await loadTrips();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete trip.");
+      setDeleteOpen(false);
+    } finally {
+      setDeleting(false);
+    }
   }
 
   function addDay() {
@@ -411,11 +451,14 @@ export function PlannerPage() {
               active={tab}
               cost={itinerary.estimatedTotalCost}
               days={itinerary.days.length}
+              deleting={deleting}
               editing={editing}
               itinerary={itinerary}
-              saveTrip={saveTripNow}
+              onDelete={() => setDeleteOpen(true)}
+              saveTrip={openSaveModal}
               saving={saving}
               setActive={setTab}
+              showDelete={Boolean(selectedTripId && user)}
               startEdit={() => { setDraftDays(itinerary.days); setEditing(true); setTab("itinerary"); }}
               cancelEdit={() => { setDraftDays(itinerary.days); setEditing(false); }}
               saveEdits={saveEdits}
@@ -460,6 +503,37 @@ export function PlannerPage() {
           user={Boolean(user)}
         />
       )}
+      <SaveTripModal
+        open={saveModalOpen}
+        saving={saving}
+        onClose={() => setSaveModalOpen(false)}
+        onConfirm={(values) => void saveTripNow(values)}
+      />
+
+      {deleteOpen && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/50 p-4 sm:items-center">
+          <button type="button" className="absolute inset-0" aria-label="Close delete confirmation" onClick={() => setDeleteOpen(false)} />
+          <div className="relative w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+            <h2 className="text-2xl font-black text-slate-950">Delete this trip?</h2>
+            <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-600">
+              <span className="font-black text-slate-900">{title}</span> will be permanently deleted from your saved trips.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-end gap-2">
+              <Button type="button" tone="ghost" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+              <Button
+                type="button"
+                tone="danger"
+                disabled={deleting}
+                icon={deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                onClick={() => void confirmDeleteTrip()}
+              >
+                {deleting ? "Deleting..." : "Delete permanently"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <Footer />
     </div>
   );

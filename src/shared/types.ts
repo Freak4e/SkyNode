@@ -249,9 +249,69 @@ export type GeneratedItinerary = {
   generationMode: "ollama" | "gemini";
 };
 
+export type TripVisibility = "private" | "invite" | "public";
+export type TripMemberRole = "owner" | "member";
+export type TripMemberStatus = "pending" | "accepted" | "declined";
+
+export type TripAccess = {
+  canViewItinerary: boolean;
+  canChat: boolean;
+  canManage: boolean;
+  membershipStatus: TripMemberStatus | "none";
+  role?: TripMemberRole;
+  isOwner: boolean;
+};
+
+export type TripMember = {
+  id: string;
+  userId: string;
+  role: TripMemberRole;
+  status: TripMemberStatus;
+  displayName: string;
+  avatarUrl?: string;
+  createdAt: string;
+};
+
+export type TripMessage = {
+  id: string;
+  tripId: string;
+  userId: string;
+  displayName: string;
+  avatarUrl?: string;
+  content: string;
+  createdAt: string;
+  own?: boolean;
+};
+
+export type UserProfileSnapshot = {
+  displayName: string;
+  avatarUrl?: string;
+};
+
 export type SaveTripRequest = GenerateItineraryRequest & {
   title: string;
   itinerary: GeneratedItinerary;
+  visibility?: TripVisibility;
+  description?: string;
+  maxMembers?: number;
+  ownerProfile?: UserProfileSnapshot;
+};
+
+export type UpdateTripSettingsRequest = {
+  visibility?: TripVisibility;
+  description?: string;
+  maxMembers?: number;
+};
+
+export type TripJoinRequest = UserProfileSnapshot;
+
+export type UpdateTripMemberRequest = {
+  status: "accepted" | "declined";
+};
+
+export type SendTripMessageRequest = {
+  content: string;
+  profile: UserProfileSnapshot;
 };
 
 export type SaveTripResponse = {
@@ -281,6 +341,14 @@ export type SavedTripSummary = {
   tags?: string[];
   estimatedTotalCost: number;
   createdAt: string;
+  visibility?: TripVisibility;
+  description?: string;
+  maxMembers?: number;
+  memberCount?: number;
+  inviteToken?: string;
+  ownerName?: string;
+  ownerAvatar?: string;
+  access?: TripAccess;
 };
 
 export type SavedTripDetail = SavedTripSummary & {

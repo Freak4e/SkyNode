@@ -1,3 +1,13 @@
+import {
+  countAcceptedMembers,
+  createInviteToken,
+  createOwnerMembership,
+  getOwnerProfile,
+  getTripSocialMeta,
+  getTripSocialMetaByToken,
+  listPublicTrips,
+  resolveTripAccess,
+} from "./tripSocialRepository.js";
 import { getDatabasePool, query } from "../../infrastructure/database/client.js";
 import { ensureSchema } from "../../infrastructure/database/schema.js";
 import type {
@@ -13,6 +23,8 @@ import type {
   SavedTripSummary,
   TravelPace,
   TripChangeProposal,
+  TripVisibility,
+  UserProfileSnapshot,
 } from "../../../shared/types.js";
 
 type TripRow = {
@@ -48,6 +60,10 @@ type TripSummaryRow = {
   tags?: string[] | null;
   estimated_total_cost: number;
   generation_mode?: GeneratedItinerary["generationMode"] | null;
+  visibility?: TripVisibility | null;
+  invite_token?: string | null;
+  description?: string | null;
+  max_members?: number | null;
   created_at: string;
 };
 
@@ -91,6 +107,11 @@ type ItineraryItemRow = {
 export async function saveTripDraft(request: SaveTripRequest, userId: string): Promise<SaveTripResponse> {
   await ensureSchema();
 
+  const visibility: TripVisibility = request.visibility || "private";
+  const inviteToken = createInviteToken();
+  const maxMembers = Math.max(2, Math.min(20, request.maxMembers || 8));
+  const ownerProfile: UserProfileSnapshot = request.ownerProfile || { displayName: "Traveler" };
+
   const tripResult = await query<TripRow>(
     `
       insert into trips (
@@ -116,9 +137,13 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
         tags,
         estimated_total_cost,
         generation_mode,
-        user_id
+        user_id,
+        visibility,
+        invite_token,
+        description,
+        max_members
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
       returning id, created_at
     `,
     [
@@ -145,9 +170,15 @@ export async function saveTripDraft(request: SaveTripRequest, userId: string): P
       request.itinerary.estimatedTotalCost,
       request.itinerary.generationMode,
       userId,
+      visibility,
+      inviteToken,
+      request.description || null,
+      maxMembers,
     ],
   );
   const trip = tripResult.rows[0];
+
+  await createOwnerMembership(trip.id, userId, ownerProfile);
 
   for (const attraction of request.itinerary.attractions) {
     await query(
@@ -256,6 +287,10 @@ export async function listTrips(userId: string): Promise<SavedTripSummary[]> {
         notes,
         tags,
         estimated_total_cost,
+        visibility,
+        invite_token,
+        description,
+        max_members,
         created_at::text
       from trips
       where user_id = $1
@@ -265,11 +300,157 @@ export async function listTrips(userId: string): Promise<SavedTripSummary[]> {
     [userId],
   );
 
-  return result.rows.map(mapTripSummary);
+  return Promise.all(result.rows.map(async (row) => enrichTripSummary(mapTripSummary(row), userId, true)));
 }
 
-export async function getTripById(tripId: string, userId: string): Promise<SavedTripDetail | null> {
+export async function listJoinedTrips(userId: string): Promise<SavedTripSummary[]> {
   await ensureSchema();
+
+  const { listJoinedTripIds } = await import("./tripSocialRepository.js");
+  const tripIds = await listJoinedTripIds(userId);
+
+  if (!tripIds.length) {
+    return [];
+  }
+
+  const result = await query<TripSummaryRow>(
+    `
+      select
+        id,
+        title,
+        origin_code,
+        destination_code,
+        destination_name,
+        start_date::text,
+        days,
+        budget,
+        pace,
+        interests,
+        budget_amount,
+        travelers,
+        route_segments,
+        expense_breakdown,
+        cities,
+        hotels,
+        budget_categories,
+        notes,
+        tags,
+        estimated_total_cost,
+        visibility,
+        invite_token,
+        description,
+        max_members,
+        created_at::text
+      from trips
+      where id = any($1::uuid[])
+      order by created_at desc
+    `,
+    [tripIds],
+  );
+
+  return Promise.all(result.rows.map(async (row) => enrichTripSummary(mapTripSummary(row), userId, false)));
+}
+
+export async function listDiscoverableTrips(
+  filters: { destination?: string; budget?: string; pace?: string },
+  userId?: string,
+): Promise<SavedTripSummary[]> {
+  await ensureSchema();
+
+  const publicRows = await listPublicTrips({ ...filters, userId });
+  const tripIds = publicRows.map((row) => row.tripId);
+
+  if (!tripIds.length) {
+    return [];
+  }
+
+  const result = await query<TripSummaryRow>(
+    `
+      select
+        id,
+        title,
+        origin_code,
+        destination_code,
+        destination_name,
+        start_date::text,
+        days,
+        budget,
+        pace,
+        interests,
+        budget_amount,
+        travelers,
+        route_segments,
+        expense_breakdown,
+        cities,
+        hotels,
+        budget_categories,
+        notes,
+        tags,
+        estimated_total_cost,
+        visibility,
+        invite_token,
+        description,
+        max_members,
+        created_at::text
+      from trips
+      where id = any($1::uuid[])
+    `,
+    [tripIds],
+  );
+
+  const byId = new Map(result.rows.map((row) => [row.id, row]));
+
+  return publicRows
+    .map((publicRow) => {
+      const row = byId.get(publicRow.tripId);
+
+      if (!row) {
+        return null;
+      }
+
+      const summary = mapTripSummary(row);
+      summary.memberCount = publicRow.memberCount;
+      summary.ownerName = publicRow.ownerName;
+      summary.ownerAvatar = publicRow.ownerAvatar;
+      summary.access = {
+        canViewItinerary: false,
+        canChat: publicRow.membershipStatus === "accepted",
+        canManage: false,
+        membershipStatus: publicRow.membershipStatus,
+        isOwner: false,
+      };
+
+      return summary;
+    })
+    .filter((trip): trip is SavedTripSummary => Boolean(trip));
+}
+
+export async function getTripById(tripId: string, userId?: string): Promise<SavedTripDetail | null> {
+  await ensureSchema();
+
+  const access = await resolveTripAccess(tripId, userId);
+  const meta = await getTripSocialMeta(tripId);
+
+  if (!meta) {
+    return null;
+  }
+
+  const canSeeTrip = access.isOwner
+    || access.membershipStatus === "accepted"
+    || access.membershipStatus === "pending"
+    || meta.visibility === "public";
+
+  if (!canSeeTrip) {
+    return null;
+  }
+
+  if (meta.visibility === "private" && !access.isOwner && access.membershipStatus !== "accepted") {
+    return null;
+  }
+
+  if (meta.visibility === "invite" && !access.isOwner && access.membershipStatus !== "accepted" && access.membershipStatus !== "pending") {
+    return null;
+  }
 
   const tripResult = await query<TripSummaryRow>(
     `
@@ -297,18 +478,120 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
         tags,
         estimated_total_cost,
         generation_mode,
+        visibility,
+        invite_token,
+        description,
+        max_members,
         created_at::text
       from trips
-      where id = $1 and user_id = $2
+      where id = $1
       limit 1
     `,
-    [tripId, userId],
+    [tripId],
   );
   const trip = tripResult.rows[0];
 
   if (!trip) {
     return null;
   }
+
+  const summary = await enrichTripSummary(mapTripSummary(trip), userId, access.isOwner);
+  summary.access = access;
+
+  if (!access.canViewItinerary) {
+    return {
+      ...summary,
+      selectedFlight: trip.selected_flight || undefined,
+      selectedFlights: trip.selected_flights || undefined,
+      itinerary: {
+        destinationName: trip.destination_name,
+        startDate: trip.start_date,
+        days: [],
+        attractions: [],
+        estimatedTotalCost: trip.estimated_total_cost,
+        generationMode: trip.generation_mode || "ollama",
+      },
+    };
+  }
+
+  return loadTripDetailContent(trip, summary);
+}
+
+export async function getTripByInviteToken(token: string, userId?: string): Promise<SavedTripDetail | null> {
+  const meta = await getTripSocialMetaByToken(token);
+
+  if (!meta) {
+    return null;
+  }
+
+  if (meta.visibility === "private") {
+    return null;
+  }
+
+  const access = await resolveTripAccess(meta.id, userId);
+  const tripResult = await query<TripSummaryRow>(
+    `
+      select
+        id,
+        title,
+        origin_code,
+        destination_code,
+        destination_name,
+        start_date::text,
+        days,
+        budget,
+        pace,
+        interests,
+        selected_flight,
+        selected_flights,
+        budget_amount,
+        travelers,
+        route_segments,
+        expense_breakdown,
+        cities,
+        hotels,
+        budget_categories,
+        notes,
+        tags,
+        estimated_total_cost,
+        generation_mode,
+        visibility,
+        invite_token,
+        description,
+        max_members,
+        created_at::text
+      from trips
+      where id = $1
+      limit 1
+    `,
+    [meta.id],
+  );
+  const trip = tripResult.rows[0];
+
+  if (!trip) {
+    return null;
+  }
+
+  const summary = await enrichTripSummary(mapTripSummary(trip), userId, false);
+  summary.access = access;
+
+  return {
+    ...summary,
+    selectedFlight: trip.selected_flight || undefined,
+    selectedFlights: trip.selected_flights || undefined,
+    itinerary: {
+      destinationName: trip.destination_name,
+      startDate: trip.start_date,
+      days: [],
+      attractions: [],
+      estimatedTotalCost: trip.estimated_total_cost,
+      generationMode: trip.generation_mode || "ollama",
+    },
+  };
+}
+
+async function loadTripDetailContent(trip: TripSummaryRow, summary: SavedTripSummary): Promise<SavedTripDetail> {
+  const tripId = trip.id;
 
   const [attractionsResult, daysResult, itemsResult] = await Promise.all([
     query<AttractionRow>(
@@ -401,7 +684,7 @@ export async function getTripById(tripId: string, userId: string): Promise<Saved
   };
 
   return {
-    ...mapTripSummary(trip),
+    ...summary,
     selectedFlight: trip.selected_flight || undefined,
     selectedFlights: trip.selected_flights || undefined,
     itinerary,
@@ -513,6 +796,20 @@ export async function applyTripChangeProposal(
   return getTripById(tripId, userId);
 }
 
+export async function deleteTripById(tripId: string, userId: string): Promise<boolean> {
+  await ensureSchema();
+
+  const result = await query(
+    `
+      delete from trips
+      where id = $1 and user_id = $2
+    `,
+    [tripId, userId],
+  );
+
+  return (result.rowCount || 0) > 0;
+}
+
 function mapTripSummary(row: TripSummaryRow): SavedTripSummary {
   return {
     id: row.id,
@@ -536,7 +833,36 @@ function mapTripSummary(row: TripSummaryRow): SavedTripSummary {
     tags: row.tags || undefined,
     estimatedTotalCost: row.estimated_total_cost,
     createdAt: row.created_at,
+    visibility: row.visibility || "private",
+    description: row.description || undefined,
+    maxMembers: row.max_members || undefined,
   };
+}
+
+async function enrichTripSummary(
+  summary: SavedTripSummary,
+  userId?: string,
+  includeInviteToken = false,
+): Promise<SavedTripSummary> {
+  summary.memberCount = await countAcceptedMembers(summary.id);
+
+  if (includeInviteToken && userId) {
+    const meta = await getTripSocialMeta(summary.id);
+
+    if (meta?.user_id === userId) {
+      summary.inviteToken = meta.invite_token;
+    }
+  }
+
+  const owner = await getOwnerProfile(summary.id);
+  summary.ownerName = owner.displayName;
+  summary.ownerAvatar = owner.avatarUrl;
+
+  if (userId) {
+    summary.access = await resolveTripAccess(summary.id, userId);
+  }
+
+  return summary;
 }
 
 function mapAttraction(row: AttractionRow): Attraction {

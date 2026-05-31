@@ -35,6 +35,30 @@ export function getAuthenticatedUserId(res: Response): string {
   return userId;
 }
 
+export function getOptionalUserId(res: Response): string | undefined {
+  const userId = res.locals.userId;
+  return typeof userId === "string" && userId ? userId : undefined;
+}
+
+export function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.header("authorization");
+  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  void verifySupabaseToken(token)
+    .then((userId) => {
+      res.locals.userId = userId;
+      next();
+    })
+    .catch(() => {
+      next();
+    });
+}
+
 async function verifySupabaseToken(token: string): Promise<string> {
   const supabaseUrl = requireSupabaseUrl().replace(/\/$/, "");
   const anonKey = requireSupabaseAnonKey();

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, MapPin, Plane, Plus, X } from "lucide-react";
+import { Building2, Plane, X } from "lucide-react";
 import { searchPlaces } from "../api/flightsApi";
 import type { Place } from "../../shared/types.js";
 
@@ -17,8 +17,7 @@ type PlaceGroup = {
 };
 
 function placeLabel(place: Place): string {
-  const city = place.cityName || place.name;
-  return place.type === "airport" ? `${city} · ${place.code}` : `${city} · ${place.code}`;
+  return place.cityName || place.name;
 }
 
 function distanceKm(a?: { lat: number; lon: number }, b?: { lat: number; lon: number }): number | undefined {
@@ -108,7 +107,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
   const [places, setPlaces] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const selectedCodes = useMemo(() => new Set(values.map((place) => place.code)), [values]);
+  const selectedCodes = useMemo(() => new Set(values.map((place) => place.code.toUpperCase())), [values]);
   const groupedPlaces = useMemo(() => groupPlaces(places, query), [places, query]);
 
   useEffect(() => {
@@ -147,7 +146,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
   }, []);
 
   function addPlace(place: Place) {
-    if (!selectedCodes.has(place.code)) {
+    if (!selectedCodes.has(place.code.toUpperCase())) {
       onChange([...values, place]);
     }
 
@@ -157,28 +156,22 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
   }
 
   function removePlace(code: string) {
-    if (values.length <= 1) {
-      return;
-    }
-
     onChange(values.filter((place) => place.code !== code));
   }
 
   return (
     <div ref={wrapperRef} className="relative min-w-0">
-      <span className="block text-xs font-black uppercase tracking-[0.16em] text-slate-400">{label}</span>
-      <div className="mt-1 flex min-h-11 flex-wrap items-center gap-2">
+      <div className="scrollbar-none flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pr-1">
+        <span className="shrink-0 text-sm font-semibold text-slate-600">{label}</span>
         {values.map((place) => (
-          <span key={place.code} className="inline-flex max-w-full items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-xs font-black text-blue-700 ring-1 ring-blue-100">
-            {place.type === "airport" ? <Plane className="h-3.5 w-3.5 shrink-0" /> : <MapPin className="h-3.5 w-3.5 shrink-0" />}
+          <span key={place.code} className="inline-flex max-w-32 shrink-0 items-center gap-1.5 rounded-lg bg-blue-500 px-2.5 py-1.5 text-sm font-black text-white">
             <span className="truncate">{placeLabel(place)}</span>
-            <button type="button" onClick={() => removePlace(place.code)} className="rounded-full p-0.5 text-blue-500 hover:bg-blue-100 hover:text-blue-800" aria-label={`Remove ${placeLabel(place)}`}>
+            <button type="button" onClick={() => removePlace(place.code)} className="rounded-full p-0.5 text-blue-100 hover:bg-blue-400 hover:text-white" aria-label={`Remove ${placeLabel(place)}`}>
               <X className="h-3.5 w-3.5" />
             </button>
           </span>
         ))}
-        <label className="flex min-w-40 flex-1 items-center gap-2">
-          <Plus className="h-3.5 w-3.5 text-slate-400" />
+        <label className="flex min-w-28 shrink-0 items-center">
           <input
             value={query}
             onChange={(event) => {
@@ -186,14 +179,14 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            placeholder={placeholder || "Add city or airport"}
-            className="min-w-24 flex-1 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-400"
+            placeholder={values.length === 0 ? placeholder || "Add city or airport" : "Add more"}
+            className="w-32 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-500"
           />
         </label>
       </div>
 
       {open && query.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12" style={{ minWidth: 390 }}>
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12" style={{ minWidth: 390 }}>
           {groupedPlaces.length === 0 ? (
             <p className="px-4 py-3 text-sm font-bold text-slate-500">No cities or airports found</p>
           ) : groupedPlaces.slice(0, 8).map((group) => {
@@ -210,7 +203,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
                   <button
                     type="button"
                     onClick={() => addPlace(group.city!)}
-                    disabled={selectedCodes.has(group.city.code)}
+                    disabled={selectedCodes.has(group.city.code.toUpperCase())}
                     className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700">
@@ -219,7 +212,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-black text-slate-950">{cityName}</span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
-                        Search all airports in this city{group.airports.length > 0 ? ` · ${group.airports.length} airport${group.airports.length === 1 ? "" : "s"}` : ""}
+                        Search all airports in this city{group.airports.length > 0 ? ` - ${group.airports.length} airport${group.airports.length === 1 ? "" : "s"}` : ""}
                       </span>
                     </span>
                     <span className="rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-black text-white">{group.city.code}</span>
@@ -231,7 +224,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
                     key={`${group.cityKey}-${airport.code}`}
                     type="button"
                     onClick={() => addPlace(airport)}
-                    disabled={selectedCodes.has(airport.code)}
+                    disabled={selectedCodes.has(airport.code.toUpperCase())}
                     className="flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 pl-8 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
@@ -241,7 +234,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
                       <span className="block truncate text-sm font-bold text-slate-900">{airport.name}</span>
                       <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
                         Airport in {airport.cityName || cityName}
-                        {typeof airport.distanceKm === "number" ? ` · ${airport.distanceKm} km from center` : ""}
+                        {typeof airport.distanceKm === "number" ? ` - ${airport.distanceKm} km from center` : ""}
                       </span>
                     </span>
                     <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{airport.code}</span>

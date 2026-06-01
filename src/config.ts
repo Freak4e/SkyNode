@@ -50,6 +50,7 @@ export const config = {
     renderJs: process.env.SCRAPINGBEE_RENDER_JS !== "false",
     waitMs: Number(process.env.SCRAPINGBEE_WAIT_MS || 10000),
     timeoutMs: Number(process.env.SCRAPINGBEE_TIMEOUT_MS || 30000),
+    cacheTtlMs: Number(process.env.SCRAPINGBEE_CACHE_TTL_MS || 6 * 60 * 60 * 1000),
   },
 };
 

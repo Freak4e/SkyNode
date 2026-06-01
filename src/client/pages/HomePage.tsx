@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
-import { ChipPlacePicker } from "../components/ChipPlacePicker";
+import { MultiPlacePicker } from "../components/MultiPlacePicker";
 import type { Place } from "../../shared/types.js";
 import heroBanner from "../../../assets/hero_banner.jpg";
 
@@ -194,7 +194,7 @@ function HomeDatePicker({
   }
 
   return (
-    <div ref={ref} className="relative shrink-0 border-slate-200 px-2 py-2 lg:border-r lg:px-4 lg:py-0">
+    <div ref={ref} className="relative min-h-14 rounded-2xl border border-white/60 bg-white/75 px-4 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
       <p className="text-xs text-slate-400 font-medium mb-1">{label}</p>
       {disabled ? (
         <p className="text-slate-400 text-sm font-medium">{disabledText || "Disabled"}</p>
@@ -262,10 +262,19 @@ function HomeDatePicker({
   );
 }
 
+function placeCodes(places: Place[]): string[] {
+  return places
+    .map((place) => place.code.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((code, index, all) => all.indexOf(code) === index);
+}
+
 export function HomePage() {
   const navigate = useNavigate();
-  const [from, setFrom] = useState<Place>(defaultFrom);
-  const [to, setTo] = useState<Place>(defaultTo);
+  const [fromPlaces, setFromPlaces] = useState<Place[]>([defaultFrom]);
+  const [toPlaces, setToPlaces] = useState<Place[]>([defaultTo]);
+  const from = fromPlaces[0];
+  const to = toPlaces[0];
   const [date, setDate] = useState(today);
   const [returnDate, setReturnDate] = useState(today);
   const [tripType, setTripType] = useState<TripType>("return");
@@ -273,9 +282,15 @@ export function HomePage() {
 
   function handleSearch(e: FormEvent) {
     e.preventDefault();
+    if (!from || !to) {
+      return;
+    }
+
     const params = new URLSearchParams({
       from: from.code,
       to: to.code,
+      fromAll: placeCodes(fromPlaces).join(","),
+      toAll: placeCodes(toPlaces).join(","),
       date,
       fromName: from.cityName,
       toName: to.cityName,
@@ -291,6 +306,10 @@ export function HomePage() {
   }
 
   function openPlanner() {
+    if (!from || !to) {
+      return;
+    }
+
     const params = new URLSearchParams({
       from: from.code,
       to: to.code,
@@ -355,43 +374,44 @@ export function HomePage() {
         {/* Search box */}
         <form
           onSubmit={handleSearch}
-          className="relative z-10 w-full max-w-4xl mx-auto px-0 sm:px-4"
+          className="relative z-10 w-full max-w-5xl mx-auto px-0 sm:px-4"
         >
-          <div className="glass rounded-2xl shadow-2xl border border-white/50 overflow-visible">
+          <div className="rounded-2xl border border-white/45 bg-white/70 p-3 shadow-2xl shadow-slate-900/20 backdrop-blur-xl">
             {/* Top options row */}
-            <div className="flex flex-wrap items-center gap-1 px-4 pt-3 pb-2 border-b border-slate-200/60">
+            <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-slate-200/60 px-1 pb-3">
               <TripTypeDropdown value={tripType} onChange={setTripType} />
               <PassengerDropdown value={passengers} onChange={setPassengers} />
             </div>
 
             {/* Main search row */}
-            <div className="flex flex-col gap-2 px-3 py-3 lg:flex-row lg:items-center lg:gap-0">
+            <div className="grid gap-2 lg:grid-cols-[minmax(150px,0.6fr)_44px_minmax(150px,0.6fr)_170px_170px_auto]">
               {/* FROM */}
-              <div className="min-w-0 px-2 lg:flex-1">
-                <ChipPlacePicker
+              <div className="min-w-0 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
+                <MultiPlacePicker
                   label="From"
-                  value={from}
-                  onChange={setFrom}
-                  chipColor="blue"
+                  values={fromPlaces}
+                  onChange={setFromPlaces}
+                  placeholder="Add departure"
                 />
               </div>
 
               {/* Swap */}
               <button
                 type="button"
-                onClick={() => { const tmp = from; setFrom(to); setTo(tmp); }}
-                className="mx-auto shrink-0 w-8 h-8 rounded-full border border-slate-200 bg-white flex items-center justify-center text-slate-400 hover:text-blue-500 hover:border-blue-300 transition-colors lg:mx-1"
+                onClick={() => { const tmp = fromPlaces; setFromPlaces(toPlaces); setToPlaces(tmp); }}
+                className="flex h-full min-h-14 items-center justify-center rounded-2xl border border-white/60 bg-white/75 text-slate-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                aria-label="Swap origin and destination"
               >
                 <ArrowLeftRight className="w-3.5 h-3.5" />
               </button>
 
               {/* TO */}
-              <div className="min-w-0 border-slate-200 px-2 lg:flex-1 lg:border-r">
-                <ChipPlacePicker
+              <div className="min-w-0 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
+                <MultiPlacePicker
                   label="To"
-                  value={to}
-                  onChange={setTo}
-                  chipColor="blue"
+                  values={toPlaces}
+                  onChange={setToPlaces}
+                  placeholder="Add destination"
                 />
               </div>
 
@@ -420,7 +440,8 @@ export function HomePage() {
               {/* SEARCH */}
               <button
                 type="submit"
-                className="ml-0 flex shrink-0 items-center justify-center gap-2 rounded-xl bg-linear-to-r from-blue-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:scale-105 hover:shadow-lg lg:ml-2"
+                disabled={!from || !to}
+                className="flex min-h-14 shrink-0 items-center justify-center gap-2 rounded-2xl bg-linear-to-r from-blue-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-md transition-all duration-200 hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Search className="w-4 h-4" />
                 Search

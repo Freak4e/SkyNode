@@ -26,6 +26,7 @@ const fallbackPlaces: Place[] = [
   { code: "ROM", name: "Rome", cityName: "Rome", countryName: "Italy", type: "city" },
   { code: "ATH", name: "Athens", cityName: "Athens", countryName: "Greece", type: "city" },
   { code: "VIE", name: "Vienna", cityName: "Vienna", countryName: "Austria", type: "city" },
+  { code: "LJU", name: "Ljubljana", cityName: "Ljubljana", countryName: "Slovenia", type: "city" },
   { code: "ZAG", name: "Zagreb", cityName: "Zagreb", countryName: "Croatia", type: "city" },
   { code: "BEG", name: "Belgrade", cityName: "Belgrade", countryName: "Serbia", type: "city" },
 ];

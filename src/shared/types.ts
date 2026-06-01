@@ -86,6 +86,30 @@ export type ExploreResponse = {
   warnings: string[];
 };
 
+export type LiveFlight = {
+  id: string;
+  callsign: string;
+  airline: string;
+  originCountry: string;
+  status: "On ground" | "Climbing" | "Descending" | "Cruising";
+  lat: number;
+  lon: number;
+  heading: number;
+  altitudeMeters?: number;
+  speedKmh?: number;
+  onGround?: boolean;
+  lastContact?: string;
+};
+
+export type LiveFlightsResponse = {
+  flights: LiveFlight[];
+  updatedAt?: string;
+  warnings: string[];
+  source: "opensky";
+  totalAvailable?: number;
+  samplePercent?: number;
+};
+
 export type Place = {
   code: string;
   name: string;

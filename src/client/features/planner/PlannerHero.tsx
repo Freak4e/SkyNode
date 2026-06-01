@@ -1,4 +1,4 @@
-import { CalendarDays, Edit3, List, Loader2, Map as MapIcon, MapPin, Plus, Save, Sparkles, Trash2 } from "lucide-react";
+import { CalendarDays, Edit3, List, Loader2, Map as MapIcon, MapPin, Plus, Save, Settings2, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui";
 import { useDestinationImage } from "../../utils/destinationImage.js";
 import type { GeneratedItinerary } from "../../../shared/types.js";
@@ -12,8 +12,10 @@ type PlannerHeroProps = {
   days: number;
   deleting?: boolean;
   editing: boolean;
+  isSavedTrip?: boolean;
   itinerary: GeneratedItinerary;
   onDelete?: () => void;
+  onOpenSettings?: () => void;
   saveEdits: () => void;
   saveTrip: () => void;
   saving: boolean;
@@ -63,7 +65,7 @@ export function PlannerHero(props: PlannerHeroProps) {
               ) : (
                 <>
                   <MapPin className="h-3.5 w-3.5" />
-                  {cityName} · Trip dashboard
+                  {cityName} · {props.isSavedTrip ? "Saved trip" : "Trip dashboard"}
                 </>
               )}
             </p>
@@ -81,8 +83,18 @@ export function PlannerHero(props: PlannerHeroProps) {
             ) : (
               <>
                 <Button type="button" tone="light" onClick={props.startNew} icon={<Plus className="h-4 w-4" />} className="rounded-full">New trip</Button>
-                <Button type="button" tone="ghost" onClick={props.startEdit} icon={<Edit3 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">Edit trip</Button>
-                <Button type="button" onClick={props.saveTrip} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full">Save trip</Button>
+                <Button type="button" tone="ghost" onClick={props.startEdit} icon={<Edit3 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">
+                  {props.isSavedTrip ? "Edit itinerary" : "Edit trip"}
+                </Button>
+                {props.isSavedTrip ? (
+                  <Button type="button" tone="ghost" onClick={props.onOpenSettings} icon={<Settings2 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">
+                    Settings
+                  </Button>
+                ) : (
+                  <Button type="button" onClick={props.saveTrip} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full">
+                    Save trip
+                  </Button>
+                )}
                 {props.showDelete && props.onDelete && (
                   <Button
                     type="button"

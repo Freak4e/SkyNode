@@ -129,6 +129,17 @@
     box-shadow: 0 0 0 4px #dbeafe;
   }
 
+  .form-field-no-spinner::-webkit-outer-spin-button,
+  .form-field-no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .form-field-no-spinner {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
   .plane-loader-sky__dot {
     width: 7px;
     height: 7px;

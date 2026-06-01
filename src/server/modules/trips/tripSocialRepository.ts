@@ -391,14 +391,14 @@ export async function updateTripMemberStatus(
   const result = await query<MemberRow>(
     `
       update trip_members
-      set status = $4,
+      set status = $3,
           updated_at = now()
       where id = $1
         and trip_id = $2
         and role = 'member'
       returning id, trip_id, user_id, role, status, display_name, avatar_url, created_at::text
     `,
-    [memberId, tripId, ownerId, status],
+    [memberId, tripId, status],
   );
 
   return result.rows[0] ? mapMember(result.rows[0]) : null;

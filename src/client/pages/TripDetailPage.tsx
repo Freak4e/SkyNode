@@ -141,7 +141,7 @@ export function TripDetailPage() {
       void listTripMessages(tripId)
         .then(setMessages)
         .catch(() => undefined);
-    }, 5000);
+    }, 2000);
 
     return () => window.clearInterval(timer);
   }, [canChat, tab, tripId]);

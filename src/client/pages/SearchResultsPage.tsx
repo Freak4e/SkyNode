@@ -17,7 +17,7 @@ import {
   User,
   X,
 } from "lucide-react";
-import { searchFlights } from "../api/flightsApi";
+import { searchFlights, searchPlaces } from "../api/flightsApi";
 import { ChipPlacePicker } from "../components/ChipPlacePicker";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
@@ -30,6 +30,13 @@ import {
   resolveStopsCount,
 } from "../../shared/flightParsing.js";
 import {
+  patchPlannerDraft,
+  readPlannerDraft,
+  sanitizeDestinationCode,
+  tripReturnDate,
+} from "../features/planner/plannerDraft";
+import { writeStoredFlightSelection } from "../features/planner/plannerFlightSelection";
+import {
   currencyChangedEvent,
   currencyOptions,
   formatCurrencyAmount,
@@ -38,6 +45,32 @@ import {
 } from "../utils/currency.js";
 
 const today = new Date().toISOString().slice(0, 10);
+
+const EMPTY_PLACE: Place = {
+  code: "",
+  name: "",
+  cityName: "",
+  countryName: "",
+  type: "city",
+};
+
+function buildPlace(code: string, name: string): Place {
+  return {
+    code,
+    name,
+    cityName: name,
+    countryName: "",
+    type: "city",
+  };
+}
+
+function buildInitialPlaces(codes: string[], name: string): Place[] {
+  if (!codes.length) {
+    return [EMPTY_PLACE];
+  }
+
+  return codes.map((code, index) => buildPlace(code, index === 0 ? name : code));
+}
 
 type SortMode = "best" | "price" | "duration" | "earliest";
 type TripType = "one-way" | "return";
@@ -1199,23 +1232,37 @@ export function SearchResultsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
-  const hasInitialSearch = Boolean((params.has("fromAll") || params.has("from")) && (params.has("toAll") || params.has("to")));
-  const initialFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "NYC");
-  const initialToCodes = parseCodeParam(params.get("toAll") || params.get("to") || "TYO");
-  const initialFromCode = initialFromCodes[0] ?? "NYC";
-  const initialToCode = initialToCodes[0] ?? "TYO";
+  const fromPlanner = params.get("source") === "planner";
+  const parsedFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "");
+  const parsedToCodes = fromPlanner
+    ? []
+    : parseCodeParam(params.get("toAll") || params.get("to") || "");
+  const hasRouteInUrl = Boolean(
+    (params.has("fromAll") || params.has("from")) && (params.has("toAll") || params.has("to")),
+  );
+  const initialFromCodes = parsedFromCodes.length ? parsedFromCodes : fromPlanner ? [] : ["NYC"];
+  const initialToCodes = parsedToCodes.length ? parsedToCodes : fromPlanner ? [] : ["TYO"];
   const initialDate = params.get("date") ?? today;
-  const initialReturnDate = params.get("returnDate") ?? initialDate;
+  const plannerDays = Number(params.get("days") || 0);
+  const initialReturnDate = params.get("returnDate")
+    ?? (plannerDays > 0 ? tripReturnDate(initialDate, plannerDays) : initialDate);
   const initialTripType = params.get("tripType") === "one-way" ? "one-way" : "return";
   const parsedPassengers = Number(params.get("passengers") || 1);
   const initialPassengers = Number.isFinite(parsedPassengers)
     ? Math.min(Math.max(parsedPassengers, 1), 9)
     : 1;
-  const initialFromName = params.get("fromName") ?? "New York";
-  const initialToName = params.get("toName") ?? "Tokyo";
+  const initialFromName = params.get("fromName") ?? (fromPlanner ? "" : "New York");
+  const initialToName = params.get("toName") ?? (fromPlanner ? "" : "Tokyo");
+  const hasInitialSearch = hasRouteInUrl;
 
-  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => initialFromCodes.map((code, index) => ({ code, name: index === 0 ? initialFromName : code, cityName: index === 0 ? initialFromName : code, countryName: "", type: "city" })));
-  const [toPlaces, setToPlaces] = useState<Place[]>(() => initialToCodes.map((code, index) => ({ code, name: index === 0 ? initialToName : code, cityName: index === 0 ? initialToName : code, countryName: "", type: "city" })));
+  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => buildInitialPlaces(initialFromCodes, initialFromName));
+  const [toPlaces, setToPlaces] = useState<Place[]>(() => (
+    initialToCodes.length
+      ? buildInitialPlaces(initialToCodes, initialToName)
+      : initialToName
+      ? [buildPlace("", initialToName)]
+      : [EMPTY_PLACE]
+  ));
   const from = fromPlaces[0];
   const to = toPlaces[0];
   const [date, setDate] = useState(initialDate);
@@ -1245,6 +1292,36 @@ export function SearchResultsPage() {
       doSearch(initialFromCodes, initialToCodes, initialDate, initialTripType, initialReturnDate);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const toName = params.get("toName")?.trim();
+
+    if (!fromPlanner || !toName || initialToCodes.length) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void searchPlaces(toName).then((places) => {
+      if (cancelled || places.length === 0) {
+        return;
+      }
+
+      const normalizedTarget = toName.toLowerCase();
+      const match = places.find((place) => (
+        place.type === "city"
+        && [place.cityName, place.name, place.code].some((value) => value?.toLowerCase().includes(normalizedTarget))
+      )) || places.find((place) => place.type === "city") || places[0];
+
+      if (match) {
+        setToPlaces([match]);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fromPlanner, initialToCodes.length, params]);
 
   useEffect(() => {
     const handleCurrencyChange = (event: Event) => {
@@ -1292,6 +1369,16 @@ export function SearchResultsPage() {
   function handleSearch(e: FormEvent) {
     e.preventDefault();
 
+    if (!from.code.trim()) {
+      setError("Choose a departure city or airport.");
+      return;
+    }
+
+    if (!to.code.trim()) {
+      setError("Choose a destination city or airport.");
+      return;
+    }
+
     const searchParams = new URLSearchParams({
       from: from.code,
       to: to.code,
@@ -1319,17 +1406,29 @@ export function SearchResultsPage() {
   function openPlanner(pair: FlightPair) {
     const outboundFrom = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
     const outboundTo = placeByCode(toPlaces, pair.outbound.searchTo) || to;
-    const plannerParams = new URLSearchParams({
-      from: outboundFrom.code,
-      to: outboundTo.code,
-      date,
-      fromName: outboundFrom.cityName || outboundFrom.name,
-      toName: outboundTo.cityName || outboundTo.name,
-      destination: outboundTo.cityName || outboundTo.name,
-    });
+    const draft = readPlannerDraft();
 
-    sessionStorage.setItem("skynode:selectedFlight", JSON.stringify(pair.outbound));
-    navigate(`/planner?${plannerParams.toString()}`);
+    if (draft) {
+      const destinationName = outboundTo.cityName || outboundTo.name || draft.destinationName;
+      patchPlannerDraft({
+        originCode: outboundFrom.code || draft.originCode,
+        destinationCode: sanitizeDestinationCode(outboundTo.code || draft.destinationCode, destinationName),
+        destinationName,
+        startDate: date || draft.startDate,
+        travelers: passengers || draft.travelers,
+        manual: false,
+      });
+    }
+
+    writeStoredFlightSelection({
+      outbound: pair.outbound,
+      inbound: pair.inbound,
+      tripType,
+      departureDate: date,
+      returnDate: tripType === "return" ? returnDate : undefined,
+      totalPriceText: formatDisplayPrice(pair, currency),
+    });
+    navigate("/planner");
   }
 
   function toggleStopsFilter(filter: StopsFilter) {

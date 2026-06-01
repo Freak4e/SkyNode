@@ -6,7 +6,7 @@ const apiKey = process.env.SCRAPINGBEE_API_KEY || process.env.API_KEY;
 
 export const config = {
   port: Number(process.env.PORT || 3000),
-  llmProvider: (process.env.LLM_PROVIDER || "ollama").toLowerCase(),
+  llmProvider: (process.env.LLM_PROVIDER || "gemini").toLowerCase(),
   database: {
     url: process.env.DATABASE_URL,
   },
@@ -43,6 +43,13 @@ export const config = {
     accessToken: process.env.TRAVELPAYOUTS_ACCESS_TOKEN,
     currency: process.env.TRAVELPAYOUTS_CURRENCY || "USD",
     timeoutMs: Number(process.env.TRAVELPAYOUTS_TIMEOUT_MS || 15000),
+  },
+  openSky: {
+    apiUrl: process.env.OPENSKY_API_URL || "https://opensky-network.org/api",
+    tokenUrl: process.env.OPENSKY_TOKEN_URL || "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
+    clientId: process.env.OPENSKY_CLIENT_ID,
+    clientSecret: process.env.OPENSKY_CLIENT_SECRET,
+    timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 12000),
   },
   scrapingBee: {
     apiUrl: "https://app.scrapingbee.com/api/v1/",
@@ -115,6 +122,17 @@ export function requireTravelpayoutsAccessToken(): string {
   }
 
   return config.travelpayouts.accessToken;
+}
+
+export function requireOpenSkyCredentials(): { clientId: string; clientSecret: string } {
+  if (!config.openSky.clientId || !config.openSky.clientSecret) {
+    throw new Error("Missing OPENSKY_CLIENT_ID or OPENSKY_CLIENT_SECRET. Add your OpenSky API client credentials to .env.");
+  }
+
+  return {
+    clientId: config.openSky.clientId,
+    clientSecret: config.openSky.clientSecret,
+  };
 }
 
 export function requireScrapingBeeApiKey(): string {

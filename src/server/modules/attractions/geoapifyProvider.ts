@@ -50,28 +50,33 @@ export async function fetchAttractions(destination: string): Promise<Attraction[
     return fallbackAttractions(destination);
   }
 
-  const coordinates = await geocodeDestination(destination, apiKey);
+  try {
+    const coordinates = await geocodeDestination(destination, apiKey);
 
-  if (!coordinates) {
+    if (!coordinates) {
+      return fallbackAttractions(destination);
+    }
+
+    const response = await axios.get<GeoapifyResponse>(config.geoapify.apiUrl, {
+      timeout: config.geoapify.timeoutMs,
+      params: {
+        apiKey,
+        categories: "tourism",
+        filter: `circle:${coordinates.lon},${coordinates.lat},7000`,
+        bias: `proximity:${coordinates.lon},${coordinates.lat}`,
+        limit: 12,
+      },
+    });
+
+    const attractions = (response.data.features || [])
+      .map((feature, index) => normalizeAttraction(feature, index))
+      .filter((attraction): attraction is Attraction => Boolean(attraction));
+
+    return attractions.length > 0 ? attractions : fallbackAttractions(destination);
+  } catch (error) {
+    console.warn("[geoapify] attraction lookup failed, using local fallback", formatProviderError(error));
     return fallbackAttractions(destination);
   }
-
-  const response = await axios.get<GeoapifyResponse>(config.geoapify.apiUrl, {
-    timeout: config.geoapify.timeoutMs,
-    params: {
-      apiKey,
-      categories: "tourism",
-      filter: `circle:${coordinates.lon},${coordinates.lat},7000`,
-      bias: `proximity:${coordinates.lon},${coordinates.lat}`,
-      limit: 12,
-    },
-  });
-
-  const attractions = (response.data.features || [])
-    .map((feature, index) => normalizeAttraction(feature, index))
-    .filter((attraction): attraction is Attraction => Boolean(attraction));
-
-  return attractions.length > 0 ? attractions : fallbackAttractions(destination);
 }
 
 async function geocodeDestination(destination: string, apiKey: string) {
@@ -175,4 +180,18 @@ function fallbackAttractions(destination: string): Attraction[] {
       source: "mock",
     },
   ];
+}
+
+function formatProviderError(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    if (error.code === "UNABLE_TO_VERIFY_LEAF_SIGNATURE") {
+      return "TLS certificate verification failed.";
+    }
+
+    return error.response?.status
+      ? `HTTP ${error.response.status}`
+      : error.code || error.message;
+  }
+
+  return error instanceof Error ? error.message : "Unknown provider error.";
 }

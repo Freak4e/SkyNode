@@ -193,17 +193,42 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
 }
 
 export function parseItineraryJson(content: string): RawItinerary {
+  const trimmed = content.trim();
+  const jsonString = extractJsonBlock(trimmed);
+
   try {
-    return JSON.parse(content) as RawItinerary;
-  } catch {
-    const match = content.match(/\{[\s\S]*\}/);
+    return JSON.parse(jsonString) as RawItinerary;
+  } catch (error) {
+    const cleaned = cleanJsonString(jsonString);
 
-    if (!match) {
-      throw new Error("Ollama did not return parseable JSON.");
+    try {
+      return JSON.parse(cleaned) as RawItinerary;
+    } catch (innerError) {
+      const preview = cleaned.length > 1000 ? `${cleaned.slice(0, 1000)}...` : cleaned;
+      throw new Error(
+        `Failed to parse itinerary JSON from LLM response: ${innerError instanceof Error ? innerError.message : String(innerError)}\n` +
+        `Cleaned content preview: ${preview}`,
+      );
     }
-
-    return JSON.parse(match[0]) as RawItinerary;
   }
+}
+
+function extractJsonBlock(content: string): string {
+  const match = content.match(/([\[{][\s\S]*[\]}])/);
+
+  if (!match) {
+    throw new Error("Ollama did not return parseable JSON.");
+  }
+
+  return match[1];
+}
+
+function cleanJsonString(content: string): string {
+  return content
+    .replace(/,\s*(?=[}\]])/g, "")
+    .replace(/\r?\n/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 export function normalizeItinerary(

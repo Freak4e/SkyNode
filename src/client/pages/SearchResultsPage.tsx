@@ -1230,24 +1230,14 @@ export function SearchResultsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
-<<<<<<< HEAD
+  const fromPlanner = params.get("source") === "planner";
   const fromParam = params.has("fromAll") ? params.get("fromAll") ?? "" : params.get("from");
   const toParam = params.has("toAll") ? params.get("toAll") ?? "" : params.get("to");
+  const parsedFromCodes = fromParam === null ? [] : parseCodeParam(fromParam);
+  const parsedToCodes = toParam === null ? [] : parseCodeParam(toParam);
   const hasInitialSearch = Boolean(fromParam?.trim() && toParam?.trim());
-  const initialFromCodes = fromParam === null ? ["NYC"] : parseCodeParam(fromParam);
-  const initialToCodes = toParam === null ? ["TYO"] : parseCodeParam(toParam);
-=======
-  const fromPlanner = params.get("source") === "planner";
-  const parsedFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "");
-  const parsedToCodes = fromPlanner
-    ? parseCodeParam(params.get("toAll") || params.get("to") || "")
-    : parseCodeParam(params.get("toAll") || params.get("to") || "", "TYO");
-  const hasInitialSearch = Boolean(
-    (params.has("fromAll") || params.has("from")) && (params.has("toAll") || params.has("to")),
-  );
-  const initialFromCodes = parsedFromCodes.length ? parsedFromCodes : fromPlanner ? [] : ["NYC"];
-  const initialToCodes = parsedToCodes.length ? parsedToCodes : fromPlanner ? [] : ["TYO"];
->>>>>>> f1e7e6a07bf9f2c10d977024ae870811d08d16f6
+  const initialFromCodes = parsedFromCodes.length ? parsedFromCodes : fromParam === null && !fromPlanner ? ["NYC"] : [];
+  const initialToCodes = parsedToCodes.length ? parsedToCodes : toParam === null && !fromPlanner ? ["TYO"] : [];
   const initialDate = params.get("date") ?? today;
   const plannerDays = Number(params.get("days") || 0);
   const initialReturnDate = params.get("returnDate")
@@ -1433,12 +1423,10 @@ export function SearchResultsPage() {
     const outboundTo = placeByCode(toPlaces, pair.outbound.searchTo) || to;
     const draft = readPlannerDraft();
 
-<<<<<<< HEAD
     const selectedFlights = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
     sessionStorage.setItem("skynode:selectedFlightsToAdd", JSON.stringify(selectedFlights));
     sessionStorage.setItem("skynode:selectedFlight", JSON.stringify(pair.outbound));
-    navigate(`/planner?${plannerParams.toString()}`);
-=======
+
     if (draft) {
       const destinationName = outboundTo.cityName || outboundTo.name || draft.destinationName;
       patchPlannerDraft({
@@ -1459,8 +1447,22 @@ export function SearchResultsPage() {
       returnDate: tripType === "return" ? returnDate : undefined,
       totalPriceText: formatDisplayPrice(pair, currency),
     });
-    navigate("/planner");
->>>>>>> f1e7e6a07bf9f2c10d977024ae870811d08d16f6
+
+    if (draft) {
+      navigate("/planner");
+      return;
+    }
+
+    const plannerParams = new URLSearchParams({
+      from: outboundFrom.code,
+      to: outboundTo.code,
+      date,
+      fromName: outboundFrom.cityName || outboundFrom.name,
+      toName: outboundTo.cityName || outboundTo.name,
+      destination: outboundTo.cityName || outboundTo.name,
+    });
+
+    navigate(`/planner?${plannerParams.toString()}`);
   }
 
   function toggleStopsFilter(filter: StopsFilter) {
@@ -1870,26 +1872,18 @@ export function SearchResultsPage() {
   );
 }
 
-<<<<<<< HEAD
-function parseCodeParam(value: string): string[] {
-  return value
-=======
 function parseCodeParam(value: string, fallback?: string): string[] {
   const codes = value
->>>>>>> f1e7e6a07bf9f2c10d977024ae870811d08d16f6
     .split(",")
     .map((code) => code.trim().toUpperCase())
     .filter(Boolean)
     .filter((code, index, all) => all.indexOf(code) === index);
-<<<<<<< HEAD
-=======
 
   if (codes.length > 0) {
     return codes;
   }
 
   return fallback ? [fallback] : [];
->>>>>>> f1e7e6a07bf9f2c10d977024ae870811d08d16f6
 }
 
 function placeCodes(places: Place[]): string[] {

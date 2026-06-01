@@ -3,14 +3,6 @@
   "outputDirectory": "dist/public",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "/api/index"
-    },
-    {
-      "source": "/test-flight-search",
-      "destination": "/api/index"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

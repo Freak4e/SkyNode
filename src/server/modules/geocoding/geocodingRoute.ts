@@ -4,6 +4,11 @@ import type { GeocodeRequest, GeocodeResponse } from "../../../shared/types.js";
 
 export const geocodingRoute = Router();
 
+type BoundaryCenter = {
+  city: string;
+  point: { lat: number; lon: number };
+};
+
 geocodingRoute.post("/", async (req, res) => {
   const request = req.body as GeocodeRequest;
 
@@ -16,22 +21,38 @@ geocodingRoute.post("/", async (req, res) => {
 
   try {
     const points: GeocodeResponse["points"] = [];
+    const warnings: string[] = [];
+    const allowOutsideDestination = request.allowOutsideDestination === true;
     const destinationCenter = await geocodeText(request.destinationName);
+    const boundaryCenters = await geocodeBoundaryCities(request.boundaryCities || [request.destinationName]);
     const radiusMeters = 80000;
 
     for (const item of request.items.slice(0, 24)) {
-      const query = buildGeocodeQuery(item, request.destinationName);
-      const point = await geocodeText(query, undefined, {
-        center: destinationCenter || undefined,
-        radiusMeters,
-      });
+      const query = buildGeocodeQuery(item, request.destinationName, allowOutsideDestination);
+      const point = await geocodeText(
+        query,
+        undefined,
+        allowOutsideDestination
+          ? {}
+          : {
+              center: destinationCenter || undefined,
+              radiusMeters,
+            },
+      );
 
       if (!point) {
         continue;
       }
 
-      if (destinationCenter && distanceMeters(destinationCenter, point) > radiusMeters) {
+      const boundary = nearestBoundary(point, boundaryCenters);
+      const outsideBoundary = Boolean(boundary && boundary.distanceMeters > radiusMeters);
+
+      if (!allowOutsideDestination && destinationCenter && distanceMeters(destinationCenter, point) > radiusMeters) {
         continue;
+      }
+
+      if (outsideBoundary) {
+        warnings.push(`${point.title} appears to be outside your trip cities.`);
       }
 
       points.push({
@@ -41,10 +62,13 @@ geocodingRoute.post("/", async (req, res) => {
         lat: point.lat,
         lon: point.lon,
         source: "geoapify",
+        outsideBoundary,
+        nearestBoundaryCity: boundary?.city,
+        distanceKm: boundary ? Math.round(boundary.distanceMeters / 1000) : undefined,
       });
     }
 
-    return res.json({ points, warnings: [] } satisfies GeocodeResponse);
+    return res.json({ points, warnings } satisfies GeocodeResponse);
   } catch (error) {
     return res.status(502).json({
       points: [],
@@ -53,9 +77,36 @@ geocodingRoute.post("/", async (req, res) => {
   }
 });
 
-function buildGeocodeQuery(item: GeocodeRequest["items"][number], destinationName: string): string {
+function buildGeocodeQuery(item: GeocodeRequest["items"][number], destinationName: string, allowOutsideDestination: boolean): string {
   const mainText = item.attractionName?.trim() || item.title.trim();
-  return `${mainText}, ${destinationName}`;
+  return allowOutsideDestination ? mainText : `${mainText}, ${destinationName}`;
+}
+
+async function geocodeBoundaryCities(cities: string[]): Promise<BoundaryCenter[]> {
+  const uniqueCities = cities
+    .map((city) => city.trim())
+    .filter(Boolean)
+    .filter((city, index, all) => all.findIndex((item) => item.toLowerCase() === city.toLowerCase()) === index)
+    .slice(0, 8);
+  const centers = await Promise.all(uniqueCities.map(async (city) => {
+    const point = await geocodeText(city);
+    return point ? { city, point: { lat: point.lat, lon: point.lon } } : null;
+  }));
+
+  return centers.filter((center): center is BoundaryCenter => Boolean(center));
+}
+
+function nearestBoundary(point: { lat: number; lon: number }, boundaries: BoundaryCenter[]) {
+  if (boundaries.length === 0) {
+    return null;
+  }
+
+  return boundaries
+    .map((boundary) => ({
+      city: boundary.city,
+      distanceMeters: distanceMeters(boundary.point, point),
+    }))
+    .sort((first, second) => first.distanceMeters - second.distanceMeters)[0];
 }
 
 function distanceMeters(

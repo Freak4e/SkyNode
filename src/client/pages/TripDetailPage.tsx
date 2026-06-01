@@ -493,10 +493,13 @@ export function TripDetailPage() {
             isPersonalSavedTrip ? (
               <ItineraryTimeline
                 days={trip.itinerary.days}
+                boundaryCities={trip.cities?.map((city) => city.name)}
+                destinationName={trip.itinerary.destinationName}
                 startDate={trip.itinerary.startDate}
                 editing={false}
                 addActivity={() => undefined}
                 addDay={() => undefined}
+                moveActivity={() => undefined}
                 removeActivity={() => undefined}
                 updateActivity={() => undefined}
                 updateDay={() => undefined}

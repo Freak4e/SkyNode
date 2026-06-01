@@ -6,13 +6,13 @@ import { parseMoney } from "./plannerUtils";
 type BudgetPanelProps = {
   itinerary: GeneratedItinerary;
   plannedBudget: number;
-  selectedFlight?: FlightOffer;
+  selectedFlights?: FlightOffer[];
   travelers: number;
 };
 
-export function BudgetPanel({ itinerary, plannedBudget, selectedFlight, travelers }: BudgetPanelProps) {
+export function BudgetPanel({ itinerary, plannedBudget, selectedFlights = [], travelers }: BudgetPanelProps) {
   const perTraveler = Math.round(plannedBudget / Math.max(travelers, 1));
-  const flightCost = parseMoney(selectedFlight?.priceText);
+  const flightCost = selectedFlights.reduce((sum, flight) => sum + parseMoney(flight.priceText), 0);
   const activityCost = itinerary.estimatedTotalCost;
   const hotelCost = Math.max(0, Math.round((plannedBudget - flightCost - activityCost) * 0.6));
   const foodCost = Math.max(0, plannedBudget - flightCost - activityCost - hotelCost);

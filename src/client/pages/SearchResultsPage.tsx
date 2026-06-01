@@ -1197,11 +1197,11 @@ export function SearchResultsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
 
-  const hasInitialSearch = Boolean((params.has("fromAll") || params.has("from")) && (params.has("toAll") || params.has("to")));
-  const initialFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "NYC", "NYC");
-  const initialToCodes = parseCodeParam(params.get("toAll") || params.get("to") || "TYO", "TYO");
-  const initialFromCode = initialFromCodes[0] ?? "NYC";
-  const initialToCode = initialToCodes[0] ?? "TYO";
+  const fromParam = params.has("fromAll") ? params.get("fromAll") ?? "" : params.get("from");
+  const toParam = params.has("toAll") ? params.get("toAll") ?? "" : params.get("to");
+  const hasInitialSearch = Boolean(fromParam?.trim() && toParam?.trim());
+  const initialFromCodes = fromParam === null ? ["NYC"] : parseCodeParam(fromParam);
+  const initialToCodes = toParam === null ? ["TYO"] : parseCodeParam(toParam);
   const initialDate = params.get("date") ?? today;
   const initialReturnDate = params.get("returnDate") ?? initialDate;
   const initialTripType = params.get("tripType") === "one-way" ? "one-way" : "return";
@@ -1346,6 +1346,8 @@ export function SearchResultsPage() {
       destination: outboundTo.cityName || outboundTo.name,
     });
 
+    const selectedFlights = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
+    sessionStorage.setItem("skynode:selectedFlightsToAdd", JSON.stringify(selectedFlights));
     sessionStorage.setItem("skynode:selectedFlight", JSON.stringify(pair.outbound));
     navigate(`/planner?${plannerParams.toString()}`);
   }
@@ -1757,14 +1759,12 @@ export function SearchResultsPage() {
   );
 }
 
-function parseCodeParam(value: string, fallback: string): string[] {
-  const codes = value
+function parseCodeParam(value: string): string[] {
+  return value
     .split(",")
     .map((code) => code.trim().toUpperCase())
     .filter(Boolean)
     .filter((code, index, all) => all.indexOf(code) === index);
-
-  return codes.length > 0 ? codes : [fallback];
 }
 
 function placeCodes(places: Place[]): string[] {

@@ -122,6 +122,8 @@ export type GeocodeRequestItem = {
 export type GeocodeRequest = {
   destinationName: string;
   items: GeocodeRequestItem[];
+  allowOutsideDestination?: boolean;
+  boundaryCities?: string[];
 };
 
 export type GeocodedMapPoint = {
@@ -131,6 +133,9 @@ export type GeocodedMapPoint = {
   lat: number;
   lon: number;
   source: "geoapify";
+  outsideBoundary?: boolean;
+  nearestBoundaryCity?: string;
+  distanceKm?: number;
 };
 
 export type GeocodeResponse = {
@@ -148,6 +153,7 @@ export type ItineraryItem = {
   location?: TripLocation;
   notes?: string;
   tags?: string[];
+  durationMinutes?: number;
   estimatedCost: number;
 };
 

@@ -131,6 +131,27 @@
     transition: border-color 160ms ease, box-shadow 160ms ease;
   }
 
+  .wizard-input {
+    width: 100%;
+    border-radius: 1rem;
+    border: 1px solid #dbe3ee;
+    background: white;
+    padding: 0.75rem 1rem;
+    color: #0f172a;
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .wizard-input::placeholder {
+    color: #64748b;
+  }
+
+  .wizard-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
+  }
+
   .form-field:focus {
     border-color: #60a5fa;
     box-shadow: 0 0 0 4px #dbeafe;

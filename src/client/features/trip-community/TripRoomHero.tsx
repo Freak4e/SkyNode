@@ -42,7 +42,7 @@ export function TripRoomHero({ trip, eyebrow, title, description, actions, child
                 {eyebrow}
               </p>
             )}
-            <h1 className="text-4xl font-black leading-tight md:text-6xl">{title}</h1>
+            <h1 className="text-3xl font-black leading-tight md:text-4xl">{title}</h1>
             {description && <p className="mt-4 max-w-2xl text-sm font-bold leading-relaxed text-slate-200">{description}</p>}
           </div>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

@@ -32,8 +32,11 @@ function ActivityIcon({ item }: { item: ItineraryItem }) {
 type ItineraryTimelineProps = {
   addActivity: (dayIndex: number) => void;
   addDay: () => void;
+  boundaryCities?: string[];
+  destinationName: string;
   days: ItineraryDay[];
   editing: boolean;
+  moveActivity: (dayIndex: number, fromIndex: number, toIndex: number) => void;
   removeActivity: (dayIndex: number, itemIndex: number) => void;
   startDate: string;
   updateActivity: (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => void;
@@ -43,7 +46,7 @@ type ItineraryTimelineProps = {
 export function ItineraryTimeline(props: ItineraryTimelineProps) {
   if (props.editing) {
     return (
-      <Card>
+      <section>
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-blue-500">Edit mode</p>
@@ -53,13 +56,17 @@ export function ItineraryTimeline(props: ItineraryTimelineProps) {
         </div>
         <ItineraryEditor
           days={props.days}
+          startDate={props.startDate}
+          destinationName={props.destinationName}
+          boundaryCities={props.boundaryCities}
           addActivity={props.addActivity}
           addDay={props.addDay}
           removeActivity={props.removeActivity}
+          moveActivity={props.moveActivity}
           updateActivity={props.updateActivity}
           updateDay={props.updateDay}
         />
-      </Card>
+      </section>
     );
   }
 

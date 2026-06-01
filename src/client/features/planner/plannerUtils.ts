@@ -69,6 +69,7 @@ export function normalizeDays(days: ItineraryDay[]): ItineraryDay[] {
           : undefined,
         notes: item.notes?.trim() || undefined,
         tags: item.tags?.map((tag) => tag.trim()).filter(Boolean),
+        durationMinutes: Math.max(0, Number(item.durationMinutes) || 0) || undefined,
         estimatedCost: Math.max(0, Number(item.estimatedCost) || 0),
       }))
       .sort((a, b) => cleanTime(a.timeOfDay).localeCompare(cleanTime(b.timeOfDay)))

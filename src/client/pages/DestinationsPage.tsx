@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { ArrowRight, CalendarDays, Expand, MapPin, Plane, Search, Sparkles, Ticket, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
@@ -183,7 +186,7 @@ export function DestinationsPage() {
             >
               <X className="h-5 w-5" />
             </button>
-            <ExploreMap deals={mappableDeals} />
+            <ExploreMap deals={mappableDeals} expanded />
           </div>
         </div>
       )}
@@ -589,9 +592,11 @@ function EmptyMapState() {
   );
 }
 
-function ExploreMap({ deals }: { deals: ExploreDeal[] }) {
+function ExploreMap({ deals, expanded = false }: { deals: ExploreDeal[]; expanded?: boolean }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const mapKey = expanded ? "expanded" : "inline";
 
   useEffect(() => {
     if (!mapElementRef.current || mapRef.current) return;
@@ -605,23 +610,34 @@ function ExploreMap({ deals }: { deals: ExploreDeal[] }) {
       zoomControl: false,
     });
     mapRef.current = map;
-    L.control.zoom({ position: "bottomright" }).addTo(map);
+    L.control.zoom({ position: expanded ? "bottomleft" : "bottomright" }).addTo(map);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
+    clusterGroupRef.current = createDealClusterGroup().addTo(map);
 
     return () => {
+      clusterGroupRef.current?.clearLayers();
       map.remove();
       mapRef.current = null;
+      clusterGroupRef.current = null;
     };
-  }, []);
+  }, [mapKey, expanded]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
 
-    const layer = L.layerGroup().addTo(map);
+    window.setTimeout(() => map.invalidateSize(), 120);
+  }, [mapKey]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const clusterGroup = clusterGroupRef.current;
+    if (!map || !clusterGroup) return;
+
+    clusterGroup.clearLayers();
     const bounds = L.latLngBounds([]);
 
     deals.forEach((deal) => {
@@ -635,35 +651,22 @@ function ExploreMap({ deals }: { deals: ExploreDeal[] }) {
       const marker = L.marker(position, {
         icon: L.divIcon({
           className: "",
-          html: `
-            <div class="group relative -translate-x-1/2 -translate-y-full">
-              <div class="whitespace-nowrap rounded-3xl border border-white bg-white/95 px-3.5 py-2.5 text-left shadow-xl shadow-slate-900/15 ring-1 ring-stone-200 backdrop-blur">
-                <div class="flex items-center gap-2">
-                  <span class="flex h-7 w-7 items-center justify-center rounded-2xl bg-sky-50 text-[10px] font-black text-sky-700">${deal.destination}</span>
-                  <div>
-                    <div class="text-xs font-black leading-none text-slate-950">${city}</div>
-                    <div class="mt-1 text-[11px] font-black text-sky-700">${price}</div>
-                  </div>
-                </div>
-              </div>
-              <div class="mx-auto h-3 w-3 -translate-y-1 rotate-45 border-b border-r border-stone-200 bg-white"></div>
-            </div>
-          `,
+          html: dealMarkerHtml(deal.destination, city, price),
           iconSize: [160, 56],
           iconAnchor: [80, 56],
         }),
-      }).addTo(layer);
+      });
 
       marker.on("click", () => {
         window.location.assign(buildInternalSearchLink(deal));
       });
+
+      clusterGroup.addLayer(marker);
     });
 
-    if (bounds.isValid()) map.fitBounds(bounds.pad(0.25));
-
-    return () => {
-      layer.removeFrom(map);
-    };
+    if (bounds.isValid()) {
+      map.fitBounds(bounds.pad(0.25), { maxZoom: 5 });
+    }
   }, [deals]);
 
   return (
@@ -674,6 +677,61 @@ function ExploreMap({ deals }: { deals: ExploreDeal[] }) {
       <div ref={mapElementRef} className="absolute inset-0 z-0" />
     </>
   );
+}
+
+function dealClusterIcon(count: number): L.DivIcon {
+  const size = count >= 100 ? 48 : count >= 30 ? 42 : 36;
+  const fontSize = count >= 100 ? 13 : 12;
+
+  return L.divIcon({
+    className: "",
+    iconSize: L.point(size, size),
+    iconAnchor: L.point(size / 2, size / 2),
+    html: `
+      <div style="
+        width:${size}px;
+        height:${size}px;
+        border-radius:9999px;
+        background:linear-gradient(135deg,#0284c7,#0369a1);
+        color:#fff;
+        border:2px solid rgba(255,255,255,0.95);
+        display:grid;
+        place-items:center;
+        font:700 ${fontSize}px/1 ui-sans-serif,system-ui,sans-serif;
+        box-shadow:0 8px 20px rgba(2,132,199,0.4);
+      ">${count}</div>
+    `,
+  });
+}
+
+function createDealClusterGroup(): L.MarkerClusterGroup {
+  return L.markerClusterGroup({
+    maxClusterRadius: 58,
+    disableClusteringAtZoom: 8,
+    spiderfyOnMaxZoom: true,
+    showCoverageOnHover: false,
+    zoomToBoundsOnClick: true,
+    removeOutsideVisibleBounds: true,
+    animate: true,
+    iconCreateFunction: (cluster) => dealClusterIcon(cluster.getChildCount()),
+  });
+}
+
+function dealMarkerHtml(code: string, city: string, price: string): string {
+  return `
+    <div class="group relative -translate-x-1/2 -translate-y-full">
+      <div class="whitespace-nowrap rounded-3xl border border-white bg-white/95 px-3.5 py-2.5 text-left shadow-xl shadow-slate-900/15 ring-1 ring-stone-200 backdrop-blur">
+        <div class="flex items-center gap-2">
+          <span class="flex h-7 w-7 items-center justify-center rounded-2xl bg-sky-50 text-[10px] font-black text-sky-700">${code}</span>
+          <div>
+            <div class="text-xs font-black leading-none text-slate-950">${city}</div>
+            <div class="mt-1 text-[11px] font-black text-sky-700">${price}</div>
+          </div>
+        </div>
+      </div>
+      <div class="mx-auto h-3 w-3 -translate-y-1 rotate-45 border-b border-r border-stone-200 bg-white"></div>
+    </div>
+  `;
 }
 
 function hasCoordinates(deal: ExploreDeal): boolean {

@@ -175,7 +175,7 @@ export function ChipPlacePicker({ label, value, onChange }: Props) {
             required
           />
           <span className="shrink-0 rounded-lg bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
-            {value.code}
+            {value.code || "—"}
           </span>
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         </div>

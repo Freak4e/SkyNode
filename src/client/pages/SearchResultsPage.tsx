@@ -2,7 +2,6 @@ import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeftRight,
-  ArrowRight,
   Briefcase,
   Bus,
   CalendarDays,
@@ -10,7 +9,6 @@ import {
   ChevronDown,
   Clock,
   Luggage,
-  MapPin,
   Plane,
   Search,
   SlidersHorizontal,
@@ -18,8 +16,8 @@ import {
   X,
 } from "lucide-react";
 import { searchFlights, searchPlaces } from "../api/flightsApi";
-import { ChipPlacePicker } from "../components/ChipPlacePicker";
 import { Footer } from "../components/Footer";
+import { MultiPlacePicker } from "../components/MultiPlacePicker";
 import { Navbar } from "../components/Navbar";
 import type { CurrencyCode, FlightOffer, Place } from "../../shared/types.js";
 import {
@@ -1235,9 +1233,9 @@ export function SearchResultsPage() {
   const fromPlanner = params.get("source") === "planner";
   const parsedFromCodes = parseCodeParam(params.get("fromAll") || params.get("from") || "");
   const parsedToCodes = fromPlanner
-    ? []
-    : parseCodeParam(params.get("toAll") || params.get("to") || "");
-  const hasRouteInUrl = Boolean(
+    ? parseCodeParam(params.get("toAll") || params.get("to") || "")
+    : parseCodeParam(params.get("toAll") || params.get("to") || "", "TYO");
+  const hasInitialSearch = Boolean(
     (params.has("fromAll") || params.has("from")) && (params.has("toAll") || params.has("to")),
   );
   const initialFromCodes = parsedFromCodes.length ? parsedFromCodes : fromPlanner ? [] : ["NYC"];
@@ -1253,7 +1251,6 @@ export function SearchResultsPage() {
     : 1;
   const initialFromName = params.get("fromName") ?? (fromPlanner ? "" : "New York");
   const initialToName = params.get("toName") ?? (fromPlanner ? "" : "Tokyo");
-  const hasInitialSearch = hasRouteInUrl;
 
   const [fromPlaces, setFromPlaces] = useState<Place[]>(() => buildInitialPlaces(initialFromCodes, initialFromName));
   const [toPlaces, setToPlaces] = useState<Place[]>(() => (
@@ -1286,6 +1283,7 @@ export function SearchResultsPage() {
   const [stopsFilters, setStopsFilters] = useState<StopsFilter[]>(["any"]);
   const [airlineFilters, setAirlineFilters] = useState<string[]>([]);
   const [maxDuration, setMaxDuration] = useState(24);
+  const canSearch = Boolean(from && to);
 
   useEffect(() => {
     if (hasInitialSearch) {
@@ -1328,13 +1326,23 @@ export function SearchResultsPage() {
       const nextCurrency = normalizeCurrency((event as CustomEvent<CurrencyCode>).detail);
       setCurrency(nextCurrency);
       if (hasSearched) {
-        doSearch([from.code], [to.code], date, tripType, returnDate, nextCurrency);
+        doSearch(placeCodes(fromPlaces), placeCodes(toPlaces), date, tripType, returnDate, nextCurrency);
       }
     };
 
     window.addEventListener(currencyChangedEvent, handleCurrencyChange);
     return () => window.removeEventListener(currencyChangedEvent, handleCurrencyChange);
-  }, [from.code, to.code, date, tripType, returnDate, hasSearched]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fromPlaces, toPlaces, date, tripType, returnDate, hasSearched]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!canSearch) {
+      setOffers([]);
+      setReturnOffers([]);
+      setDetailsPair(null);
+      setLoading(false);
+      setError("");
+    }
+  }, [canSearch]);
 
   async function doSearch(
     fromCodes: string[],
@@ -1368,6 +1376,9 @@ export function SearchResultsPage() {
 
   function handleSearch(e: FormEvent) {
     e.preventDefault();
+    if (!canSearch || !from || !to) {
+      return;
+    }
 
     if (!from.code.trim()) {
       setError("Choose a departure city or airport.");
@@ -1382,6 +1393,8 @@ export function SearchResultsPage() {
     const searchParams = new URLSearchParams({
       from: from.code,
       to: to.code,
+      fromAll: placeCodes(fromPlaces).join(","),
+      toAll: placeCodes(toPlaces).join(","),
       date,
       fromName: from.cityName || from.name,
       toName: to.cityName || to.name,
@@ -1395,15 +1408,19 @@ export function SearchResultsPage() {
     }
 
     navigate(`/search?${searchParams.toString()}`);
-    doSearch([from.code], [to.code], date, tripType, returnDate);
+    doSearch(placeCodes(fromPlaces), placeCodes(toPlaces), date, tripType, returnDate);
   }
 
   function swapPlaces() {
-    setFromPlaces([to]);
-    setToPlaces([from]);
+    setFromPlaces(toPlaces);
+    setToPlaces(fromPlaces);
   }
 
   function openPlanner(pair: FlightPair) {
+    if (!canSearch || !from || !to) {
+      return;
+    }
+
     const outboundFrom = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
     const outboundTo = placeByCode(toPlaces, pair.outbound.searchTo) || to;
     const draft = readPlannerDraft();
@@ -1495,9 +1512,13 @@ export function SearchResultsPage() {
 
             <div className="grid gap-2 lg:grid-cols-[minmax(210px,0.95fr)_44px_minmax(210px,0.95fr)_170px_170px_auto]">
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-slate-400" />
-                  <ChipPlacePicker label="From" value={from} onChange={(place) => setFromPlaces([place])} />
+                <div className="min-w-0">
+                  <MultiPlacePicker
+                    label="From"
+                    values={fromPlaces}
+                    onChange={setFromPlaces}
+                    placeholder="Add departure"
+                  />
                 </div>
               </div>
 
@@ -1511,9 +1532,13 @@ export function SearchResultsPage() {
               </button>
 
               <div className="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
-                <div className="flex items-center gap-2">
-                  <ArrowRight className="h-4 w-4 text-slate-400" />
-                  <ChipPlacePicker label="To" value={to} onChange={(place) => setToPlaces([place])} />
+                <div className="min-w-0">
+                  <MultiPlacePicker
+                    label="To"
+                    values={toPlaces}
+                    onChange={setToPlaces}
+                    placeholder="Add destination"
+                  />
                 </div>
               </div>
 
@@ -1537,6 +1562,7 @@ export function SearchResultsPage() {
 
               <button
                 type="submit"
+                disabled={!canSearch}
                 className="rounded-2xl bg-blue-600 px-7 py-3 text-sm font-black text-white shadow-lg shadow-blue-600/20 transition-colors hover:bg-blue-700"
               >
                 <Search className="mr-2 inline h-4 w-4" />
@@ -1669,14 +1695,18 @@ export function SearchResultsPage() {
             </div>
           )}
 
-          {loading && <FlightSearchLoader from={from} to={to} />}
+          {loading && canSearch && from && to && <FlightSearchLoader from={from} to={to} />}
 
           {!loading && hasSearched && error && (
             <div className="rounded-lg border border-red-100 bg-red-50 p-6 text-center">
               <p className="mb-1 font-black text-red-600">Search failed</p>
               <p className="text-sm text-red-500">{error}</p>
               <button
-                onClick={() => doSearch([from.code], [to.code], date, tripType, returnDate)}
+                onClick={() => {
+                  if (canSearch) {
+                    doSearch(placeCodes(fromPlaces), placeCodes(toPlaces), date, tripType, returnDate);
+                  }
+                }}
                 className="mt-4 rounded-full bg-red-500 px-5 py-2 text-sm font-bold text-white hover:bg-red-600"
               >
                 Try again
@@ -1684,7 +1714,17 @@ export function SearchResultsPage() {
             </div>
           )}
 
-          {!loading && !hasSearched && (
+          {!loading && !canSearch && (
+            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <Search className="mx-auto mb-4 h-12 w-12 text-blue-100" />
+              <p className="mb-2 text-xl font-black text-slate-900">Add a route to search</p>
+              <p className="mx-auto max-w-md text-sm leading-6 text-slate-500">
+                Add at least one departure and one destination above.
+              </p>
+            </div>
+          )}
+
+          {!loading && canSearch && !hasSearched && (
             <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
               <Search className="mx-auto mb-4 h-12 w-12 text-blue-100" />
               <p className="mb-2 text-xl font-black text-slate-900">Start your flight search</p>
@@ -1694,7 +1734,7 @@ export function SearchResultsPage() {
             </div>
           )}
 
-          {!loading && hasSearched && !error && sorted.length === 0 && (
+          {!loading && canSearch && hasSearched && !error && sorted.length === 0 && (
             <div className="rounded-lg border border-slate-200 bg-white p-12 text-center">
               <Plane className="mx-auto mb-4 h-12 w-12 text-slate-200" />
               <p className="mb-2 text-lg font-black text-slate-900">No flights found</p>
@@ -1702,7 +1742,7 @@ export function SearchResultsPage() {
             </div>
           )}
 
-          {!loading && !error && sorted.length > 0 && (
+          {!loading && canSearch && from && to && !error && sorted.length > 0 && (
             <div className="space-y-4">
               {flightPairs.map((pair, index) => {
                 const displayPrice = formatDisplayPrice(pair, currency);
@@ -1797,7 +1837,7 @@ export function SearchResultsPage() {
         </main>
       </div>
 
-      {detailsPair && (
+      {detailsPair && canSearch && from && to && (
         <TripDetailsModal
           pair={detailsPair}
           tripType={tripType}
@@ -1815,10 +1855,23 @@ export function SearchResultsPage() {
   );
 }
 
-function parseCodeParam(value: string): string[] {
-  return value
+function parseCodeParam(value: string, fallback?: string): string[] {
+  const codes = value
     .split(",")
     .map((code) => code.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((code, index, all) => all.indexOf(code) === index);
+
+  if (codes.length > 0) {
+    return codes;
+  }
+
+  return fallback ? [fallback] : [];
+}
+
+function placeCodes(places: Place[]): string[] {
+  return places
+    .map((place) => place.code.trim().toUpperCase())
     .filter(Boolean)
     .filter((code, index, all) => all.indexOf(code) === index);
 }

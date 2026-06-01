@@ -60,6 +60,11 @@ export type FlightSearchResponse = {
   warnings: string[];
   source: FlightSource;
   searchedRoutes?: Array<{ from: string; to: string }>;
+  cache?: {
+    hit: boolean;
+    cachedAt?: string;
+    expiresAt?: string;
+  };
 };
 
 export type ExploreDeal = {

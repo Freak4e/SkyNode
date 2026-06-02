@@ -174,9 +174,11 @@ export function ChipPlacePicker({ label, value, onChange }: Props) {
             className="w-28 min-w-0 text-sm font-semibold text-slate-800 bg-transparent outline-none placeholder:text-slate-400 sm:w-36"
             required
           />
-          <span className="shrink-0 rounded-lg bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
-            {value.code || "—"}
-          </span>
+          {value.code ? (
+            <span className="shrink-0 rounded-lg bg-blue-50 px-2 py-1 text-xs font-black text-blue-600">
+              {value.code}
+            </span>
+          ) : null}
           <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
         </div>
       </label>

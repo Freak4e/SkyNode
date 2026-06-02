@@ -45,12 +45,14 @@ export function PlannerPage() {
   const { user, loading: authLoading } = useAuth();
   const restoredDraft = useMemo(() => readPlannerDraftFromSession(), []);
   const flightsToAdd = useMemo(() => readFlightsToAddFromSession(), []);
-  const destinationCode = params.get("to") || "LJU";
-  const originCode = params.get("from") || "";
+  const initialDestinationCode = restoredDraft?.destinationCode || params.get("to") || "";
+  const initialOriginCode = restoredDraft?.originCode || params.get("from") || "";
   const initialDestination = restoredDraft?.destinationName || params.get("toName") || params.get("destination") || "Ljubljana";
   const initialStartDate = restoredDraft?.startDate || params.get("date") || today;
 
   const [tripTitle, setTripTitle] = useState(restoredDraft?.tripTitle || "");
+  const [destinationCode, setDestinationCode] = useState(initialDestinationCode);
+  const [originCode, setOriginCode] = useState(initialOriginCode);
   const [destinationName, setDestinationName] = useState(initialDestination);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [days, setDays] = useState(restoredDraft?.days || 3);
@@ -189,6 +191,8 @@ export function PlannerPage() {
       setLoadedRouteSegments(trip.routeSegments);
       setTripNotes(trip.notes || "");
       setSelectedFlights(trip.selectedFlights || (trip.selectedFlight ? [trip.selectedFlight] : []));
+      setDestinationCode(trip.destinationCode || "");
+      setOriginCode(trip.routeSegments?.find((segment) => segment.type === "flight")?.from || "");
       setPace(trip.pace);
       setSelectedInterests(trip.interests);
       setItinerary(trip.itinerary);
@@ -400,6 +404,13 @@ export function PlannerPage() {
     setDraftDays((current) => current.map((day, index) => index === dayIndex ? { ...day, items: day.items.filter((_, currentIndex) => currentIndex !== itemIndex) } : day));
   }
 
+  function updateDestinationName(value: string) {
+    setDestinationName(value);
+    if (value.trim() !== initialDestination.trim()) {
+      setDestinationCode("");
+    }
+  }
+
   function moveActivity(dayIndex: number, fromIndex: number, toIndex: number) {
     setDraftDays((current) => current.map((day, index) => {
       if (index !== dayIndex || fromIndex === toIndex) {
@@ -434,7 +445,9 @@ export function PlannerPage() {
       budgetAmount,
       days,
       destinationName,
+      destinationCode,
       hotelName,
+      originCode,
       pace,
       returnStep: 2,
       selectedFlights,
@@ -493,7 +506,7 @@ export function PlannerPage() {
             selectedFlights={selectedFlights}
             selectedInterests={selectedInterests}
             setBudgetAmount={setBudgetAmount}
-            setDestinationName={setDestinationName}
+            setDestinationName={updateDestinationName}
             setHotelName={setHotelName}
             setManual={setManual}
             setNotes={setTripNotes}
@@ -613,8 +626,10 @@ export function PlannerPage() {
 type PlannerDraftSession = {
   budgetAmount: number;
   days: number;
+  destinationCode?: string;
   destinationName: string;
   hotelName: string;
+  originCode?: string;
   pace: TravelPace;
   returnStep: number;
   selectedFlights: FlightOffer[];

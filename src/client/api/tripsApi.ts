@@ -35,8 +35,14 @@ export function profileFromUser(user: User | null | undefined): UserProfileSnaps
     : typeof identityData.avatar_url === "string" && identityData.avatar_url
     ? identityData.avatar_url
     : undefined;
+  const interests = Array.isArray(metadata.interests)
+    ? metadata.interests.filter((item): item is string => typeof item === "string")
+    : undefined;
+  const birthDate = typeof metadata.birth_date === "string" ? metadata.birth_date : undefined;
+  const homeCity = typeof metadata.home_city === "string" ? metadata.home_city : undefined;
+  const bio = typeof metadata.bio === "string" ? metadata.bio : undefined;
 
-  return { displayName, avatarUrl };
+  return { displayName, avatarUrl, birthDate, homeCity, bio, interests };
 }
 
 export async function listPublicTrips(filters: {

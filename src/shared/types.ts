@@ -304,6 +304,7 @@ export type TripMember = {
   status: TripMemberStatus;
   displayName: string;
   avatarUrl?: string;
+  profile?: UserProfileSnapshot;
   createdAt: string;
 };
 
@@ -313,6 +314,7 @@ export type TripMessage = {
   userId: string;
   displayName: string;
   avatarUrl?: string;
+  profile?: UserProfileSnapshot;
   content: string;
   createdAt: string;
   own?: boolean;
@@ -321,6 +323,10 @@ export type TripMessage = {
 export type UserProfileSnapshot = {
   displayName: string;
   avatarUrl?: string;
+  birthDate?: string;
+  homeCity?: string;
+  bio?: string;
+  interests?: string[];
 };
 
 export type SaveTripRequest = GenerateItineraryRequest & {

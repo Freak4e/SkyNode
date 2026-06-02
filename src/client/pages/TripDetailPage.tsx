@@ -41,7 +41,7 @@ import { CommunityItineraryView } from "../features/trip-community/CommunityItin
 import { TripRoomHero } from "../features/trip-community/TripRoomHero";
 import { TripVisibilityBadge } from "../features/trip-community/TripVisibilityBadge";
 import { tripDisplayCity } from "../utils/destinationImage";
-import type { SavedTripDetail, TripMember, TripMessage, TripVisibility } from "../../shared/types.js";
+import type { SavedTripDetail, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
 
 type DetailTab = "overview" | "itinerary" | "members" | "chat";
 
@@ -60,6 +60,7 @@ export function TripDetailPage() {
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState<UserProfileSnapshot | null>(null);
   const [settingsVisibility, setSettingsVisibility] = useState<TripVisibility>("private");
   const [settingsDescription, setSettingsDescription] = useState("");
   const [settingsMaxMembers, setSettingsMaxMembers] = useState(6);
@@ -479,7 +480,7 @@ export function TripDetailPage() {
                   <h3 className="text-lg font-black text-slate-950">Group</h3>
                   <div className="mt-4 space-y-3">
                     {acceptedMembers.slice(0, 4).map((member) => (
-                      <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : undefined} />
+                      <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : undefined} onOpenProfile={() => setProfileOpen(memberProfile(member))} />
                     ))}
                   </div>
                 </Card>
@@ -523,7 +524,7 @@ export function TripDetailPage() {
               <h2 className="text-2xl font-black text-slate-950">Travelers</h2>
               <div className="mt-5 space-y-3">
                 {acceptedMembers.map((member) => (
-                  <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : "Member"} />
+                  <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : "Member"} onOpenProfile={() => setProfileOpen(memberProfile(member))} />
                 ))}
               </div>
             </Card>
@@ -537,7 +538,7 @@ export function TripDetailPage() {
                   <div className="mt-5 space-y-3">
                     {pendingRequests.map((member) => (
                       <div key={member.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                        <MemberRow member={member} />
+                        <MemberRow member={member} onOpenProfile={() => setProfileOpen(memberProfile(member))} />
                         <div className="mt-3 flex gap-2">
                           <Button
                             type="button"
@@ -579,13 +580,15 @@ export function TripDetailPage() {
                 <p className="py-8 text-center text-sm font-semibold text-slate-500">No messages yet. Say hello to the group.</p>
               ) : messages.map((message) => (
                 <div key={message.id} className={`flex gap-3 ${message.own ? "flex-row-reverse" : ""}`}>
-                  {message.avatarUrl ? (
-                    <img src={message.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
-                  ) : (
-                    <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-white">
-                      <UserRound className="h-4 w-4" />
-                    </span>
-                  )}
+                  <button type="button" className="shrink-0" onClick={() => setProfileOpen(message.profile || { displayName: message.displayName, avatarUrl: message.avatarUrl })} title={`View ${message.displayName}`}>
+                    {message.avatarUrl ? (
+                      <img src={message.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-sky-200" />
+                    ) : (
+                      <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-white ring-2 ring-transparent transition hover:ring-sky-200">
+                        <UserRound className="h-4 w-4" />
+                      </span>
+                    )}
+                  </button>
                   <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${message.own ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-800"}`}>
                     <p className="text-xs font-black opacity-80">{message.displayName}</p>
                     <p className="mt-1 text-sm font-semibold leading-relaxed">{message.content}</p>
@@ -682,9 +685,17 @@ export function TripDetailPage() {
         </div>
       )}
 
+      {profileOpen && (
+        <TravelerProfileModal profile={profileOpen} onClose={() => setProfileOpen(null)} />
+      )}
+
       <Footer />
     </div>
   );
+}
+
+function memberProfile(member: TripMember): UserProfileSnapshot {
+  return member.profile || { displayName: member.displayName, avatarUrl: member.avatarUrl };
 }
 
 function formatTripDate(value: string): string {
@@ -716,9 +727,9 @@ function OverviewStat({
   );
 }
 
-function MemberRow({ member, badge }: { member: TripMember; badge?: string }) {
+function MemberRow({ member, badge, onOpenProfile }: { member: TripMember; badge?: string; onOpenProfile?: () => void }) {
   return (
-    <div className="flex items-center gap-3">
+    <button type="button" onClick={onOpenProfile} className="flex w-full items-center gap-3 rounded-2xl p-1 text-left transition hover:bg-slate-50">
       {member.avatarUrl ? (
         <img src={member.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
       ) : (
@@ -731,6 +742,65 @@ function MemberRow({ member, badge }: { member: TripMember; badge?: string }) {
         <p className="text-xs font-semibold capitalize text-slate-500">{member.role}</p>
       </div>
       {badge && <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{badge}</span>}
+    </button>
+  );
+}
+
+function TravelerProfileModal({ profile, onClose }: { profile: UserProfileSnapshot; onClose: () => void }) {
+  const age = profile.birthDate ? profileAge(profile.birthDate) : "";
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center">
+      <button type="button" className="absolute inset-0" aria-label="Close profile" onClick={onClose} />
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="bg-linear-to-br from-sky-100 via-white to-cyan-50 p-6">
+          <button type="button" onClick={onClose} className="absolute right-4 top-4 rounded-full bg-white/80 p-2 text-slate-500 shadow-sm hover:text-slate-900" aria-label="Close profile">
+            <X className="h-4 w-4" />
+          </button>
+          <div className="flex items-start gap-4 pr-10">
+            {profile.avatarUrl ? (
+              <img src={profile.avatarUrl} alt="" className="h-24 w-24 rounded-3xl object-cover shadow-sm" />
+            ) : (
+              <div className="grid h-24 w-24 place-items-center rounded-3xl bg-slate-900 text-white shadow-sm">
+                <UserRound className="h-9 w-9" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <h2 className="text-2xl font-black text-slate-950">
+                {profile.displayName}{age ? `, ${age}` : ""}
+              </h2>
+              {profile.homeCity && (
+                <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-slate-500">
+                  <MapPin className="h-4 w-4" />
+                  {profile.homeCity}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="p-6">
+          <p className="text-sm font-semibold leading-6 text-slate-600">
+            {profile.bio || "This traveler has not added a bio yet."}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {(profile.interests?.length ? profile.interests : ["No interests added"]).slice(0, 8).map((interest) => (
+              <span key={interest} className="rounded-full bg-sky-50 px-3 py-1.5 text-xs font-black text-sky-800 ring-1 ring-sky-100">
+                {interest}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
+}
+
+function profileAge(value: string): string {
+  const birthDate = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age -= 1;
+  return age > 0 ? String(age) : "";
 }

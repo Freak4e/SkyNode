@@ -19,6 +19,7 @@ type MemberRow = {
   status: TripMemberStatus;
   display_name: string;
   avatar_url: string | null;
+  profile: UserProfileSnapshot | null;
   created_at: string;
 };
 
@@ -28,6 +29,7 @@ type MessageRow = {
   user_id: string;
   display_name: string;
   avatar_url: string | null;
+  profile: UserProfileSnapshot | null;
   content: string;
   created_at: string;
 };
@@ -54,16 +56,17 @@ export async function createOwnerMembership(
 
   await query(
     `
-      insert into trip_members (trip_id, user_id, role, status, display_name, avatar_url)
-      values ($1, $2, 'owner', 'accepted', $3, $4)
+      insert into trip_members (trip_id, user_id, role, status, display_name, avatar_url, profile)
+      values ($1, $2, 'owner', 'accepted', $3, $4, $5)
       on conflict (trip_id, user_id) do update
       set role = excluded.role,
           status = excluded.status,
           display_name = excluded.display_name,
           avatar_url = excluded.avatar_url,
+          profile = excluded.profile,
           updated_at = now()
     `,
-    [tripId, userId, profile.displayName, profile.avatarUrl || null],
+    [tripId, userId, profile.displayName, profile.avatarUrl || null, profile],
   );
 }
 
@@ -117,7 +120,7 @@ export async function getMemberForUser(tripId: string, userId: string): Promise<
 
   const result = await query<MemberRow>(
     `
-      select id, trip_id, user_id, role, status, display_name, avatar_url, created_at::text
+      select id, trip_id, user_id, role, status, display_name, avatar_url, profile, created_at::text
       from trip_members
       where trip_id = $1 and user_id = $2
       limit 1
@@ -133,7 +136,7 @@ export async function listTripMembers(tripId: string): Promise<TripMember[]> {
 
   const result = await query<MemberRow>(
     `
-      select id, trip_id, user_id, role, status, display_name, avatar_url, created_at::text
+      select id, trip_id, user_id, role, status, display_name, avatar_url, profile, created_at::text
       from trip_members
       where trip_id = $1
       order by
@@ -351,16 +354,17 @@ export async function requestTripJoin(
 
   const result = await query<MemberRow>(
     `
-      insert into trip_members (trip_id, user_id, role, status, display_name, avatar_url)
-      values ($1, $2, 'member', 'pending', $3, $4)
+      insert into trip_members (trip_id, user_id, role, status, display_name, avatar_url, profile)
+      values ($1, $2, 'member', 'pending', $3, $4, $5)
       on conflict (trip_id, user_id) do update
       set status = 'pending',
           display_name = excluded.display_name,
           avatar_url = excluded.avatar_url,
+          profile = excluded.profile,
           updated_at = now()
-      returning id, trip_id, user_id, role, status, display_name, avatar_url, created_at::text
+      returning id, trip_id, user_id, role, status, display_name, avatar_url, profile, created_at::text
     `,
-    [tripId, userId, profile.displayName, profile.avatarUrl || null],
+    [tripId, userId, profile.displayName, profile.avatarUrl || null, profile],
   );
 
   return mapMember(result.rows[0]);
@@ -396,7 +400,7 @@ export async function updateTripMemberStatus(
       where id = $1
         and trip_id = $2
         and role = 'member'
-      returning id, trip_id, user_id, role, status, display_name, avatar_url, created_at::text
+      returning id, trip_id, user_id, role, status, display_name, avatar_url, profile, created_at::text
     `,
     [memberId, tripId, status],
   );
@@ -462,7 +466,7 @@ export async function listTripMessages(tripId: string, userId: string): Promise<
 
   const result = await query<MessageRow>(
     `
-      select id, trip_id, user_id, display_name, avatar_url, content, created_at::text
+      select id, trip_id, user_id, display_name, avatar_url, profile, content, created_at::text
       from trip_messages
       where trip_id = $1
       order by created_at asc
@@ -477,6 +481,7 @@ export async function listTripMessages(tripId: string, userId: string): Promise<
     userId: row.user_id,
     displayName: row.display_name,
     avatarUrl: row.avatar_url || undefined,
+    profile: normalizeProfile(row.profile, row.display_name, row.avatar_url),
     content: row.content,
     createdAt: row.created_at,
     own: row.user_id === userId,
@@ -505,11 +510,11 @@ export async function sendTripMessage(
 
   const result = await query<MessageRow>(
     `
-      insert into trip_messages (trip_id, user_id, display_name, avatar_url, content)
-      values ($1, $2, $3, $4, $5)
-      returning id, trip_id, user_id, display_name, avatar_url, content, created_at::text
+      insert into trip_messages (trip_id, user_id, display_name, avatar_url, profile, content)
+      values ($1, $2, $3, $4, $5, $6)
+      returning id, trip_id, user_id, display_name, avatar_url, profile, content, created_at::text
     `,
-    [tripId, userId, profile.displayName, profile.avatarUrl || null, trimmed.slice(0, 2000)],
+    [tripId, userId, profile.displayName, profile.avatarUrl || null, profile, trimmed.slice(0, 2000)],
   );
 
   const row = result.rows[0];
@@ -520,6 +525,7 @@ export async function sendTripMessage(
     userId: row.user_id,
     displayName: row.display_name,
     avatarUrl: row.avatar_url || undefined,
+    profile: normalizeProfile(row.profile, row.display_name, row.avatar_url),
     content: row.content,
     createdAt: row.created_at,
     own: true,
@@ -534,7 +540,17 @@ function mapMember(row: MemberRow): TripMember {
     status: row.status,
     displayName: row.display_name,
     avatarUrl: row.avatar_url || undefined,
+    profile: normalizeProfile(row.profile, row.display_name, row.avatar_url),
     createdAt: row.created_at,
+  };
+}
+
+function normalizeProfile(profile: UserProfileSnapshot | null, displayName: string, avatarUrl: string | null): UserProfileSnapshot {
+  return {
+    ...(profile || {}),
+    displayName: profile?.displayName || displayName || "Traveler",
+    avatarUrl: profile?.avatarUrl || avatarUrl || undefined,
+    interests: Array.isArray(profile?.interests) ? profile.interests.filter((item): item is string => typeof item === "string") : undefined,
   };
 }
 

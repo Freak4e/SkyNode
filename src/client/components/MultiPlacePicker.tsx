@@ -164,9 +164,9 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
       <div className="scrollbar-none flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pr-1">
         <span className="shrink-0 text-sm font-semibold text-slate-600">{label}</span>
         {values.map((place) => (
-          <span key={place.code} className="inline-flex max-w-32 shrink-0 items-center gap-1.5 rounded-lg bg-blue-500 px-2.5 py-1.5 text-sm font-black text-white">
+          <span key={place.code} className="inline-flex max-w-32 shrink-0 items-center gap-1.5 rounded-lg border border-sky-200/70 bg-sky-50/90 px-2.5 py-1.5 text-sm font-black text-sky-800 shadow-sm">
             <span className="truncate">{placeLabel(place)}</span>
-            <button type="button" onClick={() => removePlace(place.code)} className="rounded-full p-0.5 text-blue-100 hover:bg-blue-400 hover:text-white" aria-label={`Remove ${placeLabel(place)}`}>
+            <button type="button" onClick={() => removePlace(place.code)} className="rounded-full p-0.5 text-sky-500 transition hover:bg-sky-100 hover:text-sky-900" aria-label={`Remove ${placeLabel(place)}`}>
               <X className="h-3.5 w-3.5" />
             </button>
           </span>

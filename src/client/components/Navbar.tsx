@@ -99,10 +99,10 @@ export function Navbar({ transparent = false }: Props) {
               link.accent
                 ? `rounded-full px-3 py-1.5 text-sm font-black no-underline transition-all ${
                     location.pathname === link.to && !overlay
-                      ? "bg-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/25"
+                      ? "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-200 shadow-sm"
                       : overlay
-                      ? "bg-emerald-400/15 text-emerald-100 ring-1 ring-emerald-300/30 hover:bg-emerald-300 hover:text-slate-950"
-                      : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-500 hover:text-white hover:ring-emerald-500"
+                      ? "bg-white/10 text-sky-50 ring-1 ring-white/25 hover:bg-white/20"
+                      : "bg-sky-50/70 text-sky-700 ring-1 ring-sky-100 hover:bg-cyan-50 hover:text-cyan-800 hover:ring-cyan-200"
                   }`
                 : `text-sm font-medium transition-colors no-underline ${
                     overlay

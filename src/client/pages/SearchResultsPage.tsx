@@ -41,6 +41,7 @@ import {
   getStoredCurrency,
   normalizeCurrency,
 } from "../utils/currency.js";
+import planeLoaderGif from "../../../assets/plane_loader.gif";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -803,7 +804,13 @@ function FlightLegCard({ leg, date, carrier }: { leg: FlightLeg; date: string; c
 function FlightSearchLoader({ from, to }: { from: Place; to: Place }) {
   return (
     <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
-      <SkySvgScene />
+      <div className="bg-[#339bd2] px-4 py-8">
+        <img
+          src={planeLoaderGif}
+          alt=""
+          className="mx-auto block aspect-[4/3] w-full max-w-md rounded-2xl object-cover"
+        />
+      </div>
       <div className="px-6 py-6 text-center">
         <p className="text-xs font-black uppercase tracking-[0.28em] text-blue-600">SkyNode</p>
         <p className="mt-2 text-xl font-black text-slate-900 sm:text-2xl">
@@ -819,85 +826,6 @@ function FlightSearchLoader({ from, to }: { from: Place; to: Place }) {
         </p>
       </div>
     </div>
-  );
-}
-
-function SkySvgScene() {
-  return (
-    <svg
-      viewBox="0 0 600 280"
-      preserveAspectRatio="xMidYMid slice"
-      className="block h-56 w-full sm:h-64"
-      role="img"
-      aria-label="Plane flying through clouds"
-    >
-      <defs>
-        <linearGradient id="sky-gradient" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#0ea5e9" />
-          <stop offset="55%" stopColor="#38bdf8" />
-          <stop offset="100%" stopColor="#bae6fd" />
-        </linearGradient>
-        <radialGradient id="sun-glow" cx="0.78" cy="0.18" r="0.4">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.85)" />
-          <stop offset="100%" stopColor="rgba(255,255,255,0)" />
-        </radialGradient>
-        <path id="flight-path" d="M 30 220 C 180 60, 420 60, 570 220" fill="none" />
-        <symbol id="cloud-shape" viewBox="0 0 80 30">
-          <ellipse cx="20" cy="20" rx="20" ry="10" fill="white" />
-          <ellipse cx="40" cy="14" rx="22" ry="14" fill="white" />
-          <ellipse cx="62" cy="20" rx="18" ry="10" fill="white" />
-        </symbol>
-        <symbol id="plane-shape" viewBox="-40 -40 80 80">
-          <g fill="#ffffff" stroke="#1e3a8a" strokeWidth="1.2" strokeLinejoin="round">
-            <path d="M -30 0 L -8 -3 L 5 -22 L 12 -22 L 8 -5 L 28 -7 L 32 -2 L 28 2 L 8 0 L 14 18 L 9 20 L -2 4 L -16 6 L -20 12 L -24 12 L -22 4 L -28 2 Z" />
-          </g>
-        </symbol>
-      </defs>
-
-      <rect width="600" height="280" fill="url(#sky-gradient)" />
-      <rect width="600" height="280" fill="url(#sun-glow)" />
-
-      <g opacity="0.95">
-        <use href="#cloud-shape" width="120" height="44" y="40">
-          <animate attributeName="x" from="-140" to="640" dur="18s" repeatCount="indefinite" />
-        </use>
-        <use href="#cloud-shape" width="80" height="30" y="170" opacity="0.85">
-          <animate attributeName="x" from="-100" to="660" dur="14s" repeatCount="indefinite" begin="-3s" />
-        </use>
-        <use href="#cloud-shape" width="160" height="60" y="100" opacity="0.85">
-          <animate attributeName="x" from="-200" to="720" dur="22s" repeatCount="indefinite" begin="-7s" />
-        </use>
-        <use href="#cloud-shape" width="100" height="36" y="210" opacity="0.7">
-          <animate attributeName="x" from="-120" to="700" dur="16s" repeatCount="indefinite" begin="-10s" />
-        </use>
-        <use href="#cloud-shape" width="70" height="24" y="20" opacity="0.65">
-          <animate attributeName="x" from="-90" to="660" dur="12s" repeatCount="indefinite" begin="-5s" />
-        </use>
-      </g>
-
-      <path
-        d="M 30 220 C 180 60, 420 60, 570 220"
-        stroke="rgba(255,255,255,0.7)"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeDasharray="6 9"
-        fill="none"
-      >
-        <animate attributeName="stroke-dashoffset" from="0" to="-30" dur="1.6s" repeatCount="indefinite" />
-      </path>
-
-      <circle cx="30" cy="220" r="5" fill="white" stroke="#1e3a8a" strokeWidth="1.5" />
-      <circle cx="570" cy="220" r="5" fill="white" stroke="#1e3a8a" strokeWidth="1.5" />
-
-      <g>
-        <use href="#plane-shape" width="54" height="54" x="-27" y="-27">
-          <animate attributeName="opacity" values="1;1" dur="6s" repeatCount="indefinite" />
-        </use>
-        <animateMotion dur="6s" repeatCount="indefinite" rotate="auto">
-          <mpath href="#flight-path" />
-        </animateMotion>
-      </g>
-    </svg>
   );
 }
 

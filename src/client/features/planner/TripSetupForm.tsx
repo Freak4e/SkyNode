@@ -419,16 +419,18 @@ function titleCase(value: string): string {
 function buildFlightSearchUrl(input: { date: string; destinationCode: string; destinationName: string; originCode: string }): string {
   const params = new URLSearchParams({
     date: input.date,
-    to: input.destinationCode,
-    toAll: input.destinationCode,
     toName: input.destinationName,
+    source: "planner",
   });
+
+  if (input.destinationCode.trim()) {
+    params.set("to", input.destinationCode.trim());
+    params.set("toAll", input.destinationCode.trim());
+  }
 
   if (input.originCode.trim()) {
     params.set("from", input.originCode.trim());
     params.set("fromAll", input.originCode.trim());
-  } else {
-    params.set("fromAll", "");
   }
 
   return `/search?${params.toString()}`;

@@ -44,14 +44,6 @@ import {
 
 const today = new Date().toISOString().slice(0, 10);
 
-const EMPTY_PLACE: Place = {
-  code: "",
-  name: "",
-  cityName: "",
-  countryName: "",
-  type: "city",
-};
-
 function buildPlace(code: string, name: string): Place {
   return {
     code,
@@ -64,7 +56,7 @@ function buildPlace(code: string, name: string): Place {
 
 function buildInitialPlaces(codes: string[], name: string): Place[] {
   if (!codes.length) {
-    return [EMPTY_PLACE];
+    return [];
   }
 
   return codes.map((code, index) => buildPlace(code, index === 0 ? name : code));
@@ -1256,7 +1248,7 @@ export function SearchResultsPage() {
       ? buildInitialPlaces(initialToCodes, initialToName)
       : initialToName
       ? [buildPlace("", initialToName)]
-      : [EMPTY_PLACE]
+      : []
   ));
   const from = fromPlaces[0];
   const to = toPlaces[0];
@@ -1410,8 +1402,8 @@ export function SearchResultsPage() {
   }
 
   function swapPlaces() {
-    setFromPlaces(toPlaces);
-    setToPlaces(fromPlaces);
+    setFromPlaces([...toPlaces]);
+    setToPlaces([...fromPlaces]);
   }
 
   function openPlanner(pair: FlightPair) {
@@ -1419,8 +1411,8 @@ export function SearchResultsPage() {
       return;
     }
 
-    const outboundFrom = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
-    const outboundTo = placeByCode(toPlaces, pair.outbound.searchTo) || to;
+    const outboundFrom = resolveOfferPlace(fromPlaces, pair.outbound.searchFrom, from);
+    const outboundTo = resolveOfferPlace(toPlaces, pair.outbound.searchTo, to);
     const draft = readPlannerDraft();
 
     const selectedFlights = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
@@ -1763,10 +1755,10 @@ export function SearchResultsPage() {
             <div className="space-y-4">
               {flightPairs.map((pair, index) => {
                 const displayPrice = formatDisplayPrice(pair, currency);
-                const outboundOrigin = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
-                const outboundDestination = placeByCode(toPlaces, pair.outbound.searchTo) || to;
-                const inboundOrigin = placeByCode(toPlaces, pair.inbound?.searchFrom) || outboundDestination;
-                const inboundDestination = placeByCode(fromPlaces, pair.inbound?.searchTo) || outboundOrigin;
+                const outboundOrigin = resolveOfferPlace(fromPlaces, pair.outbound.searchFrom, from);
+                const outboundDestination = resolveOfferPlace(toPlaces, pair.outbound.searchTo, to);
+                const inboundOrigin = resolveOfferPlace(toPlaces, pair.inbound?.searchFrom, outboundDestination);
+                const inboundDestination = resolveOfferPlace(fromPlaces, pair.inbound?.searchTo, outboundOrigin);
                 return (
                   <div
                     key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
@@ -1810,10 +1802,10 @@ export function SearchResultsPage() {
 
                   {groundTransportPairs.map((pair, index) => {
                     const displayPrice = formatDisplayPrice(pair, currency);
-                    const outboundOrigin = placeByCode(fromPlaces, pair.outbound.searchFrom) || from;
-                    const outboundDestination = placeByCode(toPlaces, pair.outbound.searchTo) || to;
-                    const inboundOrigin = placeByCode(toPlaces, pair.inbound?.searchFrom) || outboundDestination;
-                    const inboundDestination = placeByCode(fromPlaces, pair.inbound?.searchTo) || outboundOrigin;
+                    const outboundOrigin = resolveOfferPlace(fromPlaces, pair.outbound.searchFrom, from);
+                    const outboundDestination = resolveOfferPlace(toPlaces, pair.outbound.searchTo, to);
+                    const inboundOrigin = resolveOfferPlace(toPlaces, pair.inbound?.searchFrom, outboundDestination);
+                    const inboundDestination = resolveOfferPlace(fromPlaces, pair.inbound?.searchTo, outboundOrigin);
                     return (
                       <div
                         key={`ground-${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
@@ -1860,8 +1852,8 @@ export function SearchResultsPage() {
           tripType={tripType}
           outboundDate={date}
           inboundDate={returnDate}
-          from={placeByCode(fromPlaces, detailsPair.outbound.searchFrom) || from}
-          to={placeByCode(toPlaces, detailsPair.outbound.searchTo) || to}
+          from={resolveOfferPlace(fromPlaces, detailsPair.outbound.searchFrom, from)}
+          to={resolveOfferPlace(toPlaces, detailsPair.outbound.searchTo, to)}
           passengers={passengers}
           onClose={() => setDetailsPair(null)}
         />
@@ -1899,4 +1891,12 @@ function placeByCode(places: Place[], code?: string): Place | undefined {
   }
 
   return places.find((place) => place.code.toUpperCase() === code.toUpperCase());
+}
+
+function resolveOfferPlace(places: Place[], code: string | undefined, fallback: Place): Place {
+  if (!code?.trim()) {
+    return fallback;
+  }
+
+  return placeByCode(places, code) || buildPlace(code.trim().toUpperCase(), code.trim().toUpperCase());
 }

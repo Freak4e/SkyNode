@@ -59,7 +59,7 @@ export function PlacePicker({ label, value, onChange }: Props) {
           ))}
         </div>
       )}
-      <span className="selected-code">{label}: {value.code}</span>
+      {value.code ? <span className="selected-code">{label}: {value.code}</span> : null}
     </label>
   );
 }

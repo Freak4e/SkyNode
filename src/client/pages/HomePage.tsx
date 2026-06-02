@@ -398,7 +398,12 @@ export function HomePage() {
               {/* Swap */}
               <button
                 type="button"
-                onClick={() => { const tmp = fromPlaces; setFromPlaces(toPlaces); setToPlaces(tmp); }}
+                onClick={() => {
+                  // Swap copies to avoid sharing the same array reference
+                  const tmp = [...fromPlaces];
+                  setFromPlaces([...toPlaces]);
+                  setToPlaces(tmp);
+                }}
                 className="flex h-full min-h-14 items-center justify-center rounded-2xl border border-white/60 bg-white/75 text-slate-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
                 aria-label="Swap origin and destination"
               >

@@ -1,14 +1,15 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeftRight, CalendarDays, Search, ChevronDown,
   Zap, Globe, Shield, MessageCircle, CreditCard, Map,
   Star, Plane, Mountain, Waves, Sparkles as Aurora,
-  Check, User,
+  Check, ChevronRight, User,
 } from "lucide-react";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
 import { MultiPlacePicker } from "../components/MultiPlacePicker";
+import { useDestinationImage } from "../utils/destinationImage.js";
 import type { Place } from "../../shared/types.js";
 import heroBanner from "../../../assets/hero_banner.jpg";
 
@@ -36,6 +37,60 @@ const itineraryDays = [
   { day: 1, title: "Shibuya, Harajuku & teamLab Planets", sub: "3 activities · 2 meals · transit included", price: "$84" },
   { day: 2, title: "Mt. Fuji day trip + Hakone onsen", sub: "3 activities · 2 meals · transit included", price: "$162" },
   { day: 3, title: "Ghibli Museum & Shinjuku jazz bars", sub: "3 activities · 2 meals · transit included", price: "$70" },
+];
+
+const popularDestinations = [
+  {
+    city: "Barcelona",
+    country: "Spain",
+    airport: "Barcelona-El Prat",
+    route: "Budapest to BCN",
+    price: "$72",
+    href: "/search?from=BUD&to=BCN&fromName=Budapest&toName=Barcelona&date=2026-07-12",
+  },
+  {
+    city: "Antalya",
+    country: "Turkey",
+    airport: "Antalya Airport",
+    route: "Skopje to AYT",
+    price: "$118",
+    href: "/search?from=SKP&to=AYT&fromName=Skopje&toName=Antalya&date=2026-07-19",
+  },
+  {
+    city: "Malta",
+    country: "Malta",
+    airport: "Malta International",
+    route: "Belgrade to MLA",
+    price: "$54",
+    imageCity: "Valletta",
+    href: "/search?from=BEG&to=MLA&fromName=Belgrade&toName=Malta&date=2026-08-02",
+  },
+  {
+    city: "Madrid",
+    country: "Spain",
+    airport: "Adolfo Suarez Madrid-Barajas",
+    route: "Prague to MAD",
+    price: "$89",
+    href: "/search?from=PRG&to=MAD&fromName=Prague&toName=Madrid&date=2026-08-10",
+    wide: true,
+  },
+  {
+    city: "Palma, Majorca",
+    country: "Spain",
+    airport: "Palma de Mallorca",
+    route: "Milan to PMI",
+    price: "$61",
+    href: "/search?from=MIL&to=PMI&fromName=Milan&toName=Palma%2C%20Majorca&date=2026-07-25",
+    wide: true,
+  },
+  {
+    city: "Berlin",
+    country: "Germany",
+    airport: "Berlin Brandenburg",
+    route: "Munich to BER",
+    price: "$47",
+    href: "/search?from=MUC&to=BER&fromName=Munich&toName=Berlin&date=2026-06-28",
+  },
 ];
 
 function useOutsideClose<T extends HTMLElement>(onClose: () => void) {
@@ -267,6 +322,77 @@ function placeCodes(places: Place[]): string[] {
     .map((place) => place.code.trim().toUpperCase())
     .filter(Boolean)
     .filter((code, index, all) => all.indexOf(code) === index);
+}
+
+type PopularDestination = (typeof popularDestinations)[number];
+
+function PopularDestinationCard({ destination }: { destination: PopularDestination }) {
+  const imageUrl = useDestinationImage(destination.imageCity || destination.city, destination.country);
+
+  return (
+    <Link
+      to={destination.href}
+      className={`group relative overflow-hidden rounded-lg bg-slate-900 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-xl ${
+        destination.wide ? "md:col-span-2 lg:col-span-3" : "md:col-span-1 lg:col-span-1"
+      }`}
+    >
+      {imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={`${destination.city}, ${destination.country}`}
+          className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-linear-to-br from-sky-500 via-slate-800 to-slate-950" />
+      )}
+      <div className="absolute inset-0 bg-linear-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-4 text-white transition duration-300 group-hover:translate-y-[-78px]">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate text-2xl font-black leading-tight">{destination.city}</h3>
+            <p className="mt-1 text-sm font-black">Tickets from {destination.price}</p>
+          </div>
+          <ChevronRight className="h-6 w-6 shrink-0" />
+        </div>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 translate-y-full bg-white p-4 text-slate-950 transition duration-300 group-hover:translate-y-0">
+        <p className="text-xs font-bold text-slate-500">{destination.route}</p>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-lg font-black">{destination.city}, {destination.country}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">{destination.airport}</p>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-800" />
+        </div>
+        <p className="mt-2 text-sm font-black text-slate-950">Tickets from {destination.price}</p>
+      </div>
+    </Link>
+  );
+}
+
+function PopularDestinationPromo() {
+  return (
+    <Link
+      to="/destinations"
+      className="grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl md:col-span-3 lg:col-span-2"
+    >
+      <div className="grid h-full grid-cols-[1.1fr_0.9fr]">
+        <img
+          src={heroBanner}
+          alt="Travelers looking at flights"
+          className="h-full w-full object-cover"
+        />
+        <div className="flex flex-col justify-center p-6">
+          <h3 className="text-2xl font-black leading-tight text-slate-950">Want to fly for even less?</h3>
+          <p className="mt-5 text-sm leading-6 text-slate-600">Search our best deals, price drops, and fast weekend routes.</p>
+          <span className="mt-6 inline-flex w-fit items-center gap-2 rounded-lg bg-slate-100 px-4 py-3 text-sm font-black text-slate-950">
+            Explore deals
+            <ChevronRight className="h-4 w-4" />
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
 }
 
 export function HomePage() {
@@ -565,6 +691,26 @@ export function HomePage() {
       </section>
 
       {/* ── CTA ── */}
+      <section className="px-6 pb-20 bg-white">
+        <div className="max-w-6xl mx-auto border-t border-slate-200 pt-12">
+          <div className="mb-7">
+            <h2 className="text-2xl md:text-3xl font-black text-slate-950">
+              Travelers also love these destinations
+            </h2>
+            <p className="mt-2 text-slate-600">
+              Popular city breaks from airports across Europe, with fares, routes and arrival airports at a glance.
+            </p>
+          </div>
+
+          <div className="grid auto-rows-[236px] grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
+            {popularDestinations.map((destination) => (
+              <PopularDestinationCard key={destination.city} destination={destination} />
+            ))}
+            <PopularDestinationPromo />
+          </div>
+        </div>
+      </section>
+
       <section className="py-20 px-6 bg-white">
         <div className="max-w-4xl mx-auto">
           <div className="rounded-3xl bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 px-8 py-16 text-center">
@@ -580,9 +726,9 @@ export function HomePage() {
               >
                 Create my trip
               </button>
-              <button className="px-6 py-3 rounded-full border border-white/20 text-white font-semibold text-sm hover:bg-white/10 transition-colors">
+              <Link to="/assistant" className="px-6 py-3 rounded-full border border-white/20 text-white font-semibold text-sm no-underline hover:bg-white/10 transition-colors">
                 Talk to AI
-              </button>
+              </Link>
             </div>
           </div>
         </div>

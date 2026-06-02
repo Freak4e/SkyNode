@@ -14,7 +14,6 @@ const baseNavLinks: Array<{ label: string; to: string; accent?: boolean }> = [
   { label: "Assistant", to: "/assistant" },
 ];
 
-const guestNavLink: { label: string; to: string; accent?: boolean } = { label: "About", to: "/about" };
 const communityNavLink: { label: string; to: string; accent?: boolean } = { label: "Community", to: "/explore-trips" };
 
 type Props = { transparent?: boolean };
@@ -74,7 +73,7 @@ export function Navbar({ transparent = false }: Props) {
   }, []);
 
   const avatarUrl = userImage(user);
-  const navLinks = [...baseNavLinks, user ? communityNavLink : guestNavLink];
+  const navLinks = user ? [...baseNavLinks, communityNavLink] : baseNavLinks;
 
   return (
     <nav

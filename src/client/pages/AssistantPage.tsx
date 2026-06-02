@@ -17,12 +17,33 @@ import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
 import type { ChatMessage, SavedTripDetail, SavedTripSummary, TripChangeProposal } from "../../shared/types.js";
 
-const quickPrompts = [
+const quickPromptPool = [
   "What are the top 3 things to see in Ljubljana?",
+  "Plan a 3-day city break under $500.",
+  "Where should I go for warm weather this weekend?",
+  "Find underrated cities for food lovers.",
+  "Compare Lisbon and Barcelona for a first-time trip.",
+  "Suggest a cheap beach destination in Europe.",
+  "Build a relaxed itinerary for Tokyo.",
+  "What airports are best for cheap Balkan routes?",
+  "Give me a no-tourist-trap plan for Rome.",
+  "Where can I travel solo safely for a week?",
+  "Suggest destinations with great public transport.",
+  "Find a romantic weekend trip from Skopje.",
+  "Recommend a mountain trip with good flights.",
+  "What should I pack for a spring city break?",
+  "Help me choose between Malta and Cyprus.",
+  "Make a food-focused plan for Istanbul.",
+  "Find a budget-friendly birthday trip.",
+  "Which European capitals are cheapest right now?",
   "Make this trip cheaper.",
   "Add more food spots.",
   "Make the itinerary more relaxed.",
 ];
+
+function randomQuickPrompts(count = 4) {
+  return [...quickPromptPool].sort(() => Math.random() - 0.5).slice(0, count);
+}
 
 export function AssistantPage() {
   const { user, loading: authLoading } = useAuth();
@@ -41,6 +62,7 @@ export function AssistantPage() {
   const [applying, setApplying] = useState(false);
   const [pendingProposal, setPendingProposal] = useState<TripChangeProposal | undefined>();
   const [error, setError] = useState("");
+  const [quickPrompts, setQuickPrompts] = useState(() => randomQuickPrompts());
 
   useEffect(() => {
     async function loadTrips() {
@@ -68,6 +90,7 @@ export function AssistantPage() {
   }, [authLoading, user]);
 
   const assistantMode = selectedTrip ? "Trip-aware" : "General travel";
+  const showPromptSuggestions = messages.length === 1 && messages[0]?.role === "assistant" && !sending;
   const tripStats = useMemo(() => {
     if (!selectedTrip) {
       return [];
@@ -89,6 +112,7 @@ export function AssistantPage() {
       const trip = await loadSavedTrip(tripId);
       setSelectedTrip(trip);
       setPendingProposal(undefined);
+      setQuickPrompts(randomQuickPrompts());
       setMessages([
         {
           role: "assistant",
@@ -105,6 +129,7 @@ export function AssistantPage() {
   function startGeneralChat() {
     setSelectedTrip(undefined);
     setPendingProposal(undefined);
+    setQuickPrompts(randomQuickPrompts());
     setMessages([
       {
         role: "assistant",
@@ -303,18 +328,20 @@ export function AssistantPage() {
                   )}
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {quickPrompts.map((prompt) => (
-                    <button
-                      key={prompt}
-                      type="button"
-                      onClick={() => submitMessage(undefined, prompt)}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                    >
-                      {prompt}
-                    </button>
-                  ))}
-                </div>
+                {showPromptSuggestions && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {quickPrompts.map((prompt) => (
+                      <button
+                        key={prompt}
+                        type="button"
+                        onClick={() => submitMessage(undefined, prompt)}
+                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/70 p-5">
@@ -344,6 +371,27 @@ export function AssistantPage() {
                     </div>
                   </div>
                 ))}
+
+                {showPromptSuggestions && (
+                  <div className="mx-auto mt-8 max-w-2xl rounded-3xl border border-dashed border-slate-200 bg-white/80 p-6 text-center shadow-sm">
+                    <p className="text-xs font-black uppercase tracking-widest text-blue-500">Try asking</p>
+                    <h3 className="mt-2 text-2xl font-black text-slate-950">
+                      Start with a destination, budget, route, or vibe.
+                    </h3>
+                    <div className="mt-5 flex flex-wrap justify-center gap-2">
+                      {quickPrompts.slice(0, 3).map((prompt) => (
+                        <button
+                          key={`empty-${prompt}`}
+                          type="button"
+                          onClick={() => submitMessage(undefined, prompt)}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {pendingProposal && selectedTrip && (
                   <div className="flex justify-start">

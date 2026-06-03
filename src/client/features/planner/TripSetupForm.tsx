@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Building2,
   CalendarDays,
   Check,
   CircleGauge,
@@ -18,8 +19,9 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { searchPlaces } from "../../api/flightsApi";
 import { searchCities, type CitySearchResult } from "../../api/geocodeApi";
-import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, TravelPace } from "../../../shared/types.js";
+import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, Place, TravelPace } from "../../../shared/types.js";
 import { plannerInterests } from "./plannerUtils";
 
 type TripSetupFormProps = {
@@ -507,7 +509,7 @@ function flightRouteText(flight: FlightOffer): string {
 function TripCityPicker({ onChange, value }: { onChange: (value: string) => void; value: string }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
-  const [cities, setCities] = useState<CitySearchResult[]>([]);
+  const [suggestions, setSuggestions] = useState<TripCitySuggestion[]>([]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const selectedCities = useMemo(() => parseCities(value), [value]);
 
@@ -515,14 +517,19 @@ function TripCityPicker({ onChange, value }: { onChange: (value: string) => void
     const controller = new AbortController();
     const timeout = window.setTimeout(async () => {
       if (query.trim().length < 2) {
-        setCities([]);
+        setSuggestions([]);
         return;
       }
 
       try {
-        setCities(await searchCities(query, controller.signal));
+        const [airportPlaces, geocodeCities] = await Promise.all([
+          searchPlaces(query, controller.signal).catch(() => [] as Place[]),
+          searchCities(query, controller.signal).catch(() => [] as CitySearchResult[]),
+        ]);
+
+        setSuggestions(buildTripCitySuggestions(airportPlaces, geocodeCities));
       } catch {
-        setCities([]);
+        setSuggestions([]);
       }
     }, 180);
 
@@ -559,7 +566,7 @@ function TripCityPicker({ onChange, value }: { onChange: (value: string) => void
     updateCities([...selectedCities, cleanName]);
     setQuery("");
     setOpen(false);
-    setCities([]);
+    setSuggestions([]);
   }
 
   return (
@@ -568,8 +575,8 @@ function TripCityPicker({ onChange, value }: { onChange: (value: string) => void
         {selectedCities.map((city) => (
           <span key={city} className="inline-flex max-w-36 shrink-0 items-center gap-1.5 rounded-lg border border-sky-200/70 bg-sky-50/90 px-2.5 py-1.5 text-sm font-black text-sky-800 shadow-sm">
             <span className="truncate">{city}</span>
-            <button type="button" onClick={() => updateCities(selectedCities.filter((item) => item !== city))} className="rounded-full p-0.5 text-sky-500 transition hover:bg-sky-100 hover:text-sky-900" aria-label={`Remove ${city}`}>
-              <X className="h-3.5 w-3.5" />
+            <button type="button" onClick={() => updateCities(selectedCities.filter((item) => item !== city))} className="grid h-4 w-4 shrink-0 place-items-center rounded-full text-sky-500 transition hover:bg-sky-100 hover:text-sky-900" aria-label={`Remove ${city}`}>
+              <X className="pointer-events-none h-3 w-3" />
             </button>
           </span>
         ))}
@@ -589,25 +596,68 @@ function TripCityPicker({ onChange, value }: { onChange: (value: string) => void
 
       {open && query.trim().length >= 2 && (
         <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12" style={{ minWidth: 340 }}>
-          {cities.length === 0 ? (
-            <button type="button" onClick={() => addCity(query)} className="w-full rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-600 hover:bg-blue-50">
-              Add "{query.trim()}"
-            </button>
-          ) : cities.map((city) => (
-            <button key={`${city.name}-${city.countryName}-${city.lat}-${city.lon}`} type="button" onClick={() => addCity(city.name)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-blue-50">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                <MapPin className="h-4 w-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-black text-slate-950">{city.name}</span>
-                <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{city.countryName || city.address}</span>
-              </span>
-            </button>
-          ))}
+          {suggestions.map((city) => {
+            const Icon = city.source === "airport" ? Plane : Building2;
+
+            return (
+              <button key={`${city.source}-${city.name}-${city.detail}`} type="button" onClick={() => addCity(city.name)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-blue-50">
+                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${city.source === "airport" ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-700"}`}>
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black text-slate-950">{city.name}</span>
+                  <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{city.detail}</span>
+                </span>
+                {city.source === "airport" && <span className="shrink-0 rounded-lg bg-blue-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white">Airport city</span>}
+              </button>
+            );
+          })}
+          <button type="button" onClick={() => addCity(query)} className="mt-1 w-full rounded-xl border border-dashed border-slate-200 px-3 py-3 text-left text-sm font-bold text-slate-600 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+            Add "{query.trim()}" manually
+          </button>
         </div>
       )}
     </div>
   );
+}
+
+type TripCitySuggestion = {
+  name: string;
+  detail: string;
+  source: "airport" | "city";
+};
+
+function buildTripCitySuggestions(airportPlaces: Place[], geocodeCities: CitySearchResult[]): TripCitySuggestion[] {
+  const suggestions: TripCitySuggestion[] = [];
+  const seen = new Set<string>();
+
+  airportPlaces.forEach((place) => {
+    const name = (place.cityName || place.name).trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    suggestions.push({
+      name,
+      detail: place.countryName ? `${place.countryName} - airport search available` : "Airport search available",
+      source: "airport",
+    });
+  });
+
+  geocodeCities.forEach((city) => {
+    const name = city.name.trim();
+    if (!name) return;
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    suggestions.push({
+      name,
+      detail: city.countryName || city.address || "City",
+      source: "city",
+    });
+  });
+
+  return suggestions.slice(0, 10);
 }
 
 function parseCities(value: string): string[] {

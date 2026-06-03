@@ -1,4 +1,4 @@
-export type PlannerTab = "itinerary" | "calendar" | "map";
+export type PlannerTab = "itinerary" | "calendar" | "map" | "members" | "chat";
 
 export type ForecastDay = {
   date: string;

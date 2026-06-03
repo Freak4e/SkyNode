@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  X,
 } from "lucide-react";
 import { applyTripChange, listSavedTrips, loadSavedTrip, sendTravelChatMessage } from "../api/assistantApi";
 import { useAuth } from "../auth/AuthContext";
@@ -350,7 +351,15 @@ export function AssistantPage() {
                     </h2>
                   </div>
                   {selectedTrip && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={startGeneralChat}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        General chat
+                      </button>
                       {tripStats.map((stat) => (
                         <span key={stat} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
                           {stat}

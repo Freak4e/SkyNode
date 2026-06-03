@@ -340,13 +340,13 @@ function PopularDestinationCard({ destination }: { destination: PopularDestinati
         <img
           src={imageUrl}
           alt={`${destination.city}, ${destination.country}`}
-          className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-105"
+          className="absolute inset-0 h-full w-full object-cover object-center transition duration-500 group-hover:scale-105"
         />
       ) : (
-        <div className="absolute inset-0 bg-linear-to-br from-sky-500 via-slate-800 to-slate-950" />
+        <div className="absolute inset-0 bg-white" />
       )}
       <div className="absolute inset-0 bg-linear-to-t from-slate-950/75 via-slate-950/20 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 p-4 text-white transition duration-300 group-hover:translate-y-[-78px]">
+      <div className="absolute inset-x-0 bottom-0 p-4 text-white transition duration-300 group-hover:opacity-0">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <h3 className="truncate text-2xl font-black leading-tight">{destination.city}</h3>

@@ -137,7 +137,7 @@ export function TripsPage() {
               <TripCommunityCard
                 key={trip.id}
                 trip={trip}
-                actionTo={`/trips/${trip.id}`}
+                actionTo={tab === "created" ? `/planner?tripId=${encodeURIComponent(trip.id)}` : `/trips/${trip.id}`}
                 actionLabel={tab === "created" ? "Open trip" : "Open trip room"}
                 showOwner={tab === "joined"}
               />

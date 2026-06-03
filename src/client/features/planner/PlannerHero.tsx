@@ -1,7 +1,7 @@
-import { CalendarDays, Edit3, List, Loader2, MapPin, Save, Settings2, Sparkles, Trash2 } from "lucide-react";
+import { CalendarDays, Edit3, Globe2, Link2, List, Loader2, Lock, MapPin, MessageCircle, Save, Settings2, Sparkles, Trash2, Users } from "lucide-react";
 import { Button } from "../../components/ui";
 import { useDestinationImage } from "../../utils/destinationImage.js";
-import type { GeneratedItinerary } from "../../../shared/types.js";
+import type { GeneratedItinerary, TripVisibility } from "../../../shared/types.js";
 import type { PlannerTab } from "./plannerTypes";
 import { dateRange } from "./plannerUtils";
 
@@ -15,8 +15,8 @@ type PlannerHeroProps = {
   isSavedTrip?: boolean;
   itinerary: GeneratedItinerary;
   onDelete?: () => void;
-  onOpenGeneral: () => void;
-  onOpenSettings?: () => void;
+  onOpenSettings: () => void;
+  onVisibilityChange: (visibility: TripVisibility) => void;
   saveEdits: () => void;
   saveTrip: () => void;
   saving: boolean;
@@ -25,6 +25,7 @@ type PlannerHeroProps = {
   startEdit: () => void;
   title: string;
   travelers: number;
+  visibility: TripVisibility;
 };
 
 export function PlannerHero(props: PlannerHeroProps) {
@@ -33,6 +34,10 @@ export function PlannerHero(props: PlannerHeroProps) {
   const tabs = [
     { id: "itinerary" as const, label: "Itinerary", icon: List },
     { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
+    ...(props.isSavedTrip && props.visibility !== "private" ? [
+      { id: "members" as const, label: "Members", icon: Users },
+      { id: "chat" as const, label: "Chat", icon: MessageCircle },
+    ] : []),
   ];
 
   return (
@@ -76,20 +81,17 @@ export function PlannerHero(props: PlannerHeroProps) {
           <div className="flex flex-wrap items-center gap-2">
             {props.editing ? (
               <>
-                <Button type="button" tone="light" onClick={props.cancelEdit} className="rounded-full">Cancel</Button>
+                {props.isSavedTrip && <Button type="button" tone="light" onClick={props.cancelEdit} className="rounded-full">Cancel</Button>}
+                <VisibilityToggle visibility={props.visibility} onChange={props.onVisibilityChange} />
                 <Button type="button" tone="ghost" onClick={props.saveEdits} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">Save edits</Button>
               </>
             ) : (
               <>
-                <Button type="button" tone="light" onClick={props.onOpenGeneral} icon={<Settings2 className="h-4 w-4" />} className="rounded-full">General</Button>
+                <Button type="button" tone="light" onClick={props.onOpenSettings} icon={<Settings2 className="h-4 w-4" />} className="rounded-full">Settings</Button>
                 <Button type="button" tone="ghost" onClick={props.startEdit} icon={<Edit3 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">
                   {props.isSavedTrip ? "Edit itinerary" : "Edit trip"}
                 </Button>
-                {props.isSavedTrip && props.onOpenSettings ? (
-                  <Button type="button" tone="ghost" onClick={props.onOpenSettings} icon={<Settings2 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">
-                    Settings
-                  </Button>
-                ) : !props.isSavedTrip ? (
+                {!props.isSavedTrip ? (
                   <Button type="button" onClick={props.saveTrip} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full">
                     Save trip
                   </Button>
@@ -121,5 +123,29 @@ export function PlannerHero(props: PlannerHeroProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+function VisibilityToggle({ onChange, visibility }: { onChange: (visibility: TripVisibility) => void; visibility: TripVisibility }) {
+  const options = [
+    { value: "private" as const, label: "Private", Icon: Lock },
+    { value: "invite" as const, label: "Invite", Icon: Link2 },
+    { value: "public" as const, label: "Public", Icon: Globe2 },
+  ];
+
+  return (
+    <div className="inline-flex rounded-full border border-white/15 bg-slate-950/35 p-1 backdrop-blur" aria-label="Trip visibility">
+      {options.map(({ value, label, Icon }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => onChange(value)}
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 text-xs font-black transition ${visibility === value ? "bg-white text-slate-950" : "text-slate-200 hover:text-white"}`}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </button>
+      ))}
+    </div>
   );
 }

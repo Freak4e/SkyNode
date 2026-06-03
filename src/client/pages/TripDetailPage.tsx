@@ -268,6 +268,7 @@ export function TripDetailPage() {
   }
 
   const isPersonalSavedTrip = trip?.visibility === "private" && access?.isOwner;
+  const isPrivateTrip = trip?.visibility === "private";
   const cityName = trip ? tripDisplayCity(trip) : "";
   const routeLabel = trip?.cities?.length
     ? trip.cities.map((city) => city.name).join(" -> ")
@@ -277,8 +278,8 @@ export function TripDetailPage() {
   const tabs: Array<{ id: DetailTab; label: string; icon: typeof Users; hidden?: boolean }> = [
     { id: "overview", label: "Overview", icon: MapPin },
     { id: "itinerary", label: "Itinerary", icon: CalendarDays },
-    { id: "members", label: "Members", icon: Users, hidden: !canManage && access?.membershipStatus !== "accepted" },
-    { id: "chat", label: "Chat", icon: MessageCircle, hidden: !canChat },
+    { id: "members", label: "Members", icon: Users, hidden: isPrivateTrip || (!canManage && access?.membershipStatus !== "accepted") },
+    { id: "chat", label: "Chat", icon: MessageCircle, hidden: isPrivateTrip || !canChat },
   ];
 
   if (loading || authLoading) {
@@ -525,16 +526,26 @@ export function TripDetailPage() {
           )
         )}
 
-        {tab === "members" && (
-          <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-            <Card padding="lg">
-              <h2 className="text-2xl font-black text-slate-950">Travelers</h2>
-              <div className="mt-5 space-y-3">
-                {acceptedMembers.map((member) => (
-                  <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : "Member"} onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })} />
-                ))}
+        {tab === "members" && !isPrivateTrip && (
+          <div className="grid gap-4">
+            <section>
+              <CrewSectionTitle />
+              <div className="mt-5">
+                {acceptedMembers.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-500">No accepted members yet.</p>
+                ) : (
+                  <div className="mx-auto flex max-w-4xl flex-wrap justify-center gap-x-8 gap-y-8">
+                    {acceptedMembers.map((member) => (
+                      <MemberProfileCard
+                        key={member.id}
+                        member={member}
+                        onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            </Card>
+            </section>
 
             {canManage && (
               <Card padding="lg">
@@ -576,7 +587,7 @@ export function TripDetailPage() {
           </div>
         )}
 
-        {tab === "chat" && canChat && (
+        {tab === "chat" && canChat && !isPrivateTrip && (
           <Card padding="none" className="overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
               <h2 className="text-xl font-black text-slate-950">Group chat</h2>
@@ -750,6 +761,32 @@ function MemberRow({ member, badge, onOpenProfile }: { member: TripMember; badge
       </div>
       {badge && <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{badge}</span>}
     </button>
+  );
+}
+
+function MemberProfileCard({ member, onOpenProfile }: { member: TripMember; onOpenProfile?: () => void }) {
+  return (
+    <div className="w-36 min-w-0 p-3 text-center">
+      <button type="button" onClick={onOpenProfile} className="mx-auto grid h-28 w-28 place-items-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200 transition hover:ring-blue-300" title={`View ${member.displayName}`}>
+        {member.avatarUrl ? (
+          <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <UserRound className="h-8 w-8 text-slate-500" />
+        )}
+      </button>
+      <p className="mt-3 truncate text-sm font-black text-slate-950">{member.displayName}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{member.role === "owner" ? "Host" : "Member"}</p>
+    </div>
+  );
+}
+
+function CrewSectionTitle() {
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <span className="h-px flex-1 bg-linear-to-r from-transparent via-blue-300/70 to-blue-500/50" />
+      <h2 className="shrink-0 text-center text-2xl font-extrabold text-slate-950 md:text-3xl">The Crew</h2>
+      <span className="h-px flex-1 bg-linear-to-l from-transparent via-blue-300/70 to-blue-500/50" />
+    </div>
   );
 }
 

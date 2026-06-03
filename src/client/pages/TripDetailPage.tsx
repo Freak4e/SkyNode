@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Check,
   Copy,
+  Globe2,
   ImageOff,
   Loader2,
   Lock,
@@ -33,6 +34,7 @@ import {
   updateTripSettings,
   visibilityDescriptions,
 } from "../api/tripsApi";
+import { getTravelMissionStats } from "../api/travelMissionsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
@@ -44,7 +46,7 @@ import { TripRoomHero } from "../features/trip-community/TripRoomHero";
 import { TripVisibilityBadge } from "../features/trip-community/TripVisibilityBadge";
 import { supabase } from "../lib/supabaseClient";
 import { tripDisplayCity, useDestinationImage } from "../utils/destinationImage";
-import type { SavedTripDetail, SavedTripSummary, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
+import type { SavedTripDetail, SavedTripSummary, TravelMissionStats, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
 
 type DetailTab = "overview" | "itinerary" | "members" | "chat";
 type OpenTravelerProfile = {
@@ -893,6 +895,8 @@ function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfi
   const age = profile.birthDate ? profileAge(profile.birthDate) : "";
   const [trips, setTrips] = useState<SavedTripSummary[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(Boolean(userId));
+  const [missionStats, setMissionStats] = useState<TravelMissionStats | null>(null);
+  const [loadingMissionStats, setLoadingMissionStats] = useState(Boolean(userId));
 
   useEffect(() => {
     let cancelled = false;
@@ -922,6 +926,34 @@ function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfi
     };
   }, [userId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMissionStats() {
+      if (!userId) {
+        setMissionStats(null);
+        setLoadingMissionStats(false);
+        return;
+      }
+
+      setLoadingMissionStats(true);
+      try {
+        const stats = await getTravelMissionStats(userId);
+        if (!cancelled) setMissionStats(stats);
+      } catch {
+        if (!cancelled) setMissionStats(null);
+      } finally {
+        if (!cancelled) setLoadingMissionStats(false);
+      }
+    }
+
+    void loadMissionStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close profile" onClick={onClose} />
@@ -942,10 +974,14 @@ function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfi
               <h2 className="text-2xl font-black text-slate-950">
                 {profile.displayName}{age ? `, ${age}` : ""}
               </h2>
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/85 px-3 py-1.5 text-sm font-black text-slate-700 ring-1 ring-slate-200">
                   <MapPin className="h-4 w-4" />
                   {profile.homeCity || "City not added"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/85 px-3 py-1.5 text-sm font-black text-cyan-800 ring-1 ring-cyan-100">
+                  <Globe2 className="h-4 w-4" />
+                  {loadingMissionStats ? "Loading..." : `${missionStats?.unlockedCountries || 0}/${missionStats?.totalCountries || 195} countries`}
                 </span>
               </div>
             </div>

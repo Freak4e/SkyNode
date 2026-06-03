@@ -466,3 +466,45 @@ export type ApplyTripChangeRequest = {
 export type ApplyTripChangeResponse = {
   trip: SavedTripDetail;
 };
+
+export type TravelMissionUnlock = {
+  id: string;
+  userId: string;
+  countryCode: string;
+  countryName: string;
+  confidence: number;
+  faceDetected: boolean;
+  landmarkDetected: boolean;
+  gestureDetected: boolean;
+  summary?: string;
+  createdAt: string;
+};
+
+export type TravelMissionValidation = {
+  accepted: boolean;
+  confidence: number;
+  countryMatched: boolean;
+  faceDetected: boolean;
+  landmarkDetected: boolean;
+  gestureDetected: boolean;
+  summary: string;
+  issues: string[];
+};
+
+export type TravelMissionSubmitRequest = {
+  countryCode: string;
+  countryName: string;
+  imageDataUrl: string;
+  requiredGesture: string;
+};
+
+export type TravelMissionSubmitResponse = {
+  validation: TravelMissionValidation;
+  unlock?: TravelMissionUnlock;
+};
+
+export type TravelMissionStats = {
+  userId: string;
+  unlockedCountries: number;
+  totalCountries: number;
+};

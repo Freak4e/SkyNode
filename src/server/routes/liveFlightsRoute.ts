@@ -44,7 +44,7 @@ let cachedAccessTokenExpiresAt = 0;
 export const liveFlightsRoute = Router();
 
 const SERVERLESS_AUTH_TIMEOUT_MS = 2500;
-const SERVERLESS_DATA_TIMEOUT_MS = 5500;
+const SERVERLESS_DATA_TIMEOUT_MS = 7500;
 
 liveFlightsRoute.get("/", async (req, res) => {
   const bbox = parseBbox(req.query);
@@ -59,15 +59,14 @@ liveFlightsRoute.get("/", async (req, res) => {
     url.searchParams.set("lomax", String(bbox.lomax));
   }
 
-  const controller = new AbortController();
-  const timeout = windowlessTimeout(() => controller.abort(), openSkyDataTimeoutMs());
-
   try {
     const authWarnings: string[] = [];
-    const accessToken = await getOpenSkyAccessToken().catch((error) => {
-      authWarnings.push(openSkyAuthWarning(error));
-      return null;
-    });
+    const accessToken = config.openSky.useAuth
+      ? await getOpenSkyAccessToken().catch((error) => {
+        authWarnings.push(openSkyAuthWarning(error));
+        return null;
+      })
+      : null;
     const headers: Record<string, string> = {
       Accept: "application/json",
     };
@@ -76,10 +75,7 @@ liveFlightsRoute.get("/", async (req, res) => {
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const response = await fetch(url, {
-      headers,
-      signal: controller.signal,
-    });
+    const response = await fetchOpenSkyStates(url, headers);
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
@@ -127,10 +123,22 @@ liveFlightsRoute.get("/", async (req, res) => {
       warnings: [message],
       source: "opensky",
     } satisfies LiveFlightsResponse);
+  }
+});
+
+async function fetchOpenSkyStates(url: URL, headers: Record<string, string>): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = windowlessTimeout(() => controller.abort(), openSkyDataTimeoutMs());
+
+  try {
+    return await fetch(url, {
+      headers,
+      signal: controller.signal,
+    });
   } finally {
     clearTimeout(timeout);
   }
-});
+}
 
 async function getOpenSkyAccessToken(): Promise<string> {
   const now = Date.now();

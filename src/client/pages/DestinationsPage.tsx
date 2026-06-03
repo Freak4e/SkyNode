@@ -80,8 +80,9 @@ export function DestinationsPage() {
     };
   }, [currency, destination?.code, origin]);
 
-  const mappableDeals = useMemo(() => deals.filter(hasCoordinates), [deals]);
-  const cheapest = deals[0];
+  const cityDeals = useMemo(() => deals.filter(hasCityDestination), [deals]);
+  const mappableDeals = useMemo(() => cityDeals.filter(hasCoordinates), [cityDeals]);
+  const cheapest = cityDeals[0];
   const mapReadyCount = mappableDeals.length;
 
   return (
@@ -135,7 +136,7 @@ export function DestinationsPage() {
           <div className="mx-auto grid max-w-7xl items-start gap-6 xl:grid-cols-[1fr_430px]">
             <div className="space-y-6">
                   {origin && <div className="grid gap-4 md:grid-cols-2">
-                <StatCard label="Deals found" value={String(deals.length)} icon={<Ticket className="h-5 w-5" />} />
+                <StatCard label="Deals found" value={String(cityDeals.length)} icon={<Ticket className="h-5 w-5" />} />
                 <StatCard
                   label="Cheapest fare"
                   value={cheapest ? formatMoney(cheapest.price, cheapest.currency) : "—"}
@@ -175,13 +176,13 @@ export function DestinationsPage() {
                   )}
                   {state === "loading" && <LoadingBoards />}
                 {state === "error" && <p className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
-                {state === "ready" && deals.length === 0 && (
+                {state === "ready" && cityDeals.length === 0 && (
                   <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">
                     No destination deals were returned for this route. Try a larger origin city like Vienna, Zagreb, Belgrade, London, or Paris.
                   </p>
                 )}
-                {state === "ready" && deals.length > 0 && (
-                  <DealCarousel deals={deals} />
+                {state === "ready" && cityDeals.length > 0 && (
+                  <DealCarousel deals={cityDeals} />
                 )}
               </div>
             </aside>
@@ -213,11 +214,13 @@ function PlaceSearchBox({
   value,
   onChange,
   placeholder,
+  showAirports = true,
 }: {
   label: string;
   value: Place | null;
   onChange: (place: Place | null) => void;
   placeholder: string;
+  showAirports?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
@@ -248,7 +251,7 @@ function PlaceSearchBox({
         <label className="min-w-0 flex-1">
           <span className="block text-xs font-medium text-slate-400">{label}</span>
           <input
-            value={value ? `${value.cityName || value.name} (${value.code})` : query}
+            value={value ? value.cityName || value.name : query}
             onChange={(event) => {
               onChange(null);
               setQuery(event.target.value);
@@ -288,7 +291,7 @@ function PlaceSearchBox({
                 />
               )}
 
-              {group.airports.map((airport) => (
+              {showAirports && group.airports.map((airport) => (
                 <PlaceOption
                   key={`${airport.code}-${airport.name}`}
                   place={airport}
@@ -344,7 +347,7 @@ function PlaceOption({
         >
           {badge}
         </span>
-        <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{place.code}</span>
+        {badge === "Airport" && <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{place.code}</span>}
       </span>
     </button>
   );
@@ -357,6 +360,7 @@ function DestinationPicker({ value, onChange }: { value: Place | null; onChange:
       value={value}
       onChange={onChange}
       placeholder="Anywhere or search a city"
+      showAirports={false}
     />
   );
 }
@@ -517,7 +521,7 @@ function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
 }
 
 function DealBoard({ deal }: { deal: ExploreDeal }) {
-  const rawName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
+  const rawName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || "";
   const name = normalizeDestinationName(rawName, deal.destination);
   const country = deal.destinationPlace?.countryName || "";
   const coordinates = deal.destinationPlace?.coordinates;
@@ -798,7 +802,7 @@ function ExploreMap({ deals, expanded = false }: { deals: ExploreDeal[]; expande
       const position: L.LatLngExpression = [coords.lat, coords.lon];
       bounds.extend(position);
       const price = formatMoney(deal.price, deal.currency);
-      const city = deal.destinationPlace?.cityName || deal.destination;
+      const city = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
 
       const marker = L.marker(position, {
         icon: L.divIcon({
@@ -891,6 +895,19 @@ function hasCoordinates(deal: ExploreDeal): boolean {
   return typeof coords?.lat === "number" && typeof coords?.lon === "number";
 }
 
+function hasCityDestination(deal: ExploreDeal): boolean {
+  const cityName = deal.destinationPlace?.cityName?.trim();
+  if (!cityName) return false;
+
+  const destinationCode = deal.destination.trim().toUpperCase();
+  const normalizedCity = cityName.toUpperCase();
+
+  if (normalizedCity === destinationCode) return false;
+  if (/^[A-Z]{3}$/.test(normalizedCity)) return false;
+
+  return true;
+}
+
 function formatMoney(value: number, currency: CurrencyCode): string {
   return new Intl.NumberFormat("en", {
     style: "currency",
@@ -900,12 +917,13 @@ function formatMoney(value: number, currency: CurrencyCode): string {
 }
 
 function buildInternalSearchLink(deal: ExploreDeal): string {
+  const cityName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
   const params = new URLSearchParams({
     from: deal.origin,
     to: deal.destination,
     date: deal.departDate || new Date().toISOString().slice(0, 10),
     fromName: deal.origin,
-    toName: deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination,
+    toName: cityName,
     tripType: "one-way",
     passengers: "1",
   });
@@ -966,35 +984,24 @@ function buildCityImageSearchTerms(input: {
   code: string;
   airportName: string;
 }): string[] {
-  const { placeName, country, code, airportName } = input;
+  const { placeName, country } = input;
   const cleaned = placeName
     .replace(/\b(?:airport|international|intl\.?|metropolitan|all airports)\b/gi, "")
     .replace(/\s+/g, " ")
     .trim();
-  const normalizedCode = code.trim().toUpperCase();
   const terms = new Set<string>();
 
   [cleaned, placeName].filter(Boolean).forEach((term) => {
-    terms.add(term);
+    if (/^[A-Z]{3}$/.test(term.trim().toUpperCase())) return;
+
+    if (country) terms.add(`${term}, ${country}`);
     terms.add(`${term} city`);
+    if (country) terms.add(`${term} ${country} city`);
     terms.add(`${term} skyline`);
     terms.add(`${term} old town`);
     terms.add(`${term} landmark`);
-    terms.add(`${term} travel`);
     if (country) terms.add(`${term} ${country}`);
-    if (normalizedCode) {
-      terms.add(`${term} ${normalizedCode} airport city`);
-      terms.add(`${term} ${country} ${normalizedCode}`);
-    }
   });
-
-  if (airportName) {
-    const cleanedAirport = airportName.replace(/\b(?:airport|international|intl\.?)\b/gi, "").replace(/\s+/g, " ").trim();
-    if (cleanedAirport && cleanedAirport.toLowerCase() !== cleaned.toLowerCase()) {
-      terms.add(`${cleanedAirport} city`);
-      terms.add(`${cleanedAirport} ${country}`);
-    }
-  }
 
   return Array.from(terms);
 }

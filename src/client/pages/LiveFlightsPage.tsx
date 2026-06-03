@@ -294,19 +294,20 @@ export function LiveFlightsPage() {
       <Navbar />
 
       <main className="pt-24">
-        <section className="relative overflow-hidden bg-white px-4 pb-8 pt-6 sm:px-6 lg:px-10">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(59,130,246,0.14),transparent_28%),radial-gradient(circle_at_88%_0%,rgba(14,165,233,0.12),transparent_32%)]" />
-          <div className="relative mx-auto max-w-7xl">
+        <section className="px-6 pb-8 pt-8 sm:px-8 lg:px-12">
+          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_86%_14%,rgba(20,184,166,0.16),transparent_32%)]" />
+            <div className="relative">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
-                <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-sky-700">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100 ring-1 ring-white/15">
                   <Radar className="h-4 w-4" />
                   Live flight radar
                 </span>
-                <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
+                <h1 className="mt-4 text-4xl font-black tracking-tight text-white sm:text-5xl">
                   See aircraft moving in real time
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300">
                   OpenSky tracks aircraft worldwide. World view shows 5% of live positions, mixed globally. Zoom in to reveal individual planes — clusters show counts when zoomed out.
                 </p>
               </div>
@@ -336,16 +337,17 @@ export function LiveFlightsPage() {
                     className={`rounded-2xl border px-4 py-3 text-left transition ${
                       active
                         ? "border-blue-500 bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                        : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50/70"
+                        : "border-white/15 bg-white/10 text-slate-100 hover:border-cyan-200/40 hover:bg-white/15"
                     }`}
                   >
                     <span className="block text-sm font-black">{region.label}</span>
-                    <span className={`mt-0.5 block text-xs font-semibold ${active ? "text-blue-100" : "text-slate-400"}`}>
+                    <span className={`mt-0.5 block text-xs font-semibold ${active ? "text-blue-100" : "text-slate-300"}`}>
                       {region.detail}
                     </span>
                   </button>
                 );
               })}
+            </div>
             </div>
           </div>
         </section>

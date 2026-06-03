@@ -43,6 +43,9 @@ let cachedAccessTokenExpiresAt = 0;
 
 export const liveFlightsRoute = Router();
 
+const SERVERLESS_AUTH_TIMEOUT_MS = 2500;
+const SERVERLESS_DATA_TIMEOUT_MS = 5500;
+
 liveFlightsRoute.get("/", async (req, res) => {
   const bbox = parseBbox(req.query);
   const explicitLimit = parseExplicitLimit(req.query.limit);
@@ -57,22 +60,34 @@ liveFlightsRoute.get("/", async (req, res) => {
   }
 
   const controller = new AbortController();
-  const timeout = windowlessTimeout(() => controller.abort(), config.openSky.timeoutMs);
+  const timeout = windowlessTimeout(() => controller.abort(), openSkyDataTimeoutMs());
 
   try {
-    const accessToken = await getOpenSkyAccessToken();
+    const authWarnings: string[] = [];
+    const accessToken = await getOpenSkyAccessToken().catch((error) => {
+      authWarnings.push(openSkyAuthWarning(error));
+      return null;
+    });
+    const headers: Record<string, string> = {
+      Accept: "application/json",
+    };
+
+    if (accessToken) {
+      headers.Authorization = `Bearer ${accessToken}`;
+    }
+
     const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
+      headers,
       signal: controller.signal,
     });
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      return res.status(response.status).json({
+      return res.json({
         flights: [],
+        totalAvailable: 0,
+        samplePercent: 0,
+        updatedAt: new Date().toISOString(),
         warnings: [`OpenSky request failed with ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`],
         source: "opensky",
       } satisfies LiveFlightsResponse);
@@ -94,7 +109,7 @@ liveFlightsRoute.get("/", async (req, res) => {
       totalAvailable,
       samplePercent: totalAvailable > 0 ? Math.round((flights.length / totalAvailable) * 1000) / 10 : 0,
       updatedAt: new Date((data.time || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
-      warnings: flights.length ? [] : ["OpenSky returned no aircraft positions for this map area."],
+      warnings: flights.length ? authWarnings : [...authWarnings, "OpenSky returned no aircraft positions for this map area."],
       source: "opensky",
     } satisfies LiveFlightsResponse);
   } catch (error) {
@@ -104,8 +119,11 @@ liveFlightsRoute.get("/", async (req, res) => {
         ? error.message
         : "OpenSky request failed.";
 
-    return res.status(502).json({
+    return res.json({
       flights: [],
+      totalAvailable: 0,
+      samplePercent: 0,
+      updatedAt: new Date().toISOString(),
       warnings: [message],
       source: "opensky",
     } satisfies LiveFlightsResponse);
@@ -128,7 +146,7 @@ async function getOpenSkyAccessToken(): Promise<string> {
   });
 
   const controller = new AbortController();
-  const timeout = windowlessTimeout(() => controller.abort(), config.openSky.timeoutMs);
+  const timeout = windowlessTimeout(() => controller.abort(), openSkyAuthTimeoutMs());
 
   try {
     const response = await fetch(config.openSky.tokenUrl, {
@@ -159,6 +177,26 @@ async function getOpenSkyAccessToken(): Promise<string> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function openSkyAuthWarning(error: unknown): string {
+  if (error instanceof Error && error.name === "AbortError") {
+    return "OpenSky authentication timed out, so live flights were loaded anonymously.";
+  }
+
+  if (error instanceof Error) {
+    return `OpenSky authentication failed, so live flights were loaded anonymously: ${error.message}`;
+  }
+
+  return "OpenSky authentication failed, so live flights were loaded anonymously.";
+}
+
+function openSkyAuthTimeoutMs(): number {
+  return Math.min(config.openSky.authTimeoutMs, SERVERLESS_AUTH_TIMEOUT_MS);
+}
+
+function openSkyDataTimeoutMs(): number {
+  return Math.min(config.openSky.timeoutMs, SERVERLESS_DATA_TIMEOUT_MS);
 }
 
 function mapOpenSkyState(state: OpenSkyState): LiveFlight | null {

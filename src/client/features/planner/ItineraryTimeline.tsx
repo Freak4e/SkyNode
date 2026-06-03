@@ -37,13 +37,17 @@ type ItineraryTimelineProps = {
   days: ItineraryDay[];
   editing: boolean;
   moveActivity: (dayIndex: number, fromIndex: number, toIndex: number) => void;
+  removeDay: (dayIndex: number) => void;
   removeActivity: (dayIndex: number, itemIndex: number) => void;
   startDate: string;
   updateActivity: (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => void;
-  updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "title" | "summary">>) => void;
+  updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "cityName" | "title" | "summary">>) => void;
 };
 
 export function ItineraryTimeline(props: ItineraryTimelineProps) {
+  const cityOptions = cityNames(props.boundaryCities, props.destinationName);
+  const showCitySections = cityOptions.length > 1;
+
   if (props.editing) {
     return (
       <section>
@@ -61,7 +65,9 @@ export function ItineraryTimeline(props: ItineraryTimelineProps) {
           boundaryCities={props.boundaryCities}
           addActivity={props.addActivity}
           addDay={props.addDay}
+          cityOptions={cityOptions}
           removeActivity={props.removeActivity}
+          removeDay={props.removeDay}
           moveActivity={props.moveActivity}
           updateActivity={props.updateActivity}
           updateDay={props.updateDay}
@@ -72,7 +78,10 @@ export function ItineraryTimeline(props: ItineraryTimelineProps) {
 
   return (
     <section className="space-y-5">
-      {props.days.map((day) => {
+      {groupDays(props.days, cityOptions, props.destinationName).map((group) => (
+        <div key={group.cityName} className="space-y-5">
+          {showCitySections && <CitySectionTitle cityName={group.cityName} />}
+          {group.days.map(({ day }) => {
         const date = tripDate(props.startDate, day.dayNumber);
 
         return (
@@ -84,10 +93,10 @@ export function ItineraryTimeline(props: ItineraryTimelineProps) {
                 <p className="mt-1 text-sm font-bold text-slate-500">{date.toLocaleDateString(undefined, { weekday: "short" })} - {day.items.length} activities - ${day.estimatedCost}</p>
               </div>
             </div>
-            <div className="relative ml-5 space-y-3 border-l border-dashed border-blue-200 pl-5">
+            <div className="relative ml-5 space-y-3 border-l border-dashed border-blue-200 pl-6">
               {day.items.length === 0 ? <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-500">No activities yet.</p> : day.items.map((item, itemIndex) => (
                 <div key={`${day.dayNumber}-${item.timeOfDay}-${itemIndex}-${item.title}`} className="relative rounded-3xl bg-slate-50 p-4">
-                  <span className="absolute -left-7.25 top-5 h-3 w-3 rounded-full border-2 border-blue-500 bg-white" />
+                  <span className="absolute -left-[30.5px] top-5 h-3 w-3 rounded-full border-2 border-blue-500 bg-white" />
                   <div className="grid gap-3 sm:grid-cols-[48px_1fr_auto] sm:items-start">
                     <ActivityIcon item={item} />
                     <div>
@@ -108,7 +117,49 @@ export function ItineraryTimeline(props: ItineraryTimelineProps) {
             </div>
           </Card>
         );
-      })}
+          })}
+        </div>
+      ))}
     </section>
   );
+}
+
+function CitySectionTitle({ cityName }: { cityName: string }) {
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <span className="h-px flex-1 bg-linear-to-r from-transparent via-blue-300/70 to-blue-500/50" />
+      <h2 className="shrink-0 text-center text-2xl font-extrabold text-slate-950 md:text-3xl">
+        Days in {cityName}
+      </h2>
+      <span className="h-px flex-1 bg-linear-to-l from-transparent via-blue-300/70 to-blue-500/50" />
+    </div>
+  );
+}
+
+function cityNames(boundaryCities: string[] | undefined, destinationName: string): string[] {
+  const seen = new Set<string>();
+  return [...(boundaryCities || []), destinationName]
+    .map((city) => city.trim())
+    .filter(Boolean)
+    .filter((city) => {
+      const key = city.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function groupDays(days: ItineraryDay[], cityOptions: string[], destinationName: string): Array<{ cityName: string; days: Array<{ day: ItineraryDay; index: number }> }> {
+  const fallbackCity = cityOptions[0] || destinationName || "Trip";
+  const groups = new Map<string, Array<{ day: ItineraryDay; index: number }>>();
+
+  days.forEach((day, index) => {
+    const cityName = day.cityName?.trim() || cityOptions[Math.min(index, Math.max(cityOptions.length - 1, 0))] || fallbackCity;
+    if (!groups.has(cityName)) {
+      groups.set(cityName, []);
+    }
+    groups.get(cityName)!.push({ day, index });
+  });
+
+  return Array.from(groups.entries()).map(([cityName, groupedDays]) => ({ cityName, days: groupedDays }));
 }

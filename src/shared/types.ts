@@ -67,6 +67,27 @@ export type FlightSearchResponse = {
   };
 };
 
+export type LikedFlight = {
+  id: string;
+  outbound: FlightOffer;
+  inbound?: FlightOffer;
+  tripType: "one-way" | "return";
+  departureDate: string;
+  returnDate?: string;
+  totalPriceText?: string;
+  fingerprint: string;
+  createdAt: string;
+};
+
+export type SaveLikedFlightRequest = {
+  outbound: FlightOffer;
+  inbound?: FlightOffer;
+  tripType: "one-way" | "return";
+  departureDate: string;
+  returnDate?: string;
+  totalPriceText?: string;
+};
+
 export type ExploreDeal = {
   origin: string;
   destination: string;
@@ -183,6 +204,7 @@ export type ItineraryItem = {
 
 export type ItineraryDay = {
   dayNumber: number;
+  cityName?: string;
   title: string;
   summary: string;
   estimatedCost: number;

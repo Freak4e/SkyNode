@@ -14,17 +14,17 @@ export async function searchFlights(input: FlightSearchInput): Promise<FlightSea
   const warnings: string[] = [];
 
   if (normalizedInput.provider === "scrapingbee") {
-    return searchKayakWithScrapingBee(normalizedInput);
+    return tagSearchRoute(await searchKayakWithScrapingBee(normalizedInput), normalizedInput.from, normalizedInput.to);
   }
 
   if (normalizedInput.provider === "travelpayouts") {
-    return searchTravelpayoutsCachedData(normalizedInput);
+    return tagSearchRoute(await searchTravelpayoutsCachedData(normalizedInput), normalizedInput.from, normalizedInput.to);
   }
 
   const liveResult = await searchKayakWithScrapingBee(normalizedInput);
 
   if (liveResult.offers.length > 0) {
-    return liveResult;
+    return tagSearchRoute(liveResult, normalizedInput.from, normalizedInput.to);
   }
 
   warnings.push(...liveResult.warnings);
@@ -34,7 +34,11 @@ export async function searchFlights(input: FlightSearchInput): Promise<FlightSea
     const cachedResult = await searchTravelpayoutsCachedData(normalizedInput);
 
     return {
-      offers: cachedResult.offers,
+      offers: cachedResult.offers.map((offer) => ({
+        ...offer,
+        searchFrom: offer.searchFrom || normalizedInput.from,
+        searchTo: offer.searchTo || normalizedInput.to,
+      })),
       warnings: [...warnings, ...cachedResult.warnings],
       source: cachedResult.source,
     };
@@ -48,6 +52,17 @@ export async function searchFlights(input: FlightSearchInput): Promise<FlightSea
       source: "none",
     };
   }
+}
+
+function tagSearchRoute(result: FlightSearchResponse, from: string, to: string): FlightSearchResponse {
+  return {
+    ...result,
+    offers: result.offers.map((offer) => ({
+      ...offer,
+      searchFrom: offer.searchFrom || from,
+      searchTo: offer.searchTo || to,
+    })),
+  };
 }
 
 async function searchFlightCombinations(input: FlightSearchInput & { from: string[]; to: string[] }): Promise<FlightSearchResponse> {

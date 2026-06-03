@@ -20,6 +20,10 @@ function placeLabel(place: Place): string {
   return place.cityName || place.name;
 }
 
+function hasVisiblePlaceValue(place: Place): boolean {
+  return Boolean(place.code.trim() || placeLabel(place).trim());
+}
+
 function distanceKm(a?: { lat: number; lon: number }, b?: { lat: number; lon: number }): number | undefined {
   if (!a || !b) return undefined;
 
@@ -107,7 +111,8 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
   const [places, setPlaces] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const selectedCodes = useMemo(() => new Set(values.map((place) => place.code.toUpperCase())), [values]);
+  const visibleValues = useMemo(() => values.filter(hasVisiblePlaceValue), [values]);
+  const selectedCodes = useMemo(() => new Set(visibleValues.map((place) => place.code.toUpperCase()).filter(Boolean)), [visibleValues]);
   const groupedPlaces = useMemo(() => groupPlaces(places, query), [places, query]);
 
   useEffect(() => {
@@ -147,7 +152,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
 
   function addPlace(place: Place) {
     if (!selectedCodes.has(place.code.toUpperCase())) {
-      onChange([...values, place]);
+      onChange([...visibleValues, place]);
     }
 
     setQuery("");
@@ -162,8 +167,8 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
   return (
     <div ref={wrapperRef} className="relative min-w-0">
       <div className="scrollbar-none flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pr-1">
-        <span className="shrink-0 text-sm font-semibold text-slate-600">{label}</span>
-        {values.map((place) => (
+        {label && <span className="shrink-0 text-sm font-semibold text-slate-600">{label}</span>}
+        {visibleValues.map((place) => (
           <span key={place.code} className="inline-flex max-w-32 shrink-0 items-center gap-1.5 rounded-lg border border-sky-200/70 bg-sky-50/90 px-2.5 py-1.5 text-sm font-black text-sky-800 shadow-sm">
             <span className="truncate">{placeLabel(place)}</span>
             <button type="button" onClick={() => removePlace(place.code)} className="rounded-full p-0.5 text-sky-500 transition hover:bg-sky-100 hover:text-sky-900" aria-label={`Remove ${placeLabel(place)}`}>
@@ -179,7 +184,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
               setOpen(true);
             }}
             onFocus={() => setOpen(true)}
-            placeholder={values.length === 0 ? placeholder || "Add city or airport" : "Add more"}
+            placeholder={visibleValues.length === 0 ? placeholder || "Add city or airport" : "Add more"}
             className="w-32 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-500"
           />
         </label>

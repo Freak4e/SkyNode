@@ -96,7 +96,7 @@ export function ExploreTripsPage() {
       <Navbar />
 
       <PageShell>
-        <section className="relative mb-8 overflow-hidden rounded-3xl bg-hero-panel p-8 text-white shadow-card-strong">
+        <section className="relative mb-8 rounded-3xl bg-hero-panel p-8 text-white shadow-card-strong">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.12),transparent_35%)]" />
           <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
             <div>
@@ -110,7 +110,7 @@ export function ExploreTripsPage() {
               </p>
             </div>
 
-            <form onSubmit={submitFilters} className="rounded-3xl border border-white/10 bg-slate-950/35 p-4 backdrop-blur">
+            <form onSubmit={submitFilters} className="relative z-20">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <CitySearchPicker

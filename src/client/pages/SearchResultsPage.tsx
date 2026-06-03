@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeftRight,
@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Clock,
+  Heart,
   Luggage,
   Plane,
   Search,
@@ -16,10 +17,13 @@ import {
   X,
 } from "lucide-react";
 import { searchFlights, searchPlaces } from "../api/flightsApi";
+import { deleteLikedFlight, listLikedFlights, saveLikedFlight } from "../api/likedFlightsApi";
+import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { MultiPlacePicker } from "../components/MultiPlacePicker";
 import { Navbar } from "../components/Navbar";
-import type { CurrencyCode, FlightOffer, Place } from "../../shared/types.js";
+import type { CurrencyCode, FlightOffer, LikedFlight, Place, SaveLikedFlightRequest } from "../../shared/types.js";
+import { likedFlightFingerprint } from "../../shared/likedFlights.js";
 import {
   estimateDurationMinutes,
   parseClockMinutes,
@@ -44,6 +48,29 @@ import {
 import planeLoaderGif from "../../../assets/plane_loader.gif";
 
 const today = new Date().toISOString().slice(0, 10);
+const FLIGHT_SEARCH_SESSION_KEY = "skynode:lastFlightSearch";
+const FALLBACK_PRICE_RANGE = { min: 0, max: 2400 };
+
+type FlightSearchSession = {
+  airlineFilters: string[];
+  currency: CurrencyCode;
+  date: string;
+  error: string;
+  fromPlaces: Place[];
+  hasSearched: boolean;
+  maxDuration: number;
+  maxPrice: number;
+  offers: FlightOffer[];
+  passengers: number;
+  resultFromPlaces: Place[];
+  resultToPlaces: Place[];
+  returnDate: string;
+  returnOffers: FlightOffer[];
+  sort: SortMode;
+  stopsFilters: StopsFilter[];
+  toPlaces: Place[];
+  tripType: TripType;
+};
 
 function buildPlace(code: string, name: string): Place {
   return {
@@ -241,6 +268,24 @@ function pairPrice(pair: FlightPair): number {
   return parsePrice(pair.outbound.priceText) + (pair.inbound ? parsePrice(pair.inbound.priceText) : 0);
 }
 
+function priceRangeForPairs(pairs: FlightPair[]): { min: number; max: number } {
+  const prices = pairs
+    .map(pairPrice)
+    .filter((price) => Number.isFinite(price) && price < 9999);
+
+  if (prices.length === 0) {
+    return FALLBACK_PRICE_RANGE;
+  }
+
+  const min = Math.floor(Math.min(...prices));
+  const max = Math.ceil(Math.max(...prices));
+
+  return {
+    min,
+    max: Math.max(min, max),
+  };
+}
+
 function convertUsdAmount(amount: number, currency: CurrencyCode): number {
   return amount * CURRENCY_RATES_FROM_USD[currency];
 }
@@ -429,10 +474,13 @@ function buildPairs(outboundOffers: FlightOffer[], inboundOffers: FlightOffer[],
     return outboundOffers.map((outbound) => ({ outbound }));
   }
 
-  return outboundOffers.map((outbound, index) => ({
-    outbound,
-    inbound: inboundOffers[index % Math.max(inboundOffers.length, 1)],
-  }));
+  if (inboundOffers.length === 0) {
+    return outboundOffers.map((outbound) => ({ outbound }));
+  }
+
+  return outboundOffers
+    .slice(0, 12)
+    .flatMap((outbound) => inboundOffers.slice(0, 12).map((inbound) => ({ outbound, inbound })));
 }
 
 function formatDisplayDate(value: string): string {
@@ -1149,6 +1197,8 @@ function PassengerControl({ value, onChange }: { value: number; onChange: (value
 export function SearchResultsPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const restoredSearch = useMemo(() => params.toString() ? null : readFlightSearchSession(), [params]);
 
   const fromPlanner = params.get("source") === "planner";
   const fromParam = params.has("fromAll") ? params.get("fromAll") ?? "" : params.get("from");
@@ -1170,41 +1220,53 @@ export function SearchResultsPage() {
   const initialFromName = params.get("fromName") ?? (fromPlanner ? "" : "New York");
   const initialToName = params.get("toName") ?? (fromPlanner ? "" : "Tokyo");
 
-  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => buildInitialPlaces(initialFromCodes, initialFromName));
-  const [toPlaces, setToPlaces] = useState<Place[]>(() => (
-    initialToCodes.length
-      ? buildInitialPlaces(initialToCodes, initialToName)
-      : initialToName
-      ? [buildPlace("", initialToName)]
-      : []
-  ));
+  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => restoredSearch?.fromPlaces || buildInitialPlaces(initialFromCodes, initialFromName));
+  const [toPlaces, setToPlaces] = useState<Place[]>(() => {
+    if (restoredSearch?.toPlaces) {
+      return restoredSearch.toPlaces;
+    }
+
+    if (initialToCodes.length) {
+      return buildInitialPlaces(initialToCodes, initialToName);
+    }
+
+    return initialToName ? [buildPlace("", initialToName)] : [];
+  });
   const from = fromPlaces[0];
   const to = toPlaces[0];
-  const [date, setDate] = useState(initialDate);
-  const [returnDate, setReturnDate] = useState(initialReturnDate);
-  const [tripType, setTripType] = useState<TripType>(initialTripType);
-  const [passengers, setPassengers] = useState(initialPassengers);
+  const [resultFromPlaces, setResultFromPlaces] = useState<Place[]>(() => restoredSearch?.resultFromPlaces || [...fromPlaces]);
+  const [resultToPlaces, setResultToPlaces] = useState<Place[]>(() => restoredSearch?.resultToPlaces || [...toPlaces]);
+  const resultFrom = resultFromPlaces[0] || from;
+  const resultTo = resultToPlaces[0] || to;
+  const [date, setDate] = useState(restoredSearch?.date || initialDate);
+  const [returnDate, setReturnDate] = useState(restoredSearch?.returnDate || initialReturnDate);
+  const [tripType, setTripType] = useState<TripType>(restoredSearch?.tripType || initialTripType);
+  const [passengers, setPassengers] = useState(restoredSearch?.passengers || initialPassengers);
 
-  const [offers, setOffers] = useState<FlightOffer[]>([]);
-  const [returnOffers, setReturnOffers] = useState<FlightOffer[]>([]);
-  const [hasSearched, setHasSearched] = useState(hasInitialSearch);
-  const [loading, setLoading] = useState(hasInitialSearch);
-  const [error, setError] = useState("");
-  const [sort, setSort] = useState<SortMode>("best");
+  const [offers, setOffers] = useState<FlightOffer[]>(() => restoredSearch?.offers || []);
+  const [returnOffers, setReturnOffers] = useState<FlightOffer[]>(() => restoredSearch?.returnOffers || []);
+  const [hasSearched, setHasSearched] = useState(restoredSearch?.hasSearched ?? hasInitialSearch);
+  const [loading, setLoading] = useState(restoredSearch ? false : hasInitialSearch);
+  const [error, setError] = useState(restoredSearch?.error || "");
+  const [sort, setSort] = useState<SortMode>(restoredSearch?.sort || "best");
   const [currency, setCurrency] = useState<CurrencyCode>(() => {
+    if (restoredSearch?.currency) return restoredSearch.currency;
     const currencyParam = params.get("currency");
     return currencyParam ? normalizeCurrency(currencyParam) : getStoredCurrency();
   });
   const [detailsPair, setDetailsPair] = useState<FlightPair | null>(null);
+  const [likedFlights, setLikedFlights] = useState<LikedFlight[]>([]);
+  const [likedFlightError, setLikedFlightError] = useState("");
+  const [likedFlightBusy, setLikedFlightBusy] = useState("");
 
-  const [maxPrice, setMaxPrice] = useState(2400);
-  const [stopsFilters, setStopsFilters] = useState<StopsFilter[]>(["any"]);
-  const [airlineFilters, setAirlineFilters] = useState<string[]>([]);
-  const [maxDuration, setMaxDuration] = useState(24);
-  const canSearch = Boolean(from && to);
+  const [maxPrice, setMaxPrice] = useState(restoredSearch?.maxPrice || 2400);
+  const [stopsFilters, setStopsFilters] = useState<StopsFilter[]>(restoredSearch?.stopsFilters || ["any"]);
+  const [airlineFilters, setAirlineFilters] = useState<string[]>(restoredSearch?.airlineFilters || []);
+  const [maxDuration, setMaxDuration] = useState(restoredSearch?.maxDuration || 24);
+  const canSearch = placeCodes(fromPlaces).length > 0 && placeCodes(toPlaces).length > 0;
 
   useEffect(() => {
-    if (hasInitialSearch) {
+    if (hasInitialSearch && !restoredSearch) {
       doSearch(initialFromCodes, initialToCodes, initialDate, initialTripType, initialReturnDate);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1262,6 +1324,79 @@ export function SearchResultsPage() {
     }
   }, [canSearch]);
 
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    writeFlightSearchSession({
+      airlineFilters,
+      currency,
+      date,
+      error,
+      fromPlaces,
+      hasSearched,
+      maxDuration,
+      maxPrice,
+      offers,
+      passengers,
+      resultFromPlaces,
+      resultToPlaces,
+      returnDate,
+      returnOffers,
+      sort,
+      stopsFilters,
+      toPlaces,
+      tripType,
+    });
+  }, [
+    airlineFilters,
+    currency,
+    date,
+    error,
+    fromPlaces,
+    hasSearched,
+    loading,
+    maxDuration,
+    maxPrice,
+    offers,
+    passengers,
+    resultFromPlaces,
+    resultToPlaces,
+    returnDate,
+    returnOffers,
+    sort,
+    stopsFilters,
+    toPlaces,
+    tripType,
+  ]);
+
+  useEffect(() => {
+    if (!user) {
+      setLikedFlights([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    void listLikedFlights()
+      .then((items) => {
+        if (!cancelled) {
+          setLikedFlights(items);
+          setLikedFlightError("");
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setLikedFlightError(loadError instanceof Error ? loadError.message : "Failed to load liked flights.");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   async function doSearch(
     fromCodes: string[],
     toCodes: string[],
@@ -1269,12 +1404,16 @@ export function SearchResultsPage() {
     mode: TripType,
     inboundDate: string,
     searchCurrency = currency,
+    searchedFromPlaces = fromPlaces,
+    searchedToPlaces = toPlaces,
   ) {
     setHasSearched(true);
     setLoading(true);
     setError("");
     setOffers([]);
     setReturnOffers([]);
+    setResultFromPlaces([...searchedFromPlaces]);
+    setResultToPlaces([...searchedToPlaces]);
 
     try {
       const outboundPromise = searchFlights({ from: fromCodes, to: toCodes, date: searchDate, provider: "auto", currency: searchCurrency });
@@ -1282,9 +1421,11 @@ export function SearchResultsPage() {
         ? searchFlights({ from: toCodes, to: fromCodes, date: inboundDate, provider: "auto", currency: searchCurrency })
         : Promise.resolve(null);
       const [outboundResult, inboundResult] = await Promise.all([outboundPromise, inboundPromise]);
+      const nextReturnOffers = inboundResult?.offers ?? [];
 
       setOffers(outboundResult.offers);
-      setReturnOffers(inboundResult?.offers ?? []);
+      setReturnOffers(nextReturnOffers);
+      setMaxPrice(priceRangeForPairs(buildPairs(outboundResult.offers, nextReturnOffers, mode)).max);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Search failed. Try again.");
     } finally {
@@ -1326,7 +1467,7 @@ export function SearchResultsPage() {
     }
 
     navigate(`/search?${searchParams.toString()}`);
-    doSearch(placeCodes(fromPlaces), placeCodes(toPlaces), date, tripType, returnDate);
+    doSearch(placeCodes(fromPlaces), placeCodes(toPlaces), date, tripType, returnDate, currency, fromPlaces, toPlaces);
   }
 
   function swapPlaces() {
@@ -1334,13 +1475,50 @@ export function SearchResultsPage() {
     setToPlaces([...fromPlaces]);
   }
 
+  function likedRequestForPair(pair: FlightPair): SaveLikedFlightRequest {
+    return {
+      outbound: pair.outbound,
+      inbound: pair.inbound,
+      tripType,
+      departureDate: date,
+      returnDate: tripType === "return" ? returnDate : undefined,
+      totalPriceText: formatDisplayPrice(pair, currency),
+    };
+  }
+
+  async function toggleLikedFlight(pair: FlightPair) {
+    if (!user) {
+      return;
+    }
+
+    const request = likedRequestForPair(pair);
+    const fingerprint = likedFlightFingerprint(request);
+    const existing = likedFlights.find((item) => item.fingerprint === fingerprint);
+    setLikedFlightBusy(fingerprint);
+    setLikedFlightError("");
+
+    try {
+      if (existing) {
+        await deleteLikedFlight(existing.id);
+        setLikedFlights((current) => current.filter((item) => item.id !== existing.id));
+      } else {
+        const saved = await saveLikedFlight(request);
+        setLikedFlights((current) => [saved, ...current.filter((item) => item.fingerprint !== saved.fingerprint)]);
+      }
+    } catch (likedError) {
+      setLikedFlightError(likedError instanceof Error ? likedError.message : "Failed to update liked flight.");
+    } finally {
+      setLikedFlightBusy("");
+    }
+  }
+
   function openPlanner(pair: FlightPair) {
     if (!canSearch || !from || !to) {
       return;
     }
 
-    const outboundFrom = resolveOfferPlace(fromPlaces, pair.outbound.searchFrom, from);
-    const outboundTo = resolveOfferPlace(toPlaces, pair.outbound.searchTo, to);
+    const outboundFrom = resolveOfferPlace(resultFromPlaces, pair.outbound.searchFrom, resultFrom);
+    const outboundTo = resolveOfferPlace(resultToPlaces, pair.outbound.searchTo, resultTo);
     const draft = readPlannerDraft();
 
     const selectedFlights = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
@@ -1409,10 +1587,12 @@ export function SearchResultsPage() {
   const allOffers = [...offers, ...returnOffers];
   const airlines = Array.from(new Set(allOffers.map((o) => o.carrier).filter(Boolean)));
   const pairs = buildPairs(offers, returnOffers, tripType);
+  const priceRange = priceRangeForPairs(pairs);
+  const selectedMaxPrice = Math.min(Math.max(maxPrice, priceRange.min), priceRange.max);
   const filtered = pairs.filter((pair) => {
     const pairOffers = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
 
-    if (pairPrice(pair) > maxPrice) return false;
+    if (pairPrice(pair) > selectedMaxPrice) return false;
     if (pairOffers.some((offer) => estimateOfferDurationHours(offer) > maxDuration)) return false;
     if (!pairOffers.every((offer) => matchesStopsFilter(offer, stopsFilters))) return false;
     if (
@@ -1513,21 +1693,13 @@ export function SearchResultsPage() {
       <div className="mx-auto grid max-w-7xl gap-6 px-6 py-6 lg:grid-cols-[268px_1fr]">
         <aside className="hidden lg:block">
           <div className="sticky top-24 space-y-6">
-            <div className="border-b border-slate-200 pb-5">
-              <div className="flex items-center justify-between">
-                <p className="font-black text-slate-900">Set up price alerts</p>
-                <span className="rounded-full bg-slate-300 px-5 py-2" />
-              </div>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">Receive alerts when the prices for this route change.</p>
-            </div>
-
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <p className="font-black text-slate-900">
                   {stopsFilters.some((filter) => filter !== "any") || airlineFilters.length > 0 ? "Filters active" : "Filters"}
                 </p>
                 <button
-                  onClick={() => { setStopsFilters(["any"]); setAirlineFilters([]); setMaxPrice(2400); }}
+                  onClick={() => { setStopsFilters(["any"]); setAirlineFilters([]); setMaxPrice(priceRange.max); }}
                   className="text-sm font-bold text-slate-700 underline"
                 >
                   Clear
@@ -1541,15 +1713,16 @@ export function SearchResultsPage() {
                 </div>
                 <input
                   type="range"
-                  min={200}
-                  max={2400}
-                  value={maxPrice}
+                  min={priceRange.min}
+                  max={priceRange.max}
+                  value={selectedMaxPrice}
+                  disabled={priceRange.min === priceRange.max}
                   onChange={(event) => setMaxPrice(Number(event.target.value))}
                   className="w-full accent-blue-600"
                 />
                 <div className="mt-1 flex justify-between text-xs text-slate-500">
-                  <span>{formatCurrencyAmount(convertUsdAmount(200, currency), currency)}</span>
-                  <span>{formatCurrencyAmount(convertUsdAmount(maxPrice, currency), currency)}</span>
+                  <span>{formatCurrencyAmount(convertUsdAmount(priceRange.min, currency), currency)}</span>
+                  <span>{formatCurrencyAmount(convertUsdAmount(selectedMaxPrice, currency), currency)}</span>
                 </div>
               </div>
 
@@ -1679,14 +1852,22 @@ export function SearchResultsPage() {
             </div>
           )}
 
-          {!loading && canSearch && from && to && !error && sorted.length > 0 && (
+          {!loading && canSearch && resultFrom && resultTo && !error && sorted.length > 0 && (
             <div className="space-y-4">
+              {likedFlightError && (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-bold text-red-600">
+                  {likedFlightError}
+                </div>
+              )}
               {flightPairs.map((pair, index) => {
                 const displayPrice = formatDisplayPrice(pair, currency);
-                const outboundOrigin = resolveOfferPlace(fromPlaces, pair.outbound.searchFrom, from);
-                const outboundDestination = resolveOfferPlace(toPlaces, pair.outbound.searchTo, to);
-                const inboundOrigin = resolveOfferPlace(toPlaces, pair.inbound?.searchFrom, outboundDestination);
-                const inboundDestination = resolveOfferPlace(fromPlaces, pair.inbound?.searchTo, outboundOrigin);
+                const likedRequest = likedRequestForPair(pair);
+                const likedFingerprint = likedFlightFingerprint(likedRequest);
+                const isLiked = likedFlights.some((item) => item.fingerprint === likedFingerprint);
+                const outboundOrigin = resolveOfferPlace(resultFromPlaces, pair.outbound.searchFrom, resultFrom);
+                const outboundDestination = resolveOfferPlace(resultToPlaces, pair.outbound.searchTo, resultTo);
+                const inboundOrigin = resolveOfferPlace(resultToPlaces, pair.inbound?.searchFrom, outboundDestination);
+                const inboundDestination = resolveOfferPlace(resultFromPlaces, pair.inbound?.searchTo, outboundOrigin);
                 return (
                   <div
                     key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
@@ -1703,7 +1884,23 @@ export function SearchResultsPage() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col justify-center border-t border-slate-200 bg-white p-5 text-center lg:border-l lg:border-t-0">
+                    <div className="relative flex flex-col justify-center border-t border-slate-200 bg-white p-5 text-center lg:border-l lg:border-t-0">
+                      {user && (
+                        <button
+                          type="button"
+                          onClick={() => void toggleLikedFlight(pair)}
+                          disabled={likedFlightBusy === likedFingerprint}
+                          className={`absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border transition ${
+                            isLiked
+                              ? "border-rose-200 bg-rose-50 text-rose-600"
+                              : "border-slate-200 bg-white text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                          } disabled:cursor-wait disabled:opacity-60`}
+                          aria-label={isLiked ? "Remove liked flight" : "Like flight"}
+                          title={isLiked ? "Remove liked flight" : "Like flight"}
+                        >
+                          <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+                        </button>
+                      )}
                       <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
                       <p className="mt-1 text-xs text-slate-500">
                         {tripType === "return" ? "Return total estimate" : "One-way estimate"}
@@ -1730,10 +1927,13 @@ export function SearchResultsPage() {
 
                   {groundTransportPairs.map((pair, index) => {
                     const displayPrice = formatDisplayPrice(pair, currency);
-                    const outboundOrigin = resolveOfferPlace(fromPlaces, pair.outbound.searchFrom, from);
-                    const outboundDestination = resolveOfferPlace(toPlaces, pair.outbound.searchTo, to);
-                    const inboundOrigin = resolveOfferPlace(toPlaces, pair.inbound?.searchFrom, outboundDestination);
-                    const inboundDestination = resolveOfferPlace(fromPlaces, pair.inbound?.searchTo, outboundOrigin);
+                    const likedRequest = likedRequestForPair(pair);
+                    const likedFingerprint = likedFlightFingerprint(likedRequest);
+                    const isLiked = likedFlights.some((item) => item.fingerprint === likedFingerprint);
+                    const outboundOrigin = resolveOfferPlace(resultFromPlaces, pair.outbound.searchFrom, resultFrom);
+                    const outboundDestination = resolveOfferPlace(resultToPlaces, pair.outbound.searchTo, resultTo);
+                    const inboundOrigin = resolveOfferPlace(resultToPlaces, pair.inbound?.searchFrom, outboundDestination);
+                    const inboundDestination = resolveOfferPlace(resultFromPlaces, pair.inbound?.searchTo, outboundOrigin);
                     return (
                       <div
                         key={`ground-${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
@@ -1750,7 +1950,23 @@ export function SearchResultsPage() {
                           </div>
                         </div>
 
-                        <div className="flex flex-col justify-center border-t border-amber-100 bg-amber-50/40 p-5 text-center lg:border-l lg:border-t-0">
+                        <div className="relative flex flex-col justify-center border-t border-amber-100 bg-amber-50/40 p-5 text-center lg:border-l lg:border-t-0">
+                          {user && (
+                            <button
+                              type="button"
+                              onClick={() => void toggleLikedFlight(pair)}
+                              disabled={likedFlightBusy === likedFingerprint}
+                              className={`absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border transition ${
+                                isLiked
+                                  ? "border-rose-200 bg-rose-50 text-rose-600"
+                                  : "border-slate-200 bg-white text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+                              } disabled:cursor-wait disabled:opacity-60`}
+                              aria-label={isLiked ? "Remove liked flight" : "Like flight"}
+                              title={isLiked ? "Remove liked flight" : "Like flight"}
+                            >
+                              <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+                            </button>
+                          )}
                           <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
                           <p className="mt-1 text-xs text-slate-500">
                             {tripType === "return" ? "Return total estimate" : "One-way estimate"}
@@ -1774,14 +1990,14 @@ export function SearchResultsPage() {
         </main>
       </div>
 
-      {detailsPair && canSearch && from && to && (
+      {detailsPair && canSearch && resultFrom && resultTo && (
         <TripDetailsModal
           pair={detailsPair}
           tripType={tripType}
           outboundDate={date}
           inboundDate={returnDate}
-          from={resolveOfferPlace(fromPlaces, detailsPair.outbound.searchFrom, from)}
-          to={resolveOfferPlace(toPlaces, detailsPair.outbound.searchTo, to)}
+          from={resolveOfferPlace(resultFromPlaces, detailsPair.outbound.searchFrom, resultFrom)}
+          to={resolveOfferPlace(resultToPlaces, detailsPair.outbound.searchTo, resultTo)}
           passengers={passengers}
           onClose={() => setDetailsPair(null)}
         />
@@ -1827,4 +2043,32 @@ function resolveOfferPlace(places: Place[], code: string | undefined, fallback: 
   }
 
   return placeByCode(places, code) || buildPlace(code.trim().toUpperCase(), code.trim().toUpperCase());
+}
+
+function readFlightSearchSession(): FlightSearchSession | null {
+  try {
+    const raw = sessionStorage.getItem(FLIGHT_SEARCH_SESSION_KEY);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as FlightSearchSession;
+
+    if (!Array.isArray(parsed.fromPlaces) || !Array.isArray(parsed.toPlaces)) {
+      return null;
+    }
+
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeFlightSearchSession(session: FlightSearchSession): void {
+  try {
+    sessionStorage.setItem(FLIGHT_SEARCH_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // Session restore is best-effort only.
+  }
 }

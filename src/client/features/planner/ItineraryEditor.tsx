@@ -27,13 +27,15 @@ type ItineraryEditorProps = {
   addActivity: (dayIndex: number) => void;
   addDay: () => void;
   boundaryCities?: string[];
+  cityOptions: string[];
   days: ItineraryDay[];
   destinationName: string;
   moveActivity: (dayIndex: number, fromIndex: number, toIndex: number) => void;
+  removeDay: (dayIndex: number) => void;
   removeActivity: (dayIndex: number, itemIndex: number) => void;
   startDate?: string;
   updateActivity: (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => void;
-  updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "title" | "summary">>) => void;
+  updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "cityName" | "title" | "summary">>) => void;
 };
 
 type DragState = { dayIndex: number; itemIndex: number } | null;
@@ -55,10 +57,15 @@ export function ItineraryEditor(props: ItineraryEditorProps) {
   const [iconPicker, setIconPicker] = useState<string | null>(null);
   const [dragging, setDragging] = useState<DragState>(null);
   const [locationTarget, setLocationTarget] = useState<LocationTarget>(null);
+  const showCitySelector = props.cityOptions.length > 1;
+  const groupedDays = groupEditableDays(props.days, props.cityOptions, props.destinationName);
 
   return (
     <div className="space-y-5">
-      {props.days.map((day, dayIndex) => {
+      {groupedDays.map((group) => (
+        <div key={group.cityName} className="space-y-5">
+          {showCitySelector && <CitySectionTitle cityName={group.cityName} />}
+          {group.days.map(({ day, dayIndex }) => {
         const date = props.startDate ? tripDate(props.startDate, day.dayNumber) : null;
         const cost = day.items.reduce((sum, item) => sum + (Number(item.estimatedCost) || 0), 0);
 
@@ -76,9 +83,23 @@ export function ItineraryEditor(props: ItineraryEditorProps) {
                 <ChevronDown className="h-4 w-4 text-slate-500" />
               </div>
 
-              <div className="flex items-center gap-5 text-sm font-bold text-slate-800">
+              <div className="flex flex-wrap items-center gap-3 text-sm font-bold text-slate-800">
+                {showCitySelector && (
+                  <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700">
+                    City
+                    <select
+                      value={day.cityName || group.cityName}
+                      onChange={(event) => props.updateDay(dayIndex, { cityName: event.target.value })}
+                      className="bg-transparent text-sm font-black text-slate-950 outline-none"
+                    >
+                      {props.cityOptions.map((city) => (
+                        <option key={city} value={city}>{city}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <span>{day.items.length} stops - ${cost}</span>
-                <button type="button" className="text-slate-400 hover:text-red-600" aria-label="Clear day">
+                <button type="button" onClick={() => props.removeDay(dayIndex)} className="rounded-full p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Delete day">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
@@ -170,7 +191,9 @@ export function ItineraryEditor(props: ItineraryEditorProps) {
             </div>
           </article>
         );
-      })}
+          })}
+        </div>
+      ))}
 
       <Button type="button" tone="secondary" icon={<Plus className="h-4 w-4" />} onClick={props.addDay}>Add day</Button>
 
@@ -191,6 +214,33 @@ export function ItineraryEditor(props: ItineraryEditorProps) {
       )}
     </div>
   );
+}
+
+function CitySectionTitle({ cityName }: { cityName: string }) {
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <span className="h-px flex-1 bg-linear-to-r from-transparent via-blue-300/70 to-blue-500/50" />
+      <h2 className="shrink-0 text-center text-2xl font-extrabold text-slate-950 md:text-3xl">
+        Days in {cityName}
+      </h2>
+      <span className="h-px flex-1 bg-linear-to-l from-transparent via-blue-300/70 to-blue-500/50" />
+    </div>
+  );
+}
+
+function groupEditableDays(days: ItineraryDay[], cityOptions: string[], destinationName: string): Array<{ cityName: string; days: Array<{ day: ItineraryDay; dayIndex: number }> }> {
+  const fallbackCity = cityOptions[0] || destinationName || "Trip";
+  const groups = new Map<string, Array<{ day: ItineraryDay; dayIndex: number }>>();
+
+  days.forEach((day, dayIndex) => {
+    const cityName = day.cityName?.trim() || cityOptions[Math.min(dayIndex, Math.max(cityOptions.length - 1, 0))] || fallbackCity;
+    if (!groups.has(cityName)) {
+      groups.set(cityName, []);
+    }
+    groups.get(cityName)!.push({ day, dayIndex });
+  });
+
+  return Array.from(groups.entries()).map(([cityName, groupedDays]) => ({ cityName, days: groupedDays }));
 }
 
 function iconForItem(item: ItineraryItem) {
@@ -222,9 +272,9 @@ function LocationPickerModal({ boundaryCities, destinationName, item, onClose, o
     if (!mapElementRef.current || mapRef.current) return;
     const map = L.map(mapElementRef.current, { center: point ? [point.lat, point.lon] : [46.05, 14.5], zoom: point ? 15 : 4, zoomControl: false });
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
+      attribution: '&copy; OpenStreetMap contributors',
     }).addTo(map);
     map.on("click", (event) => {
       setPoint({

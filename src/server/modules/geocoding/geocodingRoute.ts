@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { geocodeText } from "../attractions/geoapifyProvider.js";
+import { geocodeText, searchCityText } from "../attractions/geoapifyProvider.js";
 import type { GeocodeRequest, GeocodeResponse } from "../../../shared/types.js";
 
 export const geocodingRoute = Router();
@@ -8,6 +8,39 @@ type BoundaryCenter = {
   city: string;
   point: { lat: number; lon: number };
 };
+
+geocodingRoute.get("/cities", async (req, res) => {
+  const term = String(req.query.term || "").trim();
+
+  if (term.length < 2) {
+    return res.json({ cities: [] });
+  }
+
+  try {
+    const seen = new Set<string>();
+    const cities = (await searchCityText(term))
+      .filter((city) => {
+        const key = `${city.title}-${city.country || ""}`.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((city) => ({
+        name: city.title,
+        countryName: city.country || "",
+        address: city.address,
+        lat: city.lat,
+        lon: city.lon,
+      }));
+
+    return res.json({ cities });
+  } catch (error) {
+    return res.status(502).json({
+      cities: [],
+      warnings: [error instanceof Error ? error.message : "Failed to search cities."],
+    });
+  }
+});
 
 geocodingRoute.post("/", async (req, res) => {
   const request = req.body as GeocodeRequest;
@@ -28,17 +61,22 @@ geocodingRoute.post("/", async (req, res) => {
     const radiusMeters = 80000;
 
     for (const item of request.items.slice(0, 24)) {
-      const query = buildGeocodeQuery(item, request.destinationName, allowOutsideDestination);
-      const point = await geocodeText(
-        query,
-        undefined,
-        allowOutsideDestination
-          ? {}
-          : {
-              center: destinationCenter || undefined,
-              radiusMeters,
-            },
-      );
+      const queries = buildGeocodeQueries(item, request.destinationName, request.boundaryCities, allowOutsideDestination);
+      let point = null;
+
+      for (const query of queries) {
+        point = await geocodeText(
+          query,
+          undefined,
+          allowOutsideDestination
+            ? {}
+            : {
+                center: destinationCenter || undefined,
+                radiusMeters,
+              },
+        );
+        if (point) break;
+      }
 
       if (!point) {
         continue;
@@ -77,9 +115,17 @@ geocodingRoute.post("/", async (req, res) => {
   }
 });
 
-function buildGeocodeQuery(item: GeocodeRequest["items"][number], destinationName: string, allowOutsideDestination: boolean): string {
+function buildGeocodeQueries(item: GeocodeRequest["items"][number], destinationName: string, boundaryCities: string[] | undefined, allowOutsideDestination: boolean): string[] {
   const mainText = item.attractionName?.trim() || item.title.trim();
-  return allowOutsideDestination ? mainText : `${mainText}, ${destinationName}`;
+  if (!allowOutsideDestination) return [`${mainText}, ${destinationName}`];
+
+  const localCities = [...(boundaryCities || []), destinationName]
+    .map((city) => city.trim())
+    .filter(Boolean)
+    .filter((city, index, all) => all.findIndex((item) => item.toLowerCase() === city.toLowerCase()) === index)
+    .slice(0, 4);
+
+  return [...localCities.map((city) => `${mainText}, ${city}`), mainText];
 }
 
 async function geocodeBoundaryCities(cities: string[]): Promise<BoundaryCenter[]> {

@@ -70,7 +70,7 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
   ), [pins, selectedDay]);
   const visibleRoutes = useMemo(() => (
     selectedDay === "all"
-      ? routes
+      ? []
       : routes.filter((route) => route.dayNumber === selectedDay)
   ), [routes, selectedDay]);
 
@@ -174,9 +174,9 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
     mapRef.current = map;
 
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     }).addTo(map);
 
     markersLayerRef.current = L.layerGroup().addTo(map);
@@ -271,7 +271,12 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
           popupAnchor: [0, -30],
         }),
       })
-        .bindPopup(buildPinPopupHtml(pin))
+        .bindTooltip(buildPinPopupHtml(pin), {
+          className: "skynode-map-tooltip",
+          direction: "top",
+          opacity: 1,
+          sticky: true,
+        })
         .addTo(layer);
     });
 
@@ -295,29 +300,23 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
 
   return (
     <>
-    {expanded && <div className="fixed inset-0 z-80 bg-slate-950/55 backdrop-blur-sm" onClick={() => setExpanded(false)} />}
-    <section className={`overflow-hidden bg-white shadow-xl ${expanded ? "fixed inset-4 z-90 rounded-3xl" : "rounded-3xl"}`}>
+    {expanded && <div className="fixed inset-0 z-80 bg-slate-950/45 backdrop-blur-sm" onClick={() => setExpanded(false)} />}
+    <section className={`overflow-hidden rounded-3xl bg-white shadow-xl ${
+      expanded
+        ? "fixed left-1/2 top-1/2 z-90 w-[min(960px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
+        : ""
+    }`}>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-5 py-4 text-slate-900">
         <div>
           <p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-blue-500">
             <MapPin className="h-4 w-4" />
             Itinerary map
           </p>
-          <p className="mt-1 text-sm text-slate-500">
-            {pins.length > 0
-              ? `${pins.length} map pins for ${markers.length} mapped activities.`
-              : "No mappable itinerary activities were resolved yet."}
-            {geocoding ? " Finding more coordinates..." : ""}
-          </p>
+          {geocoding && <p className="mt-1 text-sm text-slate-500">Finding coordinates...</p>}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-600">
-            {itinerary.destinationName}
-          </span>
-          <button type="button" onClick={() => setExpanded((current) => !current)} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600" aria-label={expanded ? "Close map" : "Open map"}>
-            {expanded ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-          </button>
-        </div>
+        <button type="button" onClick={() => setExpanded((current) => !current)} className="grid h-9 w-9 place-items-center rounded-full bg-slate-100 text-slate-700 hover:bg-blue-50 hover:text-blue-600" aria-label={expanded ? "Close map" : "Open map"}>
+          {expanded ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
       </div>
 
       <div className="border-b border-slate-100 bg-slate-50 px-4 py-3">
@@ -325,13 +324,13 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
           <button type="button" onClick={() => setSelectedDay("all")} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${selectedDay === "all" ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>All days</button>
           {dayPins.map((day) => (
             <button key={day.dayNumber} type="button" onClick={() => setSelectedDay(day.dayNumber)} className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black ${selectedDay === day.dayNumber ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>
-              D{day.dayNumber} - {day.pins.length}
+              D{day.dayNumber}
             </button>
           ))}
         </div>
       </div>
 
-      <div className={`relative ${expanded ? "h-[calc(100vh-260px)]" : "h-[320px]"}`}>
+      <div className={`relative ${expanded ? "h-[min(620px,calc(100vh-220px))]" : "h-[320px]"}`}>
         <div ref={mapElementRef} className="absolute inset-0 z-0 bg-slate-100" />
         {pins.length === 0 && (
           <div className="absolute inset-0 z-10 grid place-items-center bg-white/85 p-8 text-center text-slate-900 backdrop-blur-sm">
@@ -344,43 +343,9 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
           </div>
         )}
       </div>
-      <div className={`${expanded ? "max-h-44" : "max-h-48"} overflow-y-auto border-t border-slate-100 p-4`}>
-        <div className="space-y-3">
-          {dayPins
-            .filter((day) => selectedDay === "all" || selectedDay === day.dayNumber)
-            .map((day) => (
-              <div key={day.dayNumber}>
-                <p className="mb-2 text-xs font-black uppercase tracking-widest text-slate-500">Day {day.dayNumber}</p>
-                <div className="grid gap-2">
-                  {day.pins.map((pin, index) => {
-                    const marker = pin.markers[0];
-                    return (
-                      <button key={`${day.dayNumber}-${pin.id}`} type="button" onClick={() => focusPin(pin)} className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 text-left hover:bg-blue-50">
-                        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black text-white" style={{ backgroundColor: dayColor(day.dayNumber) }}>{index + 1}</span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-black text-slate-900">{marker.title}</span>
-                          <span className="block truncate text-xs font-bold text-slate-500">{marker.timeOfDay} - {pin.markers.map((item) => item.attraction.name).join(", ")}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-        </div>
-      </div>
     </section>
     </>
   );
-
-  function focusPin(pin: ItineraryMapPin) {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-
-    map.flyTo([pin.lat, pin.lon], Math.max(map.getZoom(), 15), { duration: 0.6 });
-  }
 }
 
 function buildItineraryMarkerData(itinerary: GeneratedItinerary, hotels: TripHotel[], routeSegments: TripRouteSegment[]): {

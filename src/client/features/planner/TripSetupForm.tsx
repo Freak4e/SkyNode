@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -8,6 +8,8 @@ import {
   DollarSign,
   FilePenLine,
   Hotel,
+  Heart,
+  List,
   Loader2,
   MapPin,
   Plane,
@@ -16,7 +18,8 @@ import {
   Users,
   X,
 } from "lucide-react";
-import type { FlightOffer, ItineraryDay, ItineraryItem, TravelPace } from "../../../shared/types.js";
+import { searchCities, type CitySearchResult } from "../../api/geocodeApi";
+import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, TravelPace } from "../../../shared/types.js";
 import { plannerInterests } from "./plannerUtils";
 
 type TripSetupFormProps = {
@@ -32,14 +35,20 @@ type TripSetupFormProps = {
   draftDays: ItineraryDay[];
   hotelName: string;
   loading: boolean;
+  likedFlights: LikedFlight[];
+  likedFlightsError: string;
+  likedFlightsLoading: boolean;
   manual: boolean;
   notes: string;
   initialStep?: number;
   onAddFlight: () => void;
+  onAddLikedFlight: (likedFlight: LikedFlight) => void;
+  onOpenTrips: () => void;
   onRemoveFlight: (index: number) => void;
   originCode: string;
   pace: TravelPace;
   removeActivity: (dayIndex: number, itemIndex: number) => void;
+  removeDay: (dayIndex: number) => void;
   selectedFlight?: FlightOffer;
   selectedFlights: FlightOffer[];
   selectedInterests: string[];
@@ -59,7 +68,7 @@ type TripSetupFormProps = {
   tripCities: string;
   tripTitle: string;
   updateActivity: (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => void;
-  updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "title" | "summary">>) => void;
+  updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "cityName" | "title" | "summary">>) => void;
 };
 
 type StepId = 0 | 1 | 2 | 3;
@@ -79,7 +88,15 @@ const paceOptions: Array<{ value: TravelPace; title: string; description: string
 
 export function TripSetupForm(props: TripSetupFormProps) {
   const [step, setStep] = useState<StepId>(() => Math.min(Math.max(props.initialStep || 0, 0), 3) as StepId);
-  const canContinue = props.destinationName.trim().length > 0 && props.startDate.trim().length > 0;
+  const [likedDropdownOpen, setLikedDropdownOpen] = useState(false);
+  const basicsComplete = props.destinationName.trim().length > 0
+    && props.startDate.trim().length > 0
+    && props.days > 0
+    && props.travelers > 0
+    && props.budgetAmount >= 0;
+  const styleComplete = props.selectedInterests.length > 0 && Boolean(props.pace);
+  const logisticsComplete = true;
+  const canContinue = step === 0 ? basicsComplete : step === 1 ? styleComplete : true;
   const budgetPerDay = Math.round(props.budgetAmount / Math.max(props.days, 1));
   const flightSearchUrl = buildFlightSearchUrl({
     date: props.startDate,
@@ -110,7 +127,7 @@ export function TripSetupForm(props: TripSetupFormProps) {
   return (
     <section className="mx-auto max-w-6xl">
       <div className="mb-8 overflow-hidden rounded-3xl bg-hero-panel p-8 text-white shadow-card-strong">
-        <div className="flex flex-wrap items-end justify-between gap-8">
+        <div className="flex flex-wrap items-stretch justify-between gap-8">
           <div className="max-w-3xl">
             <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-slate-200">
               <Sparkles className="h-3.5 w-3.5" />
@@ -121,18 +138,28 @@ export function TripSetupForm(props: TripSetupFormProps) {
               Start with the essentials, tune the travel style, add flights or stays, then choose whether SkyNode generates the plan or you build it manually.
             </p>
           </div>
-          <div className="grid min-w-64 gap-2 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm font-bold backdrop-blur">
-            <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-300">Destination</span>
-              <span className="text-right text-white">{props.destinationName || "Not set"}</span>
-            </div>
-            <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-300">Dates</span>
-              <span className="text-right text-white">{props.days} days from {props.startDate}</span>
-            </div>
-            <div className="flex items-center justify-between gap-6">
-              <span className="text-slate-300">Budget</span>
-              <span className="text-right text-white">${props.budgetAmount.toLocaleString()}</span>
+          <div className="flex min-w-64 flex-col items-end justify-between gap-4">
+            <button
+              type="button"
+              onClick={props.onOpenTrips}
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-black text-white shadow-lg shadow-slate-950/20 transition hover:bg-white/15"
+            >
+              <List className="h-4 w-4" />
+              All trips
+            </button>
+            <div className="mt-auto grid w-full gap-2 rounded-2xl border border-white/10 bg-white/10 p-4 text-sm font-bold backdrop-blur">
+              <div className="flex items-center justify-between gap-6">
+                <span className="text-slate-300">Destination</span>
+                <span className="text-right text-white">{props.destinationName || "Add your destination"}</span>
+              </div>
+              <div className="flex items-center justify-between gap-6">
+                <span className="text-slate-300">Dates</span>
+                <span className="text-right text-white">{props.days} days from {props.startDate}</span>
+              </div>
+              <div className="flex items-center justify-between gap-6">
+                <span className="text-slate-300">Budget</span>
+                <span className="text-right text-white">${props.budgetAmount.toLocaleString()}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -141,22 +168,27 @@ export function TripSetupForm(props: TripSetupFormProps) {
       <div className="mb-7 grid gap-3 md:grid-cols-4">
         {steps.map((item, index) => {
           const Icon = item.icon;
-          const completed = index < step;
+          const stepComplete = index === 0 ? basicsComplete : index === 1 ? styleComplete : index === 2 ? logisticsComplete : false;
+          const completed = index < step && stepComplete;
           const active = index === step;
+          const canOpenStep = index === 0 || (index === 1 && basicsComplete) || (index > 1 && basicsComplete && styleComplete);
 
           return (
             <button
               key={item.title}
               type="button"
               onClick={() => {
-                if (index === 0 || canContinue) setStep(index as StepId);
+                if (canOpenStep) setStep(index as StepId);
               }}
+              disabled={!canOpenStep}
               className={`flex min-h-20 items-center gap-3 rounded-2xl border px-4 text-left transition ${
                 completed
                   ? "border-emerald-300 bg-emerald-50 text-slate-950"
                   : active
                     ? "border-blue-600 bg-white text-slate-950 shadow-lg shadow-blue-900/5"
-                    : "border-slate-200 bg-white/80 text-slate-950 hover:border-blue-200"
+                    : canOpenStep
+                    ? "border-slate-200 bg-white/80 text-slate-950 hover:border-blue-200"
+                    : "cursor-not-allowed border-slate-200 bg-white/50 text-slate-400"
               }`}
             >
               <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
@@ -177,10 +209,10 @@ export function TripSetupForm(props: TripSetupFormProps) {
         {step === 0 && (
           <div className="grid gap-6 md:grid-cols-2">
             <WizardField icon={<FilePenLine className="h-4 w-4" />} label="Trip name">
-              <input className="wizard-input" value={props.tripTitle} onChange={(event) => props.setTripTitle(event.target.value)} placeholder={`${props.destinationName} trip`} />
+              <input className="wizard-input" value={props.tripTitle} onChange={(event) => props.setTripTitle(event.target.value)} placeholder={props.destinationName ? `${props.destinationName} trip` : "Trip name"} />
             </WizardField>
             <WizardField icon={<MapPin className="h-4 w-4" />} label="Destination" required>
-              <input className="wizard-input" value={props.destinationName} onChange={(event) => props.setDestinationName(event.target.value)} placeholder="Lisbon, Portugal" required />
+              <input className="wizard-input" value={props.destinationName} onChange={(event) => props.setDestinationName(event.target.value)} placeholder="Add your destination" required />
             </WizardField>
             <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Days">
               <input className="wizard-input" type="number" min={1} max={14} value={props.days} onChange={(event) => props.changeDays(Number(event.target.value || 1))} />
@@ -260,7 +292,9 @@ export function TripSetupForm(props: TripSetupFormProps) {
             </WizardField>
 
             <WizardField icon={<MapPin className="h-4 w-4" />} label="Cities">
-              <input className="wizard-input" value={props.tripCities} onChange={(event) => props.setTripCities(event.target.value)} placeholder="Lisbon, Porto, Sintra" />
+              <div className="wizard-input flex items-center px-3 py-1">
+                <TripCityPicker value={props.tripCities} onChange={props.setTripCities} />
+              </div>
             </WizardField>
 
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-5 py-6">
@@ -276,13 +310,61 @@ export function TripSetupForm(props: TripSetupFormProps) {
                     </p>
                   </div>
                 </div>
-                <a
-                  href={flightSearchUrl}
-                  onClick={props.onAddFlight}
-                  className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-black text-slate-900 shadow-md ring-1 ring-slate-200 no-underline hover:bg-blue-50"
-                >
-                  + {props.selectedFlights.length > 0 ? "Add another" : "Add"}
-                </a>
+                <div className="relative flex flex-wrap gap-2">
+                  <a
+                    href={flightSearchUrl}
+                    onClick={props.onAddFlight}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-black text-slate-900 shadow-md ring-1 ring-slate-200 no-underline hover:bg-blue-50"
+                  >
+                    + {props.selectedFlights.length > 0 ? "Add another" : "Add"}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => setLikedDropdownOpen((open) => !open)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-xs font-black text-slate-900 shadow-md ring-1 ring-slate-200 transition hover:bg-blue-50"
+                  >
+                    <Heart className="h-3.5 w-3.5 text-rose-500" />
+                    Add from liked
+                  </button>
+
+                  {likedDropdownOpen && (
+                    <div className="absolute right-0 top-full z-30 mt-2 w-[min(380px,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white p-2 text-left shadow-2xl shadow-slate-900/15">
+                      <div className="mb-1 flex items-center justify-between gap-3 px-2 py-1.5">
+                        <p className="text-xs font-black uppercase tracking-[0.14em] text-slate-500">Liked flights</p>
+                        {props.likedFlightsLoading && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+                      </div>
+                      {props.likedFlightsError ? (
+                        <p className="px-2 py-3 text-xs font-bold text-red-600">{props.likedFlightsError}</p>
+                      ) : props.likedFlights.length === 0 ? (
+                        <p className="px-2 py-3 text-xs font-semibold leading-5 text-slate-500">Like flights with the heart button in search, then choose them here.</p>
+                      ) : (
+                        <div className="grid max-h-72 gap-1 overflow-y-auto">
+                          {props.likedFlights.map((likedFlight) => (
+                            <button
+                              key={likedFlight.id}
+                              type="button"
+                              onClick={() => {
+                                props.onAddLikedFlight(likedFlight);
+                                setLikedDropdownOpen(false);
+                              }}
+                              className="flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-blue-50"
+                            >
+                              <span className="min-w-0">
+                                <span className="block truncate text-sm font-black text-slate-950">
+                                  {flightRouteText(likedFlight.outbound)}
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                                  {[likedFlight.outbound.carrier, likedFlight.departureDate, likedFlight.totalPriceText || likedFlight.outbound.priceText].filter(Boolean).join(" - ")}
+                                </span>
+                              </span>
+                              <span className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-black text-white">Add</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               {props.selectedFlights.length > 0 && (
                 <div className="mt-4 grid gap-2">
@@ -384,7 +466,7 @@ export function TripSetupForm(props: TripSetupFormProps) {
             <button
               type="button"
               onClick={goNext}
-              disabled={(step === 0 && !canContinue) || props.loading}
+              disabled={!canContinue || props.loading}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-black text-white shadow-md shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Continue
@@ -414,6 +496,133 @@ function WizardField({ children, icon, label, required }: { children: ReactNode;
 
 function titleCase(value: string): string {
   return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function flightRouteText(flight: FlightOffer): string {
+  const from = flight.searchFrom || flight.segments?.[0]?.originCode || "From";
+  const to = flight.searchTo || flight.segments?.[flight.segments.length - 1]?.destinationCode || "To";
+  return `${from} -> ${to}`;
+}
+
+function TripCityPicker({ onChange, value }: { onChange: (value: string) => void; value: string }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [cities, setCities] = useState<CitySearchResult[]>([]);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const selectedCities = useMemo(() => parseCities(value), [value]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      if (query.trim().length < 2) {
+        setCities([]);
+        return;
+      }
+
+      try {
+        setCities(await searchCities(query, controller.signal));
+      } catch {
+        setCities([]);
+      }
+    }, 180);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, [query]);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function updateCities(nextCities: string[]) {
+    onChange(nextCities.join(", "));
+  }
+
+  function addCity(cityName: string) {
+    const cleanName = cityName.trim();
+    if (!cleanName || selectedCities.some((city) => city.toLowerCase() === cleanName.toLowerCase())) {
+      setQuery("");
+      setOpen(false);
+      return;
+    }
+
+    updateCities([...selectedCities, cleanName]);
+    setQuery("");
+    setOpen(false);
+    setCities([]);
+  }
+
+  return (
+    <div ref={wrapperRef} className="relative min-w-0 flex-1">
+      <div className="scrollbar-none flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pr-1">
+        {selectedCities.map((city) => (
+          <span key={city} className="inline-flex max-w-36 shrink-0 items-center gap-1.5 rounded-lg border border-sky-200/70 bg-sky-50/90 px-2.5 py-1.5 text-sm font-black text-sky-800 shadow-sm">
+            <span className="truncate">{city}</span>
+            <button type="button" onClick={() => updateCities(selectedCities.filter((item) => item !== city))} className="rounded-full p-0.5 text-sky-500 transition hover:bg-sky-100 hover:text-sky-900" aria-label={`Remove ${city}`}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        ))}
+        <label className="flex min-w-28 shrink-0 items-center">
+          <input
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setOpen(true);
+            }}
+            onFocus={() => setOpen(true)}
+            placeholder={selectedCities.length === 0 ? "Add city" : "Add more"}
+            className="w-32 bg-transparent text-sm font-bold text-slate-900 outline-none placeholder:text-slate-500"
+          />
+        </label>
+      </div>
+
+      {open && query.trim().length >= 2 && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12" style={{ minWidth: 340 }}>
+          {cities.length === 0 ? (
+            <button type="button" onClick={() => addCity(query)} className="w-full rounded-xl px-3 py-3 text-left text-sm font-bold text-slate-600 hover:bg-blue-50">
+              Add "{query.trim()}"
+            </button>
+          ) : cities.map((city) => (
+            <button key={`${city.name}-${city.countryName}-${city.lat}-${city.lon}`} type="button" onClick={() => addCity(city.name)} className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition hover:bg-blue-50">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                <MapPin className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-black text-slate-950">{city.name}</span>
+                <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{city.countryName || city.address}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function parseCities(value: string): string[] {
+  const seen = new Set<string>();
+
+  return value
+    .split(",")
+    .map((city) => city.trim())
+    .filter(Boolean)
+    .filter((city) => {
+      const key = city.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 function buildFlightSearchUrl(input: { date: string; destinationCode: string; destinationName: string; originCode: string }): string {

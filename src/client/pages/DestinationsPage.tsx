@@ -5,7 +5,19 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { ArrowRight, CalendarDays, Expand, MapPin, Plane, Search, Sparkles, Ticket, X } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Expand,
+  MapPin,
+  Plane,
+  Search,
+  Sparkles,
+  Ticket,
+  X,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
@@ -15,6 +27,7 @@ import { searchPlaces } from "../api/flightsApi";
 import { currencyOptions, getStoredCurrency } from "../utils/currency.js";
 
 type ViewState = "idle" | "loading" | "ready" | "error";
+type DealSortMode = "cheap" | "expensive";
 type PlaceGroup = {
   cityKey: string;
   city: Place | null;
@@ -69,29 +82,31 @@ export function DestinationsPage() {
 
   const mappableDeals = useMemo(() => deals.filter(hasCoordinates), [deals]);
   const cheapest = deals[0];
+  const mapReadyCount = mappableDeals.length;
 
   return (
     <div className="min-h-screen bg-[#f6f8fc] text-slate-950">
       <Navbar />
       <main className="pt-24">
-        <section className="relative overflow-hidden bg-white px-6 pb-10 pt-8 sm:px-8 lg:px-12">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(59,130,246,0.16),transparent_28%),radial-gradient(circle_at_86%_10%,rgba(16,185,129,0.14),transparent_30%)]" />
-          <div className="relative mx-auto max-w-7xl">
-            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-end">
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-sky-700">
+        <section className="px-6 pb-8 pt-8 sm:px-8 lg:px-12">
+          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_86%_14%,rgba(20,184,166,0.16),transparent_32%)]" />
+            <div className="relative">
+            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
+              <div className="text-center lg:text-left">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-100 ring-1 ring-white/15">
                   <Sparkles className="h-4 w-4" />
                   Explore cheap destinations
                 </span>
-                <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
+                <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:mx-0">
                   {origin ? `Find affordable places to fly from ${origin.cityName || origin.name}` : "Find affordable places to fly next"}
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 lg:mx-0">
                   Choose your departure city first, then explore destination ideas on the map.
                 </p>
               </div>
 
-              <div className="rounded-4xl border border-stone-200 bg-white p-4 shadow-xl shadow-stone-200/60">
+              <div className="rounded-4xl border border-white/10 bg-white/10 p-4 shadow-2xl shadow-slate-950/30 backdrop-blur">
                 <div className="grid gap-3">
                   <PlaceSearchBox label="From" value={origin} onChange={setOrigin} placeholder="Search departure city" />
                   <DestinationPicker value={destination} onChange={setDestination} />
@@ -112,20 +127,21 @@ export function DestinationsPage() {
                 </div>
               </div>
             </div>
+            </div>
           </div>
         </section>
 
         <section className="px-6 py-8 sm:px-8 lg:px-12">
-          <div className="mx-auto grid max-w-7xl gap-6 xl:grid-cols-[1fr_430px]">
+          <div className="mx-auto grid max-w-7xl items-start gap-6 xl:grid-cols-[1fr_430px]">
             <div className="space-y-6">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  {origin && <div className="grid gap-4 md:grid-cols-2">
                 <StatCard label="Deals found" value={String(deals.length)} icon={<Ticket className="h-5 w-5" />} />
                 <StatCard
                   label="Cheapest fare"
                   value={cheapest ? formatMoney(cheapest.price, cheapest.currency) : "—"}
                   icon={<Plane className="h-5 w-5" />}
                 />
-              </div>
+              </div>}
 
               <section className="relative min-h-130 overflow-hidden rounded-4xl border border-stone-200 bg-white shadow-xl shadow-stone-200/70">
                 <button
@@ -141,8 +157,9 @@ export function DestinationsPage() {
               </section>
             </div>
 
-            <aside className="space-y-4">
-                <div className="rounded-4xl border border-stone-200 bg-white p-5 shadow-xl shadow-stone-200/70">
+            <aside className="space-y-6">
+              {origin && <StatCard label="On the map" value={String(mapReadyCount)} icon={<MapPin className="h-5 w-5" />} />}
+                <div className="flex min-h-130 flex-col rounded-4xl border border-stone-200 bg-white p-5 shadow-xl shadow-stone-200/70">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-700">Popular flight boards</p>
@@ -164,11 +181,7 @@ export function DestinationsPage() {
                   </p>
                 )}
                 {state === "ready" && deals.length > 0 && (
-                  <div className="mt-5 space-y-3">
-                    {deals.slice(0, 14).map((deal) => (
-                      <DealBoard key={`${deal.origin}-${deal.destination}-${deal.price}-${deal.departDate}`} deal={deal} />
-                    ))}
-                  </div>
+                  <DealCarousel deals={deals} />
                 )}
               </div>
             </aside>
@@ -411,6 +424,98 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
   );
 }
 
+function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
+  const [sortMode, setSortMode] = useState<DealSortMode>("cheap");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+
+  const sortedDeals = useMemo(() => {
+    const direction = sortMode === "cheap" ? 1 : -1;
+    return [...deals].sort((a, b) => (a.price - b.price) * direction);
+  }, [deals, sortMode]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [sortedDeals.length, sortMode]);
+
+  useEffect(() => {
+    if (paused || sortedDeals.length < 2) return;
+
+    const interval = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % sortedDeals.length);
+    }, 4200);
+
+    return () => window.clearInterval(interval);
+  }, [paused, sortedDeals.length]);
+
+  const shiftDeal = (direction: -1 | 1) => {
+    setActiveIndex((current) => (current + direction + sortedDeals.length) % sortedDeals.length);
+  };
+
+  const activeDeal = sortedDeals[activeIndex];
+  const progress = sortedDeals.length > 0 ? ((activeIndex + 1) / sortedDeals.length) * 100 : 0;
+
+  return (
+    <div className="mt-5 flex flex-1 flex-col">
+      <div className="flex flex-1" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+        {activeDeal && <DealBoard key={`${activeDeal.origin}-${activeDeal.destination}-${activeDeal.price}-${activeDeal.departDate}`} deal={activeDeal} />}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
+          {[
+            { label: "Cheapest", value: "cheap" as const },
+            { label: "Priciest", value: "expensive" as const },
+          ].map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setSortMode(option.value)}
+              className={`rounded-full px-3 py-1.5 text-xs font-black uppercase tracking-[0.12em] transition ${
+                sortMode === option.value ? "bg-slate-950 text-white" : "text-slate-500 hover:bg-sky-50 hover:text-sky-700"
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => shiftDeal(-1)}
+            className="rounded-full bg-white p-2 text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-sky-700 hover:text-white"
+            aria-label="Previous destination offer"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => shiftDeal(1)}
+            className="rounded-full bg-white p-2 text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:bg-sky-700 hover:text-white"
+            aria-label="Next destination offer"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-3">
+        <div className="h-2 flex-1 overflow-hidden rounded-full bg-white ring-1 ring-slate-200">
+          <div className="h-full rounded-full bg-sky-500 transition-all duration-500" style={{ width: `${progress}%` }} />
+        </div>
+        <p className="min-w-14 text-right text-xs font-black text-slate-500">
+          {activeIndex + 1}/{sortedDeals.length}
+        </p>
+      </div>
+      {activeDeal && (
+        <p className="mt-2 truncate text-xs font-bold text-slate-400">
+          {sortMode === "cheap" ? "Lowest fares first" : "Highest fares first"} · {normalizeDestinationName(activeDeal.destinationPlace?.cityName || activeDeal.destination, activeDeal.destination)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DealBoard({ deal }: { deal: ExploreDeal }) {
   const rawName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
   const name = normalizeDestinationName(rawName, deal.destination);
@@ -422,7 +527,7 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
   return (
     <Link
       to={searchLink}
-      className="group grid grid-cols-[112px_1fr] overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-xl"
+      className="group relative block h-full min-h-88 w-full overflow-hidden rounded-2xl bg-slate-900 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
     >
       <DestinationPhoto
         placeName={name}
@@ -431,19 +536,47 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
         airportName={airportName}
         coordinates={coordinates}
       />
-      <div>
-        <div className="bg-linear-to-r from-slate-800 to-sky-700 px-4 py-3 text-white">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.14em] text-white/70">{deal.origin} to {deal.destination}</p>
-              <p className="mt-1 text-lg font-black">{name}</p>
+      <div className="absolute inset-0 bg-linear-to-t from-slate-950/85 via-slate-950/25 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-5 text-white transition duration-300 group-hover:-translate-y-32">
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold uppercase tracking-[0.14em] text-white/70">{deal.origin} to {deal.destination}</p>
+            <h3 className="mt-1 truncate text-3xl font-black leading-tight">{name}</h3>
+            <p className="mt-1 text-base font-black">Tickets from {formatMoney(deal.price, deal.currency)}</p>
+          </div>
+          <ChevronRight className="h-7 w-7 shrink-0" />
+        </div>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 translate-y-full bg-white p-5 text-slate-950 transition duration-300 group-hover:translate-y-0">
+        <p className="text-xs font-bold text-slate-500">{country || "Destination idea"}</p>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-xl font-black">{name}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">{airportName || deal.destination}</p>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-800" />
+        </div>
+        <div className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500">
+          <CalendarDays className="h-4 w-4" />
+          {deal.departDate || "Flexible dates"}
+        </div>
+        <p className="mt-1 text-xs font-bold text-slate-500">
+          {deal.stopsText || "Flight offer"} {deal.airline ? `- ${deal.airline}` : ""}
+        </p>
+        <p className="mt-3 text-base font-black text-slate-950">Tickets from {formatMoney(deal.price, deal.currency)}</p>
+      </div>
+      <div className="hidden">
+        <div className="bg-slate-900 px-4 py-3 text-white">
+          <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-3">
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold uppercase tracking-[0.14em] text-white/70">{deal.origin} to {deal.destination}</p>
+              <p className="mt-1 truncate text-lg font-black">{name}</p>
             </div>
-            <p className="text-xl font-black">{formatMoney(deal.price, deal.currency)}</p>
           </div>
         </div>
-        <div className="grid grid-cols-[1fr_auto] gap-3 p-4">
-          <div>
-            <p className="text-sm font-semibold text-slate-500">{country || "Destination idea"}</p>
+        <div className="flex flex-1 flex-col justify-between gap-4 p-4">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-500">{country || "Destination idea"}</p>
             <p className="mt-2 flex items-center gap-2 text-xs font-bold text-slate-400">
               <CalendarDays className="h-4 w-4" />
               {deal.departDate || "Flexible dates"}
@@ -451,10 +584,17 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
             <p className="mt-1 text-xs font-bold text-slate-400">
               {deal.stopsText || "Flight offer"} {deal.airline ? `· ${deal.airline}` : ""}
             </p>
+            <div className="mt-4 border-t border-slate-200 pt-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Fare from</p>
+                <p className="mt-1 text-3xl font-black leading-none text-slate-950">{formatMoney(deal.price, deal.currency)}</p>
+              </div>
+            </div>
           </div>
-          <span className="self-center rounded-full bg-stone-100 p-2 text-slate-600 transition group-hover:bg-sky-700 group-hover:text-white">
+          <div className="flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-xs font-black uppercase tracking-[0.12em] text-slate-950 shadow-sm ring-1 ring-slate-200 transition group-hover:bg-sky-700 group-hover:text-white group-hover:ring-sky-700">
+            <span>Search flights</span>
             <ArrowRight className="h-4 w-4" />
-          </span>
+          </div>
         </div>
       </div>
     </Link>
@@ -568,10 +708,22 @@ function getPreviewTiles(lat: number, lon: number, z: number): Array<{ z: number
 
 function LoadingBoards() {
   return (
-    <div className="mt-5 space-y-3">
-      {[0, 1, 2].map((item) => (
-        <div key={item} className="h-28 animate-pulse rounded-3xl bg-slate-100" />
-      ))}
+    <div className="mt-5 flex flex-1 flex-col">
+      <div className="min-h-88 flex-1 animate-pulse overflow-hidden rounded-2xl bg-linear-to-br from-slate-200 via-slate-100 to-sky-100">
+        <div className="flex h-full flex-col justify-end p-5">
+          <div className="h-4 w-28 rounded-full bg-white/70" />
+          <div className="mt-3 h-8 w-48 rounded-full bg-white/80" />
+          <div className="mt-2 h-4 w-32 rounded-full bg-white/60" />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="h-9 w-44 rounded-full bg-slate-100" />
+        <div className="flex gap-2">
+          <div className="h-9 w-9 rounded-full bg-slate-100" />
+          <div className="h-9 w-9 rounded-full bg-slate-100" />
+        </div>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-slate-100" />
     </div>
   );
 }

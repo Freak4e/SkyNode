@@ -242,6 +242,8 @@ export async function listJoinedTripIds(userId: string): Promise<string[]> {
 export async function listPublicTrips(filters: {
   destination?: string;
   budget?: string;
+  includePast?: boolean;
+  ownerId?: string;
   pace?: string;
   userId?: string;
 }): Promise<Array<{ tripId: string; memberCount: number; ownerName: string; ownerAvatar?: string; membershipStatus: TripMemberStatus | "none" }>> {
@@ -250,6 +252,10 @@ export async function listPublicTrips(filters: {
   const values: unknown[] = ["public"];
   const clauses = ["t.visibility = $1"];
   let index = 2;
+
+  if (!filters.includePast) {
+    clauses.push("t.start_date >= current_date");
+  }
 
   if (filters.destination) {
     clauses.push(`(
@@ -273,6 +279,12 @@ export async function listPublicTrips(filters: {
   if (filters.pace) {
     clauses.push(`t.pace = $${index}`);
     values.push(filters.pace);
+    index += 1;
+  }
+
+  if (filters.ownerId) {
+    clauses.push(`t.user_id = $${index}`);
+    values.push(filters.ownerId);
     index += 1;
   }
 
@@ -453,6 +465,33 @@ export async function updateTripSettings(
   );
 
   return (result.rowCount || 0) > 0;
+}
+
+export async function updateUserTripProfileSnapshots(userId: string, profile: UserProfileSnapshot): Promise<void> {
+  await ensureSchema();
+
+  await query(
+    `
+      update trip_members
+      set display_name = $2,
+          avatar_url = $3,
+          profile = $4,
+          updated_at = now()
+      where user_id = $1
+    `,
+    [userId, profile.displayName, profile.avatarUrl || null, profile],
+  );
+
+  await query(
+    `
+      update trip_messages
+      set display_name = $2,
+          avatar_url = $3,
+          profile = $4
+      where user_id = $1
+    `,
+    [userId, profile.displayName, profile.avatarUrl || null, profile],
+  );
 }
 
 export async function listTripMessages(tripId: string, userId: string): Promise<TripMessage[]> {

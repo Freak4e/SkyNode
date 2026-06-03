@@ -44,7 +44,7 @@ let cachedAccessTokenExpiresAt = 0;
 export const liveFlightsRoute = Router();
 
 const SERVERLESS_AUTH_TIMEOUT_MS = 2500;
-const SERVERLESS_DATA_TIMEOUT_MS = 7500;
+const SERVERLESS_DATA_TIMEOUT_MS = 8500;
 const WORLD_SAMPLE_BBOXES = [
   { lamin: 35, lomin: -12, lamax: 62, lomax: 35 },
   { lamin: 24, lomin: -130, lamax: 55, lomax: -60 },

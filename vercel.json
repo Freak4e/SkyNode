@@ -3,7 +3,9 @@
   "outputDirectory": "dist/public",
   "functions": {
     "api/[...path].ts": {
-      "includeFiles": "dist/server/**"
+      "includeFiles": "dist/server/**",
+      "regions": ["fra1"],
+      "maxDuration": 10
     }
   },
   "rewrites": [

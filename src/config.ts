@@ -51,7 +51,7 @@ export const config = {
     clientSecret: process.env.OPENSKY_CLIENT_SECRET,
     useAuth: process.env.OPENSKY_USE_AUTH === "true",
     authTimeoutMs: Number(process.env.OPENSKY_AUTH_TIMEOUT_MS || 2500),
-    timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 7500),
+    timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 8500),
   },
   huggingFace: {
     apiUrl: process.env.HUGGINGFACE_API_URL || "https://router.huggingface.co/v1/chat/completions",

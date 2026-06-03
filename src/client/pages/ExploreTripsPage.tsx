@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Loader2, Sparkles, Users } from "lucide-react";
+import { Loader2, Users } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { listPublicTrips, profileFromUser, requestJoinTrip } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
@@ -7,7 +7,7 @@ import { CitySearchPicker } from "../components/CitySearchPicker";
 import { FilterDropdown } from "../components/FilterDropdown";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
-import { Button, ButtonLink, EmptyState, PageShell } from "../components/ui";
+import { Button, ButtonLink, EmptyState, HeroPanel, PageShell } from "../components/ui";
 import { TripCommunityCard } from "../features/trip-community/TripCommunityCard";
 import type { SavedTripSummary } from "../../shared/types.js";
 
@@ -96,21 +96,12 @@ export function ExploreTripsPage() {
       <Navbar />
 
       <PageShell>
-        <section className="relative mb-8 rounded-3xl bg-hero-panel p-8 text-white shadow-card-strong">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.12),transparent_35%)]" />
-          <div className="relative grid gap-8 lg:grid-cols-[1.2fr_0.8fr] lg:items-end">
-            <div>
-              <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-slate-200">
-                <Sparkles className="h-3.5 w-3.5" />
-                Community trips
-              </p>
-              <h1 className="text-4xl font-black leading-tight md:text-5xl">Find travelers going your way.</h1>
-              <p className="mt-4 max-w-2xl text-sm font-bold leading-relaxed text-slate-300">
-                Browse public SkyNode itineraries, request to join, and coordinate with the group after you are accepted.
-              </p>
-            </div>
-
-            <form onSubmit={submitFilters} className="relative z-20">
+        <HeroPanel
+          eyebrow={<><Users className="h-3.5 w-3.5" />Community trips</>}
+          title="Find travelers going your way."
+          description="Browse public SkyNode itineraries, request to join, and coordinate with the group after you are accepted."
+          actions={
+            <form onSubmit={submitFilters} className="relative z-20 w-full min-w-0 sm:w-96 lg:w-[26rem]">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <CitySearchPicker
@@ -140,8 +131,8 @@ export function ExploreTripsPage() {
                 Search trips
               </Button>
             </form>
-          </div>
-        </section>
+          }
+        />
 
         {!authLoading && !user && (
           <div className="mb-6 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-700">

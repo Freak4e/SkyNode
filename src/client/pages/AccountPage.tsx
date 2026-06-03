@@ -67,7 +67,7 @@ function metadataInterests(user: User | null): string[] {
 }
 
 function displayNameFromForm(form: ProfileForm, fallback = "SkyNode traveler") {
-  return [form.firstName, form.lastName].filter(Boolean).join(" ") || fallback;
+  return [form.firstName, form.lastName].map((part) => part.trim()).filter(Boolean).join(" ") || fallback.trim() || "SkyNode traveler";
 }
 
 function profileFormFromUser(user: User | null): ProfileForm {
@@ -140,7 +140,7 @@ export function AccountPage() {
     return <Navigate to="/auth" replace state={{ from: "/account" }} />;
   }
 
-  const metadataName = metadataString(user, "full_name");
+  const metadataName = metadataString(user, "full_name") || metadataString(user, "name");
   const displayName = displayNameFromForm(form, metadataName || user?.email?.split("@")[0] || "SkyNode traveler");
   const avatarUrl = form.avatarUrl || userImage(user);
   const createdAt = user?.created_at ? new Date(user.created_at).toLocaleDateString() : "Unknown";
@@ -321,7 +321,7 @@ export function AccountPage() {
             <div className="absolute inset-0 bg-linear-to-t from-white via-white/5 to-transparent" />
           </div>
           <div className="flex flex-wrap items-end justify-between gap-5 px-6 pb-6">
-            <div className="-mt-16 flex flex-wrap items-end gap-4">
+            <div className="-mt-16 flex min-w-0 flex-1 flex-wrap items-end gap-4">
               <div className="relative">
                 <input
                   ref={fileInputRef}
@@ -336,19 +336,16 @@ export function AccountPage() {
                 <button
                   type="button"
                   onClick={() => setPhotoMenuOpen((open) => !open)}
-                  className="block rounded-3xl focus:outline-none focus:ring-4 focus:ring-sky-100"
+                  className="block rounded-full focus:outline-none focus:ring-4 focus:ring-sky-100"
                   aria-label="Change profile picture"
                 >
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="h-28 w-28 rounded-3xl border-4 border-white bg-white object-contain shadow-md" />
+                    <img src={avatarUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
                   ) : (
-                    <div className="grid h-28 w-28 place-items-center rounded-3xl border-4 border-white bg-slate-900 text-white shadow-md">
-                      <UserRound className="h-9 w-9" />
+                    <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-600 text-lg font-black lowercase text-white">
+                      {displayName.charAt(0)}
                     </div>
                   )}
-                  <span className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full bg-white text-slate-700 shadow-md ring-1 ring-slate-200">
-                    <Camera className="h-4 w-4" />
-                  </span>
                 </button>
                 {photoMenuOpen && (
                   <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-2xl">
@@ -379,10 +376,10 @@ export function AccountPage() {
                   </div>
                 )}
               </div>
-              <div className="pb-1">
+              <div className="min-w-0 flex-1 pb-1">
                 <p className="text-xs font-black uppercase tracking-widest text-sky-700">My account</p>
-                <h1 className="mt-1 text-3xl font-black leading-tight text-slate-950 md:text-4xl">{displayName}</h1>
-                <p className="mt-1 text-sm font-semibold text-slate-500">{user?.email}</p>
+                <h1 className="mt-1 break-words text-3xl font-black leading-tight text-slate-950 md:text-4xl">{displayName}</h1>
+                <p className="mt-1 break-all text-sm font-semibold text-slate-500">{user?.email}</p>
                 <p className="mt-2 text-xs font-bold text-slate-400">Member since {createdAt}</p>
               </div>
             </div>
@@ -395,16 +392,13 @@ export function AccountPage() {
         {error && <div className="mb-6 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm font-bold text-red-600">{error}</div>}
         {success && <div className="mb-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">{success}</div>}
 
-        <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
-          <div className="space-y-6">
+        <section className="space-y-6">
+          <div className="grid items-stretch gap-6 lg:grid-cols-[1fr_340px]">
             <Card as="form" className="p-6" onSubmit={handleSaveProfile}>
               <div className="relative flex flex-wrap items-start justify-between gap-4 pr-12">
                 <div>
                   <p className="text-xs font-black uppercase tracking-widest text-blue-500">Profile</p>
                   <h2 className="mt-2 text-2xl font-black text-slate-950">Personal details</h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                    Your public travel profile is shown when someone checks who is requesting to join, who is in a trip room, or who sent a chat message.
-                  </p>
                 </div>
                 <button
                   type="button"
@@ -475,66 +469,66 @@ export function AccountPage() {
               )}
             </Card>
 
-            <Card as="section" className="p-6">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-blue-500">My trips</p>
-                  <h2 className="mt-2 text-2xl font-black text-slate-950">Trips you created</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">A cleaner view of your saved itineraries and trip rooms.</p>
-                </div>
-                <ButtonLink to="/trips" tone="ghost">Open all trips</ButtonLink>
-              </div>
+            <aside className="grid h-full gap-6">
+              <Card as="section" className="flex flex-col p-6">
+                <p className="text-xs font-black uppercase tracking-widest text-blue-500">Security</p>
+                <h2 className="mt-2 text-xl font-black text-slate-950">Password access</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">
+                  Send a password reset link to your email if you forgot your password or want to change it.
+                </p>
+                <Button
+                  type="button"
+                  tone="ghost"
+                  size="lg"
+                  className="mt-auto w-full rounded-2xl"
+                  disabled={resettingPassword || !isSupabaseConfigured}
+                  onClick={handlePasswordReset}
+                  icon={resettingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}
+                >
+                  {resettingPassword ? "Sending..." : "Send reset email"}
+                </Button>
+              </Card>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                {loadingTrips && [1, 2].map((item) => <div key={item} className="h-56 animate-pulse rounded-2xl bg-slate-100" />)}
-                {!loadingTrips && visibleTrips.length === 0 && (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500 sm:col-span-2">
-                    No created trips yet. Build a trip in the planner and save it to your account.
-                  </div>
-                )}
-                {!loadingTrips && visibleTrips.map((trip) => <AccountTripCard key={trip.id} trip={trip} />)}
-              </div>
-            </Card>
+              <Card as="section" className="flex flex-col p-6">
+                <p className="text-xs font-black uppercase tracking-widest text-red-500">Danger zone</p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-500">
+                  Delete your account and saved trip data from SkyNode.
+                </p>
+                <Button
+                  type="button"
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                  tone="danger"
+                  size="lg"
+                  className="mt-auto w-full rounded-2xl"
+                  icon={deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                >
+                  {deleting ? "Deleting..." : "Delete account"}
+                </Button>
+              </Card>
+            </aside>
           </div>
 
-          <aside className="space-y-6">
-            <Card as="section" className="p-6">
-              <p className="text-xs font-black uppercase tracking-widest text-blue-500">Security</p>
-              <h2 className="mt-2 text-xl font-black text-slate-950">Password access</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-500">
-                Send a password reset link to your email if you forgot your password or want to change it.
-              </p>
-              <Button
-                type="button"
-                tone="ghost"
-                size="lg"
-                className="mt-4 w-full rounded-2xl"
-                disabled={resettingPassword || !isSupabaseConfigured}
-                onClick={handlePasswordReset}
-                icon={resettingPassword ? <Loader2 className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}
-              >
-                {resettingPassword ? "Sending..." : "Send reset email"}
-              </Button>
-            </Card>
+          <Card as="section" className="p-6">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-blue-500">My trips</p>
+                <h2 className="mt-2 text-2xl font-black text-slate-950">Trips you created</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500">A cleaner view of your saved itineraries and trip rooms.</p>
+              </div>
+              <ButtonLink to="/trips" tone="ghost">Open all trips</ButtonLink>
+            </div>
 
-            <Card as="section" className="p-6">
-              <p className="text-xs font-black uppercase tracking-widest text-red-500">Danger zone</p>
-              <p className="mt-2 text-sm leading-relaxed text-slate-500">
-                Delete your account and saved trip data from SkyNode.
-              </p>
-              <Button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={deleting}
-                tone="danger"
-                size="lg"
-                className="mt-4 w-full rounded-2xl"
-                icon={deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              >
-                {deleting ? "Deleting..." : "Delete account"}
-              </Button>
-            </Card>
-          </aside>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {loadingTrips && [1, 2].map((item) => <div key={item} className="h-56 animate-pulse rounded-2xl bg-slate-100" />)}
+              {!loadingTrips && visibleTrips.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm font-bold text-slate-500 sm:col-span-2 lg:col-span-4">
+                  No created trips yet. Build a trip in the planner and save it to your account.
+                </div>
+              )}
+              {!loadingTrips && visibleTrips.map((trip) => <AccountTripCard key={trip.id} trip={trip} />)}
+            </div>
+          </Card>
         </section>
       </PageShell>
 

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Plus } from "lucide-react";
+import { BookOpen, Plus } from "lucide-react";
 import { listSavedTrips } from "../api/assistantApi";
 import { listJoinedTrips } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
-import { ButtonLink, EmptyState, PageShell } from "../components/ui";
+import { ButtonLink, EmptyState, HeroPanel, PageShell } from "../components/ui";
 import { TripCommunityCard } from "../features/trip-community/TripCommunityCard";
 import type { SavedTripSummary } from "../../shared/types.js";
 
@@ -54,44 +54,40 @@ export function TripsPage() {
       <Navbar />
 
       <PageShell>
-        <section className="mb-8 rounded-3xl border border-slate-200 bg-white p-6 shadow-card">
-          <div className="flex flex-wrap items-end justify-between gap-5">
-            <div>
-              <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-blue-600">Trip library</p>
-              <h1 className="text-3xl font-black leading-tight text-slate-950">
-                {tab === "created" ? "Trips you created" : "Trips you joined"}
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-600">
-                {tab === "created"
-                  ? "Manage visibility, invite links, join requests, and group chat for your saved itineraries."
-                  : "Trips where your join request was accepted."}
-              </p>
+        <HeroPanel
+          eyebrow={<><BookOpen className="h-3.5 w-3.5" />Trip library</>}
+          title={tab === "created" ? "Trips you created" : "Trips you joined"}
+          description={
+            tab === "created"
+              ? "Manage visibility, invite links, join requests, and group chat for your saved itineraries."
+              : "Trips where your join request was accepted."
+          }
+          actions={
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+                <ButtonLink to="/explore-trips" tone="ghost" size="md">Community</ButtonLink>
+                <ButtonLink to="/planner" tone="primary" size="md" icon={<Plus className="h-4 w-4" />}>New trip</ButtonLink>
+              </div>
+              <div className="inline-flex rounded-full border border-slate-200 bg-slate-100 p-1">
+                {([
+                  { id: "created" as const, label: "Created" },
+                  { id: "joined" as const, label: "Joined" },
+                ]).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setTab(item.id)}
+                    className={`rounded-full px-4 py-2 text-sm font-bold transition ${
+                      tab === item.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <ButtonLink to="/explore-trips" tone="ghost" size="md">Community</ButtonLink>
-              <ButtonLink to="/planner" tone="primary" size="md" icon={<Plus className="h-4 w-4" />}>New trip</ButtonLink>
-            </div>
-          </div>
-
-          <div className="mt-5 inline-flex rounded-full border border-slate-200 bg-slate-100 p-1">
-            {([
-              { id: "created" as const, label: "Created" },
-              { id: "joined" as const, label: "Joined" },
-            ]).map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                  tab === item.id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-900"
-                }`}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </section>
+          }
+        />
 
         {!authLoading && !user && (
           <EmptyState

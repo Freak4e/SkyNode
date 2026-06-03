@@ -17,13 +17,13 @@ import {
   MapPin,
   Plane,
   Search,
-  Sparkles,
   Ticket,
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
+import { HeroPanel } from "../components/ui";
 import type { CurrencyCode, ExploreDeal, Place } from "../../shared/types.js";
 import { fetchExploreDeals } from "../api/exploreApi";
 import { searchPlaces } from "../api/flightsApi";
@@ -112,33 +112,21 @@ export function DestinationsPage() {
       <Navbar />
       <main className="pt-24">
         <section className="px-6 pb-8 pt-8 sm:px-8 lg:px-12">
-          <div className="relative mx-auto max-w-7xl rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_86%_14%,rgba(20,184,166,0.16),transparent_32%)]" />
-            <div className="relative">
-            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
-              <div className="text-center lg:text-left">
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-100 ring-1 ring-white/15">
-                  <Sparkles className="h-4 w-4" />
-                  Explore cheap destinations
-                </span>
-                <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:mx-0">
-                  {origin ? `Find affordable places to fly from ${origin.cityName || origin.name}` : "Find affordable places to fly next"}
-                </h1>
-                <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 lg:mx-0">
-                  Choose your departure city first, then explore destination ideas on the map.
-                </p>
-              </div>
-
-              <div className="relative z-20">
+          <HeroPanel
+            className="mx-auto mb-0 max-w-7xl"
+            eyebrow={<><Globe2 className="h-3.5 w-3.5" />Explore cheap destinations</>}
+            title={origin ? `Find affordable places to fly from ${origin.cityName || origin.name}` : "Find affordable places to fly next"}
+            description="Choose your departure city first, then explore destination ideas on the map."
+            actions={
+              <div className="relative z-20 w-full min-w-0 sm:min-w-96 lg:w-[26rem]">
                 <div className="grid gap-3">
                   <PlaceSearchBox label="From" value={origin} onChange={setOrigin} placeholder="Search departure city" variant="dark" />
                   <DestinationPicker value={destination} onChange={setDestination} variant="dark" />
                   <CurrencyDropdown refObject={currencyRef} open={currencyOpen} value={currency} onChange={handleCurrencyChange} onToggle={() => setCurrencyOpen((open) => !open)} variant="dark" />
                 </div>
               </div>
-            </div>
-            </div>
-          </div>
+            }
+          />
         </section>
 
         <section className="px-6 py-8 sm:px-8 lg:px-12">

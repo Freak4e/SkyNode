@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { searchPlaces } from "../../api/flightsApi";
 import { searchCities, type CitySearchResult } from "../../api/geocodeApi";
+import { HeroPanel } from "../../components/ui";
 import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, Place, TravelPace } from "../../../shared/types.js";
 import { plannerInterests } from "./plannerUtils";
 
@@ -127,20 +128,13 @@ export function TripSetupForm(props: TripSetupFormProps) {
   }
 
   return (
-    <section className="mx-auto max-w-6xl">
-      <div className="mb-8 overflow-hidden rounded-3xl bg-hero-panel p-8 text-white shadow-card-strong">
-        <div className="flex flex-wrap items-stretch justify-between gap-8">
-          <div className="max-w-3xl">
-            <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-black text-slate-200">
-              <Sparkles className="h-3.5 w-3.5" />
-              Trip builder
-            </p>
-            <h1 className="text-4xl font-black leading-tight md:text-5xl">Shape the trip before the itinerary.</h1>
-            <p className="mt-4 max-w-2xl text-sm font-bold leading-relaxed text-slate-300">
-              Start with the essentials, tune the travel style, add flights or stays, then choose whether SkyNode generates the plan or you build it manually.
-            </p>
-          </div>
-          <div className="flex min-w-64 flex-col items-end justify-between gap-4">
+    <section className="mx-auto max-w-7xl">
+      <HeroPanel
+        eyebrow={<><CircleGauge className="h-3.5 w-3.5" />Trip builder</>}
+        title="Shape the trip before the itinerary."
+        description="Start with the essentials, tune the travel style, add flights or stays, then choose whether SkyNode generates the plan or you build it manually."
+        actions={
+          <div className="flex w-full min-w-0 flex-col items-end gap-4 sm:min-w-64 lg:w-72">
             <button
               type="button"
               onClick={props.onOpenTrips}
@@ -164,8 +158,8 @@ export function TripSetupForm(props: TripSetupFormProps) {
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="mb-7 grid gap-3 md:grid-cols-4">
         {steps.map((item, index) => {

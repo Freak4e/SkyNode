@@ -49,6 +49,7 @@ export const config = {
     tokenUrl: process.env.OPENSKY_TOKEN_URL || "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
     clientId: process.env.OPENSKY_CLIENT_ID,
     clientSecret: process.env.OPENSKY_CLIENT_SECRET,
+    authTimeoutMs: Number(process.env.OPENSKY_AUTH_TIMEOUT_MS || 4000),
     timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 12000),
   },
   scrapingBee: {

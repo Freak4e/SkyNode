@@ -36,6 +36,26 @@ const quickPromptPool = [
   "Make a food-focused plan for Istanbul.",
   "Find a budget-friendly birthday trip.",
   "Which European capitals are cheapest right now?",
+  "Plan a 7-day honeymoon in Greece.",
+  "Build a 7-day Italy trip for two people.",
+  "Plan a romantic honeymoon under $2,000.",
+  "Create a 7-day beach trip with direct flights.",
+  "Plan a family-friendly week in Spain.",
+  "Make a 5-day itinerary for Paris and Amsterdam.",
+  "Plan a cheap 7-day trip from Skopje.",
+  "Suggest a luxury honeymoon with a realistic budget.",
+  "Build a 10-day Europe route by train and flight.",
+  "Plan a week in Japan for first-time visitors.",
+  "Create a relaxed 7-day Portugal itinerary.",
+  "Plan a food and wine trip through Italy.",
+  "Suggest a surprise anniversary weekend.",
+  "Build a 7-day island-hopping trip.",
+  "Plan a winter city break with good museums.",
+  "Find a beach honeymoon that is not too expensive.",
+  "Create a 6-day trip for nightlife and food.",
+  "Plan a calm wellness trip with spas and nature.",
+  "Suggest a one-week trip for remote workers.",
+  "Build a multi-city Balkan trip for 7 days.",
   "Make this trip cheaper.",
   "Add more food spots.",
   "Make the itinerary more relaxed.",
@@ -49,12 +69,7 @@ export function AssistantPage() {
   const { user, loading: authLoading } = useAuth();
   const [trips, setTrips] = useState<SavedTripSummary[]>([]);
   const [selectedTrip, setSelectedTrip] = useState<SavedTripDetail | undefined>();
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: "assistant",
-      content: "Hi, I'm SkyNode Assistant. Ask me for destination ideas, or select a saved trip so I can tailor suggestions to your itinerary.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [loadingTripId, setLoadingTripId] = useState("");
@@ -90,7 +105,7 @@ export function AssistantPage() {
   }, [authLoading, user]);
 
   const assistantMode = selectedTrip ? "Trip-aware" : "General travel";
-  const showPromptSuggestions = messages.length === 1 && messages[0]?.role === "assistant" && !sending;
+  const showStartScreen = messages.length === 0 && !sending;
   const tripStats = useMemo(() => {
     if (!selectedTrip) {
       return [];
@@ -113,12 +128,7 @@ export function AssistantPage() {
       setSelectedTrip(trip);
       setPendingProposal(undefined);
       setQuickPrompts(randomQuickPrompts());
-      setMessages([
-        {
-          role: "assistant",
-          content: `Loaded ${trip.title}. I can now answer using this itinerary, budget, pace, and attractions as context.`,
-        },
-      ]);
+      setMessages([]);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Failed to load trip.");
     } finally {
@@ -130,12 +140,7 @@ export function AssistantPage() {
     setSelectedTrip(undefined);
     setPendingProposal(undefined);
     setQuickPrompts(randomQuickPrompts());
-    setMessages([
-      {
-        role: "assistant",
-        content: "New general travel chat started. Ask about a city, attractions, trip ideas, budget, or travel style.",
-      },
-    ]);
+    setMessages([]);
   }
 
   async function submitMessage(event?: FormEvent, overrideMessage?: string) {
@@ -167,6 +172,33 @@ export function AssistantPage() {
     } finally {
       setSending(false);
     }
+  }
+
+  function renderComposer(centered = false) {
+    return (
+      <form onSubmit={submitMessage} className={centered ? "w-full" : "border-t border-slate-100 p-5"}>
+        <div
+          className={`flex gap-3 border border-slate-200 bg-white p-2 shadow-sm focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-100 ${
+            centered ? "rounded-3xl" : "rounded-2xl"
+          }`}
+        >
+          <input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            placeholder={selectedTrip ? "Ask for trip tweaks, cheaper options, food spots..." : "Ask about destinations, attractions, budgets..."}
+            className="min-w-0 flex-1 bg-transparent px-4 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+          />
+          <button
+            type="submit"
+            disabled={sending || !input.trim()}
+            className="flex items-center gap-2 rounded-2xl bg-linear-to-r from-blue-500 to-cyan-400 px-5 py-3 text-sm font-black text-white shadow-md transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            Send
+          </button>
+        </div>
+      </form>
+    );
   }
 
   async function applyPendingProposal() {
@@ -328,23 +360,34 @@ export function AssistantPage() {
                   )}
                 </div>
 
-                {showPromptSuggestions && (
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {quickPrompts.map((prompt) => (
-                      <button
-                        key={prompt}
-                        type="button"
-                        onClick={() => submitMessage(undefined, prompt)}
-                        className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/70 p-5">
+                {showStartScreen && (
+                  <div className="flex min-h-full items-center justify-center">
+                    <div className="w-full max-w-3xl">
+                      <h3 className="text-center text-3xl font-black text-slate-950">
+                        How can I help with your explorations?
+                      </h3>
+                      <div className="mt-8">
+                        {renderComposer(true)}
+                      </div>
+                      <div className="mt-5 flex flex-wrap justify-center gap-2">
+                        {quickPrompts.map((prompt) => (
+                          <button
+                            key={prompt}
+                            type="button"
+                            onClick={() => submitMessage(undefined, prompt)}
+                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {messages.map((message, index) => (
                   <div
                     key={`${message.role}-${index}`}
@@ -371,27 +414,6 @@ export function AssistantPage() {
                     </div>
                   </div>
                 ))}
-
-                {showPromptSuggestions && (
-                  <div className="mx-auto mt-8 max-w-2xl rounded-3xl border border-dashed border-slate-200 bg-white/80 p-6 text-center shadow-sm">
-                    <p className="text-xs font-black uppercase tracking-widest text-blue-500">Try asking</p>
-                    <h3 className="mt-2 text-2xl font-black text-slate-950">
-                      Start with a destination, budget, route, or vibe.
-                    </h3>
-                    <div className="mt-5 flex flex-wrap justify-center gap-2">
-                      {quickPrompts.slice(0, 3).map((prompt) => (
-                        <button
-                          key={`empty-${prompt}`}
-                          type="button"
-                          onClick={() => submitMessage(undefined, prompt)}
-                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
-                        >
-                          {prompt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
 
                 {pendingProposal && selectedTrip && (
                   <div className="flex justify-start">
@@ -443,24 +465,7 @@ export function AssistantPage() {
                 </div>
               )}
 
-              <form onSubmit={submitMessage} className="border-t border-slate-100 p-5">
-                <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-100">
-                  <input
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    placeholder={selectedTrip ? "Ask for trip tweaks, cheaper options, food spots..." : "Ask about destinations, attractions, budgets..."}
-                    className="min-w-0 flex-1 bg-transparent px-3 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !input.trim()}
-                    className="flex items-center gap-2 rounded-xl bg-linear-to-r from-blue-500 to-cyan-400 px-5 py-3 text-sm font-black text-white shadow-md transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    <Send className="h-4 w-4" />
-                    Send
-                  </button>
-                </div>
-              </form>
+              {!showStartScreen && renderComposer()}
             </section>
           </div>
         </div>

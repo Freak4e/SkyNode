@@ -88,24 +88,25 @@ export function DestinationsPage() {
     <div className="min-h-screen bg-[#f6f8fc] text-slate-950">
       <Navbar />
       <main className="pt-24">
-        <section className="relative overflow-hidden bg-white px-6 pb-10 pt-8 sm:px-8 lg:px-12">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(59,130,246,0.16),transparent_28%),radial-gradient(circle_at_86%_10%,rgba(16,185,129,0.14),transparent_30%)]" />
-          <div className="relative mx-auto max-w-7xl">
-            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-end">
-              <div>
-                <span className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-sky-700">
+        <section className="px-6 pb-8 pt-8 sm:px-8 lg:px-12">
+          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_86%_14%,rgba(20,184,166,0.16),transparent_32%)]" />
+            <div className="relative">
+            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
+              <div className="text-center lg:text-left">
+                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-100 ring-1 ring-white/15">
                   <Sparkles className="h-4 w-4" />
                   Explore cheap destinations
                 </span>
-                <h1 className="mt-5 max-w-3xl text-4xl font-black tracking-tight text-slate-950 sm:text-5xl">
+                <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:mx-0">
                   {origin ? `Find affordable places to fly from ${origin.cityName || origin.name}` : "Find affordable places to fly next"}
                 </h1>
-                <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
+                <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 lg:mx-0">
                   Choose your departure city first, then explore destination ideas on the map.
                 </p>
               </div>
 
-              <div className="rounded-4xl border border-stone-200 bg-white p-4 shadow-xl shadow-stone-200/60">
+              <div className="rounded-4xl border border-white/10 bg-white/10 p-4 shadow-2xl shadow-slate-950/30 backdrop-blur">
                 <div className="grid gap-3">
                   <PlaceSearchBox label="From" value={origin} onChange={setOrigin} placeholder="Search departure city" />
                   <DestinationPicker value={destination} onChange={setDestination} />
@@ -126,20 +127,21 @@ export function DestinationsPage() {
                 </div>
               </div>
             </div>
+            </div>
           </div>
         </section>
 
         <section className="px-6 py-8 sm:px-8 lg:px-12">
           <div className="mx-auto grid max-w-7xl items-start gap-6 xl:grid-cols-[1fr_430px]">
             <div className="space-y-6">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  {origin && <div className="grid gap-4 md:grid-cols-2">
                 <StatCard label="Deals found" value={String(deals.length)} icon={<Ticket className="h-5 w-5" />} />
                 <StatCard
                   label="Cheapest fare"
                   value={cheapest ? formatMoney(cheapest.price, cheapest.currency) : "—"}
                   icon={<Plane className="h-5 w-5" />}
                 />
-              </div>
+              </div>}
 
               <section className="relative min-h-130 overflow-hidden rounded-4xl border border-stone-200 bg-white shadow-xl shadow-stone-200/70">
                 <button
@@ -156,7 +158,7 @@ export function DestinationsPage() {
             </div>
 
             <aside className="space-y-6">
-              <StatCard label="On the map" value={String(mapReadyCount)} icon={<MapPin className="h-5 w-5" />} />
+              {origin && <StatCard label="On the map" value={String(mapReadyCount)} icon={<MapPin className="h-5 w-5" />} />}
                 <div className="flex min-h-130 flex-col rounded-4xl border border-stone-200 bg-white p-5 shadow-xl shadow-stone-200/70">
                 <div className="flex items-center justify-between">
                   <div>
@@ -455,7 +457,11 @@ function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
 
   return (
     <div className="mt-5 flex flex-1 flex-col">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-1" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+        {activeDeal && <DealBoard key={`${activeDeal.origin}-${activeDeal.destination}-${activeDeal.price}-${activeDeal.departDate}`} deal={activeDeal} />}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-200">
           {[
             { label: "Cheapest", value: "cheap" as const },
@@ -493,10 +499,6 @@ function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-1" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-        {activeDeal && <DealBoard key={`${activeDeal.origin}-${activeDeal.destination}-${activeDeal.price}-${activeDeal.departDate}`} deal={activeDeal} />}
-      </div>
-
       <div className="mt-3 flex items-center gap-3">
         <div className="h-2 flex-1 overflow-hidden rounded-full bg-white ring-1 ring-slate-200">
           <div className="h-full rounded-full bg-sky-500 transition-all duration-500" style={{ width: `${progress}%` }} />
@@ -525,7 +527,7 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
   return (
     <Link
       to={searchLink}
-      className="group grid h-full w-full grid-cols-[128px_minmax(0,1fr)] overflow-hidden rounded-2xl bg-slate-50 transition hover:bg-sky-50"
+      className="group relative block h-full min-h-88 w-full overflow-hidden rounded-2xl bg-slate-900 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
     >
       <DestinationPhoto
         placeName={name}
@@ -534,7 +536,36 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
         airportName={airportName}
         coordinates={coordinates}
       />
-      <div className="flex min-w-0 flex-col">
+      <div className="absolute inset-0 bg-linear-to-t from-slate-950/85 via-slate-950/25 to-transparent" />
+      <div className="absolute inset-x-0 bottom-0 p-5 text-white transition duration-300 group-hover:-translate-y-32">
+        <div className="flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-bold uppercase tracking-[0.14em] text-white/70">{deal.origin} to {deal.destination}</p>
+            <h3 className="mt-1 truncate text-3xl font-black leading-tight">{name}</h3>
+            <p className="mt-1 text-base font-black">Tickets from {formatMoney(deal.price, deal.currency)}</p>
+          </div>
+          <ChevronRight className="h-7 w-7 shrink-0" />
+        </div>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 translate-y-full bg-white p-5 text-slate-950 transition duration-300 group-hover:translate-y-0">
+        <p className="text-xs font-bold text-slate-500">{country || "Destination idea"}</p>
+        <div className="mt-1 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-xl font-black">{name}</p>
+            <p className="mt-1 truncate text-xs font-bold text-slate-500">{airportName || deal.destination}</p>
+          </div>
+          <ChevronRight className="h-5 w-5 shrink-0 text-slate-800" />
+        </div>
+        <div className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-500">
+          <CalendarDays className="h-4 w-4" />
+          {deal.departDate || "Flexible dates"}
+        </div>
+        <p className="mt-1 text-xs font-bold text-slate-500">
+          {deal.stopsText || "Flight offer"} {deal.airline ? `- ${deal.airline}` : ""}
+        </p>
+        <p className="mt-3 text-base font-black text-slate-950">Tickets from {formatMoney(deal.price, deal.currency)}</p>
+      </div>
+      <div className="hidden">
         <div className="bg-slate-900 px-4 py-3 text-white">
           <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-3">
             <div className="min-w-0">
@@ -677,10 +708,22 @@ function getPreviewTiles(lat: number, lon: number, z: number): Array<{ z: number
 
 function LoadingBoards() {
   return (
-    <div className="mt-5 space-y-3">
-      {[0, 1, 2].map((item) => (
-        <div key={item} className="h-28 animate-pulse rounded-3xl bg-slate-100" />
-      ))}
+    <div className="mt-5 flex flex-1 flex-col">
+      <div className="min-h-88 flex-1 animate-pulse overflow-hidden rounded-2xl bg-linear-to-br from-slate-200 via-slate-100 to-sky-100">
+        <div className="flex h-full flex-col justify-end p-5">
+          <div className="h-4 w-28 rounded-full bg-white/70" />
+          <div className="mt-3 h-8 w-48 rounded-full bg-white/80" />
+          <div className="mt-2 h-4 w-32 rounded-full bg-white/60" />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="h-9 w-44 rounded-full bg-slate-100" />
+        <div className="flex gap-2">
+          <div className="h-9 w-9 rounded-full bg-slate-100" />
+          <div className="h-9 w-9 rounded-full bg-slate-100" />
+        </div>
+      </div>
+      <div className="mt-3 h-2 rounded-full bg-slate-100" />
     </div>
   );
 }

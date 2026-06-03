@@ -62,6 +62,7 @@ export function TripDetailPage() {
   const [messages, setMessages] = useState<TripMessage[]>([]);
   const [tab, setTab] = useState<DetailTab>("overview");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
   const [error, setError] = useState("");
   const [messageInput, setMessageInput] = useState("");
@@ -73,6 +74,7 @@ export function TripDetailPage() {
   const [settingsDescription, setSettingsDescription] = useState("");
   const [settingsMaxMembers, setSettingsMaxMembers] = useState(6);
   const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "connecting" | "error" | "off">("off");
+  const tripRef = useRef<SavedTripDetail | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const access = trip?.access;
@@ -81,6 +83,10 @@ export function TripDetailPage() {
   const canManage = Boolean(access?.canManage);
   const pendingRequests = useMemo(() => members.filter((member) => member.status === "pending"), [members]);
   const acceptedMembers = useMemo(() => members.filter((member) => member.status === "accepted"), [members]);
+
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
 
   useEffect(() => {
     const nextTab = new URLSearchParams(location.search).get("tab");
@@ -124,7 +130,12 @@ export function TripDetailPage() {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
+      const hasCurrentTrip = tripRef.current?.id === tripId;
+      if (!hasCurrentTrip) {
+        setTrip(null);
+      }
+      setLoading(!hasCurrentTrip);
+      setRefreshing(hasCurrentTrip);
       setError("");
 
       try {
@@ -152,6 +163,7 @@ export function TripDetailPage() {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setRefreshing(false);
         }
       }
     }
@@ -358,7 +370,7 @@ export function TripDetailPage() {
     { id: "chat", label: "Chat", icon: MessageCircle, hidden: isPrivateTrip || !canChat },
   ];
 
-  if (loading || authLoading) {
+  if ((loading || authLoading) && !trip) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />
@@ -388,6 +400,13 @@ export function TripDetailPage() {
       <Navbar />
 
       <PageShell>
+        {refreshing && (
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-black text-sky-700 shadow-sm">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Syncing trip
+          </div>
+        )}
+
         <TripRoomHero
           trip={trip}
           eyebrow={

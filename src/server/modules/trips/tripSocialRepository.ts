@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { query } from "../../infrastructure/database/client.js";
 import { ensureSchema } from "../../infrastructure/database/schema.js";
+import { createNotification } from "../notifications/notificationRepository.js";
 import type {
   TripAccess,
   TripMember,
@@ -41,6 +42,11 @@ type TripSocialRow = {
   invite_token: string;
   description: string | null;
   max_members: number;
+};
+
+type TripNotificationMetaRow = {
+  title: string;
+  user_id: string;
 };
 
 export function createInviteToken(): string {
@@ -379,7 +385,22 @@ export async function requestTripJoin(
     [tripId, userId, profile.displayName, profile.avatarUrl || null, profile],
   );
 
-  return mapMember(result.rows[0]);
+  const member = mapMember(result.rows[0]);
+  const tripMeta = await getTripNotificationMeta(tripId);
+
+  if (tripMeta) {
+    await createNotification({
+      userId: tripMeta.user_id,
+      tripId,
+      type: "join_request",
+      referenceId: member.id,
+      title: "New join request",
+      body: `${member.displayName} wants to join ${tripMeta.title}.`,
+      targetPath: `/trips/${tripId}?tab=members`,
+    });
+  }
+
+  return member;
 }
 
 export async function updateTripMemberStatus(
@@ -417,7 +438,27 @@ export async function updateTripMemberStatus(
     [memberId, tripId, status],
   );
 
-  return result.rows[0] ? mapMember(result.rows[0]) : null;
+  const member = result.rows[0] ? mapMember(result.rows[0]) : null;
+
+  if (member) {
+    const tripMeta = await getTripNotificationMeta(tripId);
+
+    if (tripMeta) {
+      await createNotification({
+        userId: member.userId,
+        tripId,
+        type: status === "accepted" ? "join_accepted" : "join_declined",
+        referenceId: member.id,
+        title: status === "accepted" ? "Join request accepted" : "Join request declined",
+        body: status === "accepted"
+          ? `You were accepted into ${tripMeta.title}.`
+          : `Your request to join ${tripMeta.title} was declined.`,
+        targetPath: status === "accepted" ? `/trips/${tripId}?tab=chat` : "/explore-trips",
+      });
+    }
+  }
+
+  return member;
 }
 
 export async function updateTripSettings(
@@ -557,8 +598,7 @@ export async function sendTripMessage(
   );
 
   const row = result.rows[0];
-
-  return {
+  const message = {
     id: row.id,
     tripId: row.trip_id,
     userId: row.user_id,
@@ -569,6 +609,54 @@ export async function sendTripMessage(
     createdAt: row.created_at,
     own: true,
   };
+
+  const [tripMeta, recipients] = await Promise.all([
+    getTripNotificationMeta(tripId),
+    listAcceptedTripMemberUserIds(tripId, userId),
+  ]);
+
+  if (tripMeta && recipients.length > 0) {
+    await Promise.all(recipients.map((recipientId) => createNotification({
+      userId: recipientId,
+      tripId,
+      type: "trip_message",
+      referenceId: message.id,
+      title: row.display_name,
+      body: row.content,
+      targetPath: `/trips/${tripId}?tab=chat`,
+    })));
+  }
+
+  return message;
+}
+
+async function getTripNotificationMeta(tripId: string): Promise<TripNotificationMetaRow | null> {
+  const result = await query<TripNotificationMetaRow>(
+    `
+      select title, user_id
+      from trips
+      where id = $1
+      limit 1
+    `,
+    [tripId],
+  );
+
+  return result.rows[0] || null;
+}
+
+async function listAcceptedTripMemberUserIds(tripId: string, excludeUserId: string): Promise<string[]> {
+  const result = await query<{ user_id: string }>(
+    `
+      select user_id
+      from trip_members
+      where trip_id = $1
+        and status = 'accepted'
+        and user_id <> $2
+    `,
+    [tripId, excludeUserId],
+  );
+
+  return result.rows.map((row) => row.user_id);
 }
 
 function mapMember(row: MemberRow): TripMember {

@@ -2,10 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { MessageCircle, Users, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { listSavedTrips } from "../api/assistantApi";
+import {
+  listUnreadNotifications,
+  markNotificationRead,
+  markNotificationReferenceRead,
+} from "../api/notificationsApi";
 import { listJoinedTrips } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
 import { supabase } from "../lib/supabaseClient";
-import type { SavedTripSummary, TripMember, TripMessage } from "../../shared/types.js";
+import type { AppNotification, AppNotificationType, SavedTripSummary, TripMember, TripMessage } from "../../shared/types.js";
 
 type NotificationKind = "message" | "request";
 
@@ -13,9 +18,12 @@ type TripNotification = {
   id: string;
   body: string;
   kind: NotificationKind;
+  notificationId?: string;
+  referenceId?: string;
   target: string;
   title: string;
   tripTitle: string;
+  type?: AppNotificationType;
 };
 
 type TripSubscription = {
@@ -50,6 +58,18 @@ export function GlobalTripNotifications() {
         if (cancelled || !supabase) return;
 
         const subscriptions = buildTripSubscriptions(createdTrips, joinedTrips);
+        const tripTitles = new Map(subscriptions.map((trip) => [trip.id, trip.title]));
+
+        try {
+          const unread = await listUnreadNotifications();
+          if (!cancelled) {
+            unread.reverse().forEach((notification) => {
+              addNotificationOnce(`stored:${notification.id}`, notificationFromStored(notification, tripTitles));
+            });
+          }
+        } catch {
+          // Realtime can still work even if persisted notification fetch fails.
+        }
 
         for (const trip of subscriptions) {
           const channel = supabase
@@ -70,8 +90,10 @@ export function GlobalTripNotifications() {
                 kind: "message",
                 title: message.displayName,
                 body: message.content,
+                referenceId: message.id,
                 tripTitle: trip.title,
                 target: `/trips/${trip.id}?tab=chat`,
+                type: "trip_message",
               });
             })
             .on("broadcast", { event: "join_request" }, (payload) => {
@@ -84,8 +106,10 @@ export function GlobalTripNotifications() {
                 kind: "request",
                 title: "New join request",
                 body: `${member.displayName} wants to join ${trip.title}.`,
+                referenceId: member.id,
                 tripTitle: trip.title,
                 target: `/trips/${trip.id}?tab=members`,
+                type: "join_request",
               });
             })
             .subscribe();
@@ -97,10 +121,11 @@ export function GlobalTripNotifications() {
       }
     }
 
-    void subscribeToTrips();
+    const timer = window.setTimeout(() => void subscribeToTrips(), 800);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
       channels.forEach((channel) => {
         void supabase?.removeChannel(channel);
       });
@@ -114,16 +139,18 @@ export function GlobalTripNotifications() {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setNotifications((current) => [...current.slice(-3), { ...notification, id }]);
     window.setTimeout(() => {
-      setNotifications((current) => current.filter((item) => item.id !== id));
+      void closeNotification(id);
     }, 10000);
   }
 
-  function closeNotification(id: string) {
+  async function closeNotification(id: string) {
+    const notification = notifications.find((item) => item.id === id);
     setNotifications((current) => current.filter((item) => item.id !== id));
+    await markToastRead(notification);
   }
 
-  function openNotification(notification: TripNotification) {
-    closeNotification(notification.id);
+  async function openNotification(notification: TripNotification) {
+    await closeNotification(notification.id);
     navigate(notification.target);
   }
 
@@ -141,6 +168,41 @@ export function GlobalTripNotifications() {
       ))}
     </div>
   );
+}
+
+function notificationFromStored(
+  notification: AppNotification,
+  tripTitles: Map<string, string>,
+): Omit<TripNotification, "id"> {
+  const message = notification.type === "trip_message";
+
+  return {
+    kind: message ? "message" : "request",
+    notificationId: notification.id,
+    referenceId: notification.referenceId,
+    type: notification.type,
+    title: notification.title,
+    body: notification.body,
+    tripTitle: notification.tripId ? tripTitles.get(notification.tripId) || "Trip update" : "Trip update",
+    target: notification.targetPath,
+  };
+}
+
+async function markToastRead(notification: TripNotification | undefined) {
+  if (!notification) return;
+
+  try {
+    if (notification.notificationId) {
+      await markNotificationRead(notification.notificationId);
+      return;
+    }
+
+    if (notification.type && notification.referenceId) {
+      await markNotificationReferenceRead(notification.type, notification.referenceId);
+    }
+  } catch {
+    // Read state is best-effort; never block navigation/toast dismissal.
+  }
 }
 
 function TripNotificationToast({

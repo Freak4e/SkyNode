@@ -12,6 +12,7 @@ import { exploreRoute } from "./routes/exploreRoute.js";
 import { liveFlightsRoute } from "./routes/liveFlightsRoute.js";
 import { placesRoute } from "./routes/placesRoute.js";
 import { likedFlightsRoute } from "./modules/flights/likedFlightsRoute.js";
+import { notificationsRoute } from "./modules/notifications/notificationsRoute.js";
 
 export function createApp() {
   const app = express();
@@ -31,6 +32,7 @@ export function createApp() {
   app.use("/api/trips", tripsRoute);
   app.use("/api/chat", chatRoute);
   app.use("/api/account", accountRoute);
+  app.use("/api/notifications", notificationsRoute);
 
   app.get("/test-flight-search", (req, res) => {
     const params = new URLSearchParams(req.query as Record<string, string>);

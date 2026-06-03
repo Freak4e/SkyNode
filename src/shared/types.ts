@@ -351,6 +351,21 @@ export type UserProfileSnapshot = {
   interests?: string[];
 };
 
+export type AppNotificationType = "trip_message" | "join_request" | "join_accepted" | "join_declined";
+
+export type AppNotification = {
+  id: string;
+  userId: string;
+  tripId?: string;
+  type: AppNotificationType;
+  referenceId?: string;
+  title: string;
+  body: string;
+  targetPath: string;
+  readAt?: string;
+  createdAt: string;
+};
+
 export type SaveTripRequest = GenerateItineraryRequest & {
   title: string;
   itinerary: GeneratedItinerary;

@@ -83,6 +83,7 @@ export function PlannerPage() {
   const [manual, setManual] = useState(false);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [openingTrip, setOpeningTrip] = useState(Boolean(tripIdToOpen));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedTrip, setSavedTrip] = useState(false);
@@ -153,10 +154,17 @@ export function PlannerPage() {
   }), [budget, budgetAmount, days, destinationCode, destinationName, hotelName, loadedHotels, loadedRouteSegments, originCode, pace, selectedFlight, selectedFlights, selectedInterests, startDate, travelers, tripCities, tripNotes]);
 
   const title = tripTitle.trim() || itinerary?.destinationName || destinationName;
+  const showOpeningSavedTrip = Boolean(tripIdToOpen) && openingTrip && !itinerary;
   const tripCityNames = useMemo(() => {
     const cities = parseTripCities(tripCities);
     return cities.length > 0 ? cities : parseTripCities(destinationName);
   }, [destinationName, tripCities]);
+  useEffect(() => {
+    if (!tripIdToOpen) {
+      setOpeningTrip(false);
+    }
+  }, [tripIdToOpen]);
+
   useEffect(() => {
     if (flightsToAdd.length > 0) {
       sessionStorage.removeItem("skynode:selectedFlightsToAdd");
@@ -209,6 +217,7 @@ export function PlannerPage() {
     let cancelled = false;
 
     async function openTripInPlanner() {
+      setOpeningTrip(true);
       setLoading(true);
       setError("");
 
@@ -249,6 +258,7 @@ export function PlannerPage() {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setOpeningTrip(false);
         }
       }
     }
@@ -734,11 +744,15 @@ export function PlannerPage() {
             </button>
           </div>
         )}
-        {itinerary && !editing && (
+        {!showOpeningSavedTrip && itinerary && !editing && (
           <div className="mb-6">
             <button
               type="button"
               onClick={() => {
+                if (selectedTripId) {
+                  navigate("/trips");
+                  return;
+                }
                 setItinerary(null);
                 setEditing(false);
                 setTab("itinerary");
@@ -746,12 +760,14 @@ export function PlannerPage() {
               className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-blue-600"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to trip setup
+              {selectedTripId ? "Back to trip library" : "Back to trip setup"}
             </button>
           </div>
         )}
 
-        {!itinerary ? (
+        {showOpeningSavedTrip ? (
+          <SavedTripOpening />
+        ) : !itinerary ? (
           <TripSetupForm
             addActivity={addActivity}
             addDay={addDay}
@@ -938,6 +954,31 @@ type GeneralInfoValues = {
   tripTitle: string;
   visibility?: TripVisibility;
 };
+
+function SavedTripOpening() {
+  return (
+    <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-card">
+      <div className="relative min-h-80 bg-hero-panel p-8 text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.18),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(20,184,166,0.16),transparent_36%)]" />
+        <div className="relative flex min-h-64 flex-col justify-between">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-slate-100">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Opening saved trip
+          </div>
+          <div>
+            <div className="h-10 w-72 max-w-full animate-pulse rounded-2xl bg-white/20" />
+            <div className="mt-4 h-4 w-96 max-w-full animate-pulse rounded-full bg-white/15" />
+            <div className="mt-8 flex flex-wrap gap-2">
+              <div className="h-10 w-28 animate-pulse rounded-full bg-white/20" />
+              <div className="h-10 w-28 animate-pulse rounded-full bg-white/10" />
+              <div className="h-10 w-28 animate-pulse rounded-full bg-white/10" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function PlannerSettingsModal(props: GeneralInfoValues & {
   description: string;

@@ -336,16 +336,23 @@ export function AccountPage() {
                 <button
                   type="button"
                   onClick={() => setPhotoMenuOpen((open) => !open)}
-                  className="block rounded-full focus:outline-none focus:ring-4 focus:ring-sky-100"
+                  className="group relative block rounded-3xl focus:outline-none focus:ring-4 focus:ring-sky-100"
                   aria-label="Change profile picture"
                 >
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="" className="h-12 w-12 rounded-full object-cover" />
+                    <img
+                      src={avatarUrl}
+                      alt=""
+                      className="h-28 w-28 rounded-3xl border-4 border-white bg-white object-contain shadow-md transition group-hover:brightness-95"
+                    />
                   ) : (
-                    <div className="grid h-12 w-12 place-items-center rounded-full bg-violet-600 text-lg font-black lowercase text-white">
-                      {displayName.charAt(0)}
+                    <div className="grid h-28 w-28 place-items-center rounded-3xl border-4 border-white bg-slate-900 text-white shadow-md transition group-hover:bg-slate-800">
+                      <UserRound className="h-9 w-9" />
                     </div>
                   )}
+                  <span className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full bg-white text-slate-700 shadow-md ring-1 ring-slate-200">
+                    <Camera className="h-4 w-4" />
+                  </span>
                 </button>
                 {photoMenuOpen && (
                   <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-2xl">

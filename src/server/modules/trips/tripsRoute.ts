@@ -16,6 +16,7 @@ import {
   sendTripMessage,
   updateTripMemberStatus,
   updateTripSettings,
+  updateUserTripProfileSnapshots,
 } from "./tripSocialRepository.js";
 import { getAuthenticatedUserId, getOptionalUserId, optionalAuth, requireAuth } from "../../middleware/authMiddleware.js";
 import type {
@@ -25,6 +26,7 @@ import type {
   TripJoinRequest,
   UpdateTripMemberRequest,
   UpdateTripSettingsRequest,
+  UserProfileSnapshot,
 } from "../../../shared/types.js";
 
 export const tripsRoute = Router();
@@ -35,6 +37,8 @@ tripsRoute.get("/public", optionalAuth, async (req, res) => {
       {
         destination: typeof req.query.destination === "string" ? req.query.destination : undefined,
         budget: typeof req.query.budget === "string" ? req.query.budget : undefined,
+        includePast: req.query.includePast === "true",
+        ownerId: typeof req.query.ownerId === "string" ? req.query.ownerId : undefined,
         pace: typeof req.query.pace === "string" ? req.query.pace : undefined,
       },
       getOptionalUserId(res),
@@ -94,6 +98,35 @@ tripsRoute.get("/", async (_req, res) => {
     return res.status(502).json({
       trips: [],
       warnings: [error instanceof Error ? error.message : "Failed to load trips."],
+    });
+  }
+});
+
+tripsRoute.patch("/profile", async (req, res) => {
+  try {
+    const profile = req.body as UserProfileSnapshot;
+
+    if (!profile.displayName?.trim()) {
+      return res.status(400).json({ warnings: ["Missing profile details."] });
+    }
+
+    await updateUserTripProfileSnapshots(getAuthenticatedUserId(res), {
+      displayName: profile.displayName.trim(),
+      avatarUrl: profile.avatarUrl || undefined,
+      birthDate: profile.birthDate || undefined,
+      homeCity: profile.homeCity?.trim() || undefined,
+      bio: profile.bio?.trim() || undefined,
+      interests: Array.isArray(profile.interests)
+        ? profile.interests.filter((item): item is string => typeof item === "string")
+        : undefined,
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("[route:trips] profile sync failed", error);
+
+    return res.status(502).json({
+      warnings: [error instanceof Error ? error.message : "Failed to sync profile."],
     });
   }
 });

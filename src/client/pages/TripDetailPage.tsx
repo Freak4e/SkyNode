@@ -4,6 +4,7 @@ import {
   CalendarDays,
   Check,
   Copy,
+  ImageOff,
   Loader2,
   Lock,
   MapPin,
@@ -21,6 +22,7 @@ import {
 import { loadSavedTrip } from "../api/assistantApi";
 import {
   deleteTrip,
+  listPublicTrips,
   listTripMembers,
   listTripMessages,
   profileFromUser,
@@ -40,10 +42,14 @@ import { ItineraryTimeline } from "../features/planner/ItineraryTimeline";
 import { CommunityItineraryView } from "../features/trip-community/CommunityItineraryView";
 import { TripRoomHero } from "../features/trip-community/TripRoomHero";
 import { TripVisibilityBadge } from "../features/trip-community/TripVisibilityBadge";
-import { tripDisplayCity } from "../utils/destinationImage";
-import type { SavedTripDetail, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
+import { tripDisplayCity, useDestinationImage } from "../utils/destinationImage";
+import type { SavedTripDetail, SavedTripSummary, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
 
 type DetailTab = "overview" | "itinerary" | "members" | "chat";
+type OpenTravelerProfile = {
+  profile: UserProfileSnapshot;
+  userId?: string;
+};
 
 export function TripDetailPage() {
   const { tripId = "" } = useParams();
@@ -60,7 +66,7 @@ export function TripDetailPage() {
   const [copied, setCopied] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState<UserProfileSnapshot | null>(null);
+  const [profileOpen, setProfileOpen] = useState<OpenTravelerProfile | null>(null);
   const [settingsVisibility, setSettingsVisibility] = useState<TripVisibility>("private");
   const [settingsDescription, setSettingsDescription] = useState("");
   const [settingsMaxMembers, setSettingsMaxMembers] = useState(6);
@@ -480,7 +486,7 @@ export function TripDetailPage() {
                   <h3 className="text-lg font-black text-slate-950">Group</h3>
                   <div className="mt-4 space-y-3">
                     {acceptedMembers.slice(0, 4).map((member) => (
-                      <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : undefined} onOpenProfile={() => setProfileOpen(memberProfile(member))} />
+                      <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : undefined} onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })} />
                     ))}
                   </div>
                 </Card>
@@ -524,7 +530,7 @@ export function TripDetailPage() {
               <h2 className="text-2xl font-black text-slate-950">Travelers</h2>
               <div className="mt-5 space-y-3">
                 {acceptedMembers.map((member) => (
-                  <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : "Member"} onOpenProfile={() => setProfileOpen(memberProfile(member))} />
+                  <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : "Member"} onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })} />
                 ))}
               </div>
             </Card>
@@ -538,7 +544,7 @@ export function TripDetailPage() {
                   <div className="mt-5 space-y-3">
                     {pendingRequests.map((member) => (
                       <div key={member.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                        <MemberRow member={member} onOpenProfile={() => setProfileOpen(memberProfile(member))} />
+                        <MemberRow member={member} onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })} />
                         <div className="mt-3 flex gap-2">
                           <Button
                             type="button"
@@ -580,7 +586,7 @@ export function TripDetailPage() {
                 <p className="py-8 text-center text-sm font-semibold text-slate-500">No messages yet. Say hello to the group.</p>
               ) : messages.map((message) => (
                 <div key={message.id} className={`flex gap-3 ${message.own ? "flex-row-reverse" : ""}`}>
-                  <button type="button" className="shrink-0" onClick={() => setProfileOpen(message.profile || { displayName: message.displayName, avatarUrl: message.avatarUrl })} title={`View ${message.displayName}`}>
+                  <button type="button" className="shrink-0" onClick={() => setProfileOpen({ profile: message.profile || { displayName: message.displayName, avatarUrl: message.avatarUrl }, userId: message.userId })} title={`View ${message.displayName}`}>
                     {message.avatarUrl ? (
                       <img src={message.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover ring-2 ring-transparent transition hover:ring-sky-200" />
                     ) : (
@@ -686,7 +692,7 @@ export function TripDetailPage() {
       )}
 
       {profileOpen && (
-        <TravelerProfileModal profile={profileOpen} onClose={() => setProfileOpen(null)} />
+        <TravelerProfileModal profile={profileOpen.profile} userId={profileOpen.userId} onClose={() => setProfileOpen(null)} />
       )}
 
       <Footer />
@@ -746,13 +752,43 @@ function MemberRow({ member, badge, onOpenProfile }: { member: TripMember; badge
   );
 }
 
-function TravelerProfileModal({ profile, onClose }: { profile: UserProfileSnapshot; onClose: () => void }) {
+function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfileSnapshot; userId?: string; onClose: () => void }) {
   const age = profile.birthDate ? profileAge(profile.birthDate) : "";
+  const [trips, setTrips] = useState<SavedTripSummary[]>([]);
+  const [loadingTrips, setLoadingTrips] = useState(Boolean(userId));
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrips() {
+      if (!userId) {
+        setTrips([]);
+        setLoadingTrips(false);
+        return;
+      }
+
+      setLoadingTrips(true);
+      try {
+        const publicTrips = await listPublicTrips({ ownerId: userId, includePast: true });
+        if (!cancelled) setTrips(publicTrips.slice(0, 4));
+      } catch {
+        if (!cancelled) setTrips([]);
+      } finally {
+        if (!cancelled) setLoadingTrips(false);
+      }
+    }
+
+    void loadTrips();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close profile" onClick={onClose} />
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+      <div className="relative max-h-[88vh] w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
         <div className="bg-linear-to-br from-sky-100 via-white to-cyan-50 p-6">
           <button type="button" onClick={onClose} className="absolute right-4 top-4 rounded-full bg-white/80 p-2 text-slate-500 shadow-sm hover:text-slate-900" aria-label="Close profile">
             <X className="h-4 w-4" />
@@ -769,29 +805,85 @@ function TravelerProfileModal({ profile, onClose }: { profile: UserProfileSnapsh
               <h2 className="text-2xl font-black text-slate-950">
                 {profile.displayName}{age ? `, ${age}` : ""}
               </h2>
-              {profile.homeCity && (
-                <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-slate-500">
+              <div className="mt-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/85 px-3 py-1.5 text-sm font-black text-slate-700 ring-1 ring-slate-200">
                   <MapPin className="h-4 w-4" />
-                  {profile.homeCity}
-                </p>
-              )}
+                  {profile.homeCity || "City not added"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-        <div className="p-6">
-          <p className="text-sm font-semibold leading-6 text-slate-600">
-            {profile.bio || "This traveler has not added a bio yet."}
-          </p>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {(profile.interests?.length ? profile.interests : ["No interests added"]).slice(0, 8).map((interest) => (
-              <span key={interest} className="rounded-full bg-sky-50 px-3 py-1.5 text-xs font-black text-sky-800 ring-1 ring-sky-100">
-                {interest}
-              </span>
-            ))}
-          </div>
+        <div className="max-h-[58vh] overflow-y-auto p-6">
+          <section>
+            <p className="text-xs font-black uppercase tracking-widest text-sky-600">Bio</p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">
+              {profile.bio || "This traveler has not added a bio yet."}
+            </p>
+          </section>
+
+          <section className="mt-6">
+            <p className="text-xs font-black uppercase tracking-widest text-sky-600">Interests</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(profile.interests?.length ? profile.interests : ["No interests added"]).slice(0, 10).map((interest) => (
+                <span key={interest} className="rounded-full bg-sky-50 px-3 py-1.5 text-xs font-black text-sky-800 ring-1 ring-sky-100">
+                  {interest}
+                </span>
+              ))}
+            </div>
+          </section>
+
+          <section className="mt-6">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-sky-600">Public trips</p>
+                <p className="mt-1 text-sm font-semibold text-slate-500">Trips this member created publicly.</p>
+              </div>
+              {trips.length > 0 && <span className="text-xs font-black text-slate-400">{trips.length}</span>}
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {loadingTrips && [1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl bg-slate-100" />)}
+              {!loadingTrips && trips.length === 0 && (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-500 sm:col-span-2">
+                  No public created trips yet.
+                </div>
+              )}
+              {!loadingTrips && trips.map((trip) => <TravelerProfileTripCard key={trip.id} trip={trip} />)}
+            </div>
+          </section>
         </div>
       </div>
     </div>
+  );
+}
+
+function TravelerProfileTripCard({ trip }: { trip: SavedTripSummary }) {
+  const imageUrl = useDestinationImage(trip.destinationName);
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-slate-100 bg-white text-slate-950 shadow-sm">
+      <div className="relative h-24 overflow-hidden bg-slate-100">
+        {imageUrl ? (
+          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="grid h-full place-items-center bg-slate-100 text-slate-400">
+            <ImageOff className="h-6 w-6" />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-linear-to-t from-slate-950/50 via-transparent to-transparent" />
+      </div>
+      <div className="p-3">
+        <p className="line-clamp-1 text-sm font-black text-slate-950">{trip.title}</p>
+        <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-500">
+          <MapPin className="h-3.5 w-3.5" />
+          {trip.destinationName}
+        </p>
+        <p className="mt-2 text-xs font-black capitalize text-sky-700">
+          {trip.days} days · {trip.pace}
+        </p>
+      </div>
+    </article>
   );
 }
 

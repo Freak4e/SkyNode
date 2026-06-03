@@ -1,12 +1,12 @@
 import {
   CalendarDays,
   Camera,
-  Edit3,
   ImageOff,
   Loader2,
   LockKeyhole,
   LogOut,
   MapPin,
+  PencilLine,
   Save,
   Trash2,
   UserRound,
@@ -16,8 +16,10 @@ import type { FormEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import type { User } from "@supabase/supabase-js";
+import { DotLottieReact } from "@lottiefiles/dotlottie-react";
 import { authHeaders } from "../api/authHeaders.js";
 import { listSavedTrips } from "../api/assistantApi";
+import { syncTripProfile } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
@@ -25,6 +27,7 @@ import { Button, ButtonLink, Card, PageShell } from "../components/ui";
 import { isSupabaseConfigured, supabase } from "../lib/supabaseClient";
 import { useDestinationImage } from "../utils/destinationImage.js";
 import type { SavedTripSummary } from "../../shared/types.js";
+import airplaneHero from "../../../assets/test4.lottie";
 
 const interestOptions = ["Culture", "Food", "Nature", "Beaches", "Nightlife", "Museums", "Hiking", "Photography", "Wellness", "Budget trips"];
 
@@ -79,6 +82,19 @@ function profileFormFromUser(user: User | null): ProfileForm {
   };
 }
 
+function profileSnapshotFromForm(form: ProfileForm, fallbackName: string) {
+  const fullName = displayNameFromForm(form, fallbackName);
+
+  return {
+    displayName: fullName,
+    avatarUrl: form.avatarUrl.trim() || undefined,
+    birthDate: form.birthDate || undefined,
+    homeCity: form.homeCity.trim() || undefined,
+    bio: form.bio.trim() || undefined,
+    interests: form.interests,
+  };
+}
+
 export function AccountPage() {
   const { user, loading, signOut } = useAuth();
   const navigate = useNavigate();
@@ -92,6 +108,7 @@ export function AccountPage() {
   const [createdTrips, setCreatedTrips] = useState<SavedTripSummary[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [form, setForm] = useState<ProfileForm>(() => profileFormFromUser(user));
+  const [photoMenuOpen, setPhotoMenuOpen] = useState(false);
 
   useEffect(() => {
     setForm(profileFormFromUser(user));
@@ -148,20 +165,56 @@ export function AccountPage() {
       setError("Choose an image file for your profile picture.");
       return;
     }
-    if (file.size > 450_000) {
-      setError("Choose an image under 450 KB. Large profile photos should be optimized first.");
+    if (file.size > 1_000_000) {
+      setError("Choose an image under 1 MB. Large profile photos should be optimized first.");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        setForm((current) => ({ ...current, avatarUrl: reader.result as string }));
+        const nextAvatarUrl = reader.result;
+        setForm((current) => ({ ...current, avatarUrl: nextAvatarUrl }));
         setError("");
+        void saveAvatarUrl(nextAvatarUrl);
       }
     };
     reader.onerror = () => setError("Could not read that image file.");
     reader.readAsDataURL(file);
+  }
+
+  async function saveAvatarUrl(nextAvatarUrl: string) {
+    if (!supabase) {
+      setError("Auth is disabled: missing Supabase environment variables.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: {
+          first_name: form.firstName.trim(),
+          last_name: form.lastName.trim(),
+          full_name: displayNameFromForm(form, ""),
+          birth_date: form.birthDate,
+          home_city: form.homeCity.trim(),
+          avatar_url: nextAvatarUrl,
+          bio: form.bio.trim(),
+          interests: form.interests,
+        },
+      });
+
+      if (updateError) throw updateError;
+      await syncTripProfile(profileSnapshotFromForm({ ...form, avatarUrl: nextAvatarUrl }, user?.email?.split("@")[0] || "Traveler"));
+      setSuccess(nextAvatarUrl ? "Profile photo updated." : "Profile photo removed.");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to update profile photo.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSaveProfile(event: FormEvent) {
@@ -191,6 +244,7 @@ export function AccountPage() {
       });
 
       if (updateError) throw updateError;
+      await syncTripProfile(profileSnapshotFromForm(form, user?.email?.split("@")[0] || "Traveler"));
 
       setEditing(false);
       setSuccess("Profile updated.");
@@ -255,22 +309,76 @@ export function AccountPage() {
       <Navbar />
 
       <PageShell containerClassName="max-w-6xl">
-        <section className="mb-6 overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-card">
-          <div className="relative h-36 overflow-hidden bg-slate-50 sm:h-40">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_22%,rgba(14,165,233,0.18),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(45,212,191,0.18),transparent_28%),linear-gradient(135deg,#f8fafc,#e0f2fe_56%,#f8fafc)]" />
-            <div className="absolute left-10 top-8 h-16 w-48 rounded-full bg-white/45 blur-2xl" />
-            <div className="absolute right-14 top-10 h-20 w-64 rounded-full bg-cyan-100/40 blur-2xl" />
-            <div className="absolute inset-0 bg-linear-to-t from-white via-white/10 to-transparent" />
+        <section className="mb-6 overflow-visible rounded-3xl border border-slate-100 bg-white shadow-card">
+          <div className="relative h-48 overflow-hidden rounded-t-3xl bg-[#eefbff] sm:h-56 md:h-60">
+            <DotLottieReact
+              src={airplaneHero}
+              loop
+              autoplay
+              layout={{ fit: "cover", align: [0.08, 0.42] }}
+              className="pointer-events-none absolute inset-0 h-full w-full scale-[1.00]"
+            />
+            <div className="absolute inset-0 bg-linear-to-t from-white via-white/5 to-transparent" />
           </div>
           <div className="flex flex-wrap items-end justify-between gap-5 px-6 pb-6">
             <div className="-mt-16 flex flex-wrap items-end gap-4">
-              {avatarUrl ? (
-                <img src={avatarUrl} alt="" className="h-28 w-28 rounded-3xl border-4 border-white bg-white object-cover object-top shadow-md" />
-              ) : (
-                <div className="grid h-28 w-28 place-items-center rounded-3xl border-4 border-white bg-slate-900 text-white shadow-md">
-                  <UserRound className="h-9 w-9" />
-                </div>
-              )}
+              <div className="relative">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    handlePhotoFile(event.target.files?.[0]);
+                    event.currentTarget.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setPhotoMenuOpen((open) => !open)}
+                  className="block rounded-3xl focus:outline-none focus:ring-4 focus:ring-sky-100"
+                  aria-label="Change profile picture"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" className="h-28 w-28 rounded-3xl border-4 border-white bg-white object-contain shadow-md" />
+                  ) : (
+                    <div className="grid h-28 w-28 place-items-center rounded-3xl border-4 border-white bg-slate-900 text-white shadow-md">
+                      <UserRound className="h-9 w-9" />
+                    </div>
+                  )}
+                  <span className="absolute bottom-2 right-2 grid h-8 w-8 place-items-center rounded-full bg-white text-slate-700 shadow-md ring-1 ring-slate-200">
+                    <Camera className="h-4 w-4" />
+                  </span>
+                </button>
+                {photoMenuOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-2 w-44 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-2xl">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                        setPhotoMenuOpen(false);
+                      }}
+                    >
+                      <Camera className="h-4 w-4" />
+                      Change photo
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!avatarUrl}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={() => {
+                        updateField("avatarUrl", "");
+                        void saveAvatarUrl("");
+                        setPhotoMenuOpen(false);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                      Remove photo
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="pb-1">
                 <p className="text-xs font-black uppercase tracking-widest text-sky-700">My account</p>
                 <h1 className="mt-1 text-3xl font-black leading-tight text-slate-950 md:text-4xl">{displayName}</h1>
@@ -290,7 +398,7 @@ export function AccountPage() {
         <section className="grid gap-6 lg:grid-cols-[1fr_340px]">
           <div className="space-y-6">
             <Card as="form" className="p-6" onSubmit={handleSaveProfile}>
-              <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="relative flex flex-wrap items-start justify-between gap-4 pr-12">
                 <div>
                   <p className="text-xs font-black uppercase tracking-widest text-blue-500">Profile</p>
                   <h2 className="mt-2 text-2xl font-black text-slate-950">Personal details</h2>
@@ -298,10 +406,11 @@ export function AccountPage() {
                     Your public travel profile is shown when someone checks who is requesting to join, who is in a trip room, or who sent a chat message.
                   </p>
                 </div>
-                <Button
+                <button
                   type="button"
-                  tone="ghost"
-                  icon={editing ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
+                  className="absolute right-0 top-0 grid h-12 w-12 place-items-center rounded-full border border-sky-100 bg-sky-50 text-sky-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-sky-100 focus:outline-none focus:ring-4 focus:ring-sky-100"
+                  aria-label={editing ? "Cancel editing" : "Edit personal details"}
+                  title={editing ? "Cancel editing" : "Edit personal details"}
                   onClick={() => {
                     setEditing((value) => !value);
                     setError("");
@@ -309,8 +418,8 @@ export function AccountPage() {
                     if (editing) setForm(profileFormFromUser(user));
                   }}
                 >
-                  {editing ? "Cancel" : "Edit"}
-                </Button>
+                  {editing ? <X className="h-5 w-5" /> : <PencilLine className="h-5 w-5" />}
+                </button>
               </div>
 
               <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -318,28 +427,6 @@ export function AccountPage() {
                 <ProfileInput label="Last name" value={form.lastName} disabled={!editing} onChange={(value) => updateField("lastName", value)} />
                 <ProfileInput label="Date of birth" type="date" value={form.birthDate} disabled={!editing} onChange={(value) => updateField("birthDate", value)} />
                 <ProfileInput label="Home city" value={form.homeCity} disabled={!editing} placeholder="Ljubljana, Vienna, Berlin..." onChange={(value) => updateField("homeCity", value)} />
-
-                <div className="sm:col-span-2">
-                  <p className="mb-2 text-sm font-bold text-slate-600">Profile picture</p>
-                  <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-100 bg-slate-50 p-4">
-                    {avatarUrl ? (
-                      <img src={avatarUrl} alt="" className="h-20 w-20 rounded-2xl bg-white object-cover object-top ring-1 ring-slate-200" />
-                    ) : (
-                      <div className="grid h-20 w-20 place-items-center rounded-2xl bg-slate-900 text-white">
-                        <UserRound className="h-8 w-8" />
-                      </div>
-                    )}
-                    <div className="flex min-w-0 flex-1 flex-wrap gap-2">
-                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={(event) => handlePhotoFile(event.target.files?.[0])} />
-                      <Button type="button" tone="ghost" disabled={!editing} icon={<Camera className="h-4 w-4" />} onClick={() => fileInputRef.current?.click()}>
-                        Change photo
-                      </Button>
-                      <Button type="button" tone="ghost" disabled={!editing || !avatarUrl} icon={<X className="h-4 w-4" />} onClick={() => updateField("avatarUrl", "")}>
-                        Remove old photo
-                      </Button>
-                    </div>
-                  </div>
-                </div>
 
                 <label className="block sm:col-span-2">
                   <span className="mb-1 block text-sm font-bold text-slate-600">Short bio</span>

@@ -48,12 +48,16 @@ export function profileFromUser(user: User | null | undefined): UserProfileSnaps
 export async function listPublicTrips(filters: {
   destination?: string;
   budget?: string;
+  includePast?: boolean;
+  ownerId?: string;
   pace?: string;
 }): Promise<SavedTripSummary[]> {
   const params = new URLSearchParams();
 
   if (filters.destination) params.set("destination", filters.destination);
   if (filters.budget) params.set("budget", filters.budget);
+  if (filters.includePast) params.set("includePast", "true");
+  if (filters.ownerId) params.set("ownerId", filters.ownerId);
   if (filters.pace) params.set("pace", filters.pace);
 
   const response = await fetch(`/api/trips/public?${params.toString()}`, {
@@ -66,6 +70,22 @@ export async function listPublicTrips(filters: {
   }
 
   return body.trips;
+}
+
+export async function syncTripProfile(profile: UserProfileSnapshot): Promise<void> {
+  const response = await fetch("/api/trips/profile", {
+    method: "PATCH",
+    headers: {
+      ...(await authHeaders()),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(profile),
+  });
+  const body = await response.json() as { warnings?: string[] };
+
+  if (!response.ok) {
+    throw new Error(body.warnings?.[0] || "Failed to sync trip profile.");
+  }
 }
 
 export async function listJoinedTrips(): Promise<SavedTripSummary[]> {

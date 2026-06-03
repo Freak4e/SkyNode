@@ -352,7 +352,7 @@ export async function listJoinedTrips(userId: string): Promise<SavedTripSummary[
 }
 
 export async function listDiscoverableTrips(
-  filters: { destination?: string; budget?: string; pace?: string },
+  filters: { destination?: string; budget?: string; includePast?: boolean; ownerId?: string; pace?: string },
   userId?: string,
 ): Promise<SavedTripSummary[]> {
   await ensureSchema();

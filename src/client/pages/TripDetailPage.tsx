@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   CalendarDays,
   Check,
   Copy,
+  Globe2,
   ImageOff,
   Loader2,
   Lock,
@@ -33,6 +34,7 @@ import {
   updateTripSettings,
   visibilityDescriptions,
 } from "../api/tripsApi";
+import { getTravelMissionStats } from "../api/travelMissionsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
@@ -42,8 +44,9 @@ import { ItineraryTimeline } from "../features/planner/ItineraryTimeline";
 import { CommunityItineraryView } from "../features/trip-community/CommunityItineraryView";
 import { TripRoomHero } from "../features/trip-community/TripRoomHero";
 import { TripVisibilityBadge } from "../features/trip-community/TripVisibilityBadge";
+import { supabase } from "../lib/supabaseClient";
 import { tripDisplayCity, useDestinationImage } from "../utils/destinationImage";
-import type { SavedTripDetail, SavedTripSummary, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
+import type { SavedTripDetail, SavedTripSummary, TravelMissionStats, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
 
 type DetailTab = "overview" | "itinerary" | "members" | "chat";
 type OpenTravelerProfile = {
@@ -53,6 +56,7 @@ type OpenTravelerProfile = {
 
 export function TripDetailPage() {
   const { tripId = "" } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [trip, setTrip] = useState<SavedTripDetail | null>(null);
@@ -60,6 +64,7 @@ export function TripDetailPage() {
   const [messages, setMessages] = useState<TripMessage[]>([]);
   const [tab, setTab] = useState<DetailTab>("overview");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState("");
   const [error, setError] = useState("");
   const [messageInput, setMessageInput] = useState("");
@@ -70,7 +75,9 @@ export function TripDetailPage() {
   const [settingsVisibility, setSettingsVisibility] = useState<TripVisibility>("private");
   const [settingsDescription, setSettingsDescription] = useState("");
   const [settingsMaxMembers, setSettingsMaxMembers] = useState(6);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<"connected" | "connecting" | "error" | "off">("off");
+  const tripRef = useRef<SavedTripDetail | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
 
   const access = trip?.access;
   const canViewItinerary = Boolean(access?.canViewItinerary);
@@ -78,6 +85,39 @@ export function TripDetailPage() {
   const canManage = Boolean(access?.canManage);
   const pendingRequests = useMemo(() => members.filter((member) => member.status === "pending"), [members]);
   const acceptedMembers = useMemo(() => members.filter((member) => member.status === "accepted"), [members]);
+
+  useEffect(() => {
+    tripRef.current = trip;
+  }, [trip]);
+
+  useEffect(() => {
+    const nextTab = new URLSearchParams(location.search).get("tab");
+    if (nextTab === "overview" || nextTab === "itinerary" || nextTab === "members" || nextTab === "chat") {
+      setTab(nextTab);
+    }
+  }, [location.search]);
+
+  function addMessages(nextMessages: TripMessage | TripMessage[]) {
+    const incomingMessages = Array.isArray(nextMessages) ? nextMessages : [nextMessages];
+
+    setMessages((current) => {
+      const byId = new Map(current.map((message) => [message.id, message]));
+
+      for (const message of incomingMessages) {
+        byId.set(message.id, message);
+      }
+
+      return Array.from(byId.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    });
+  }
+
+  function addOrUpdateMember(member: TripMember) {
+    setMembers((current) => {
+      const byId = new Map(current.map((item) => [item.id, item]));
+      byId.set(member.id, member);
+      return Array.from(byId.values());
+    });
+  }
 
   useEffect(() => {
     if (!tripId || authLoading) {
@@ -92,7 +132,12 @@ export function TripDetailPage() {
     let cancelled = false;
 
     async function load() {
-      setLoading(true);
+      const hasCurrentTrip = tripRef.current?.id === tripId;
+      if (!hasCurrentTrip) {
+        setTrip(null);
+      }
+      setLoading(!hasCurrentTrip);
+      setRefreshing(hasCurrentTrip);
       setError("");
 
       try {
@@ -111,7 +156,7 @@ export function TripDetailPage() {
         }
 
         if (loadedTrip.access?.canChat) {
-          setMessages(await listTripMessages(tripId));
+          addMessages(await listTripMessages(tripId));
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -120,6 +165,7 @@ export function TripDetailPage() {
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setRefreshing(false);
         }
       }
     }
@@ -136,22 +182,66 @@ export function TripDetailPage() {
       return;
     }
 
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const chatScroll = chatScrollRef.current;
+    if (chatScroll) {
+      chatScroll.scrollTo({ top: chatScroll.scrollHeight, behavior: "smooth" });
+    }
   }, [messages, tab]);
 
   useEffect(() => {
-    if (!canChat || tab !== "chat") {
+    if (!canChat || !supabase) {
+      setRealtimeStatus("off");
       return;
     }
 
-    const timer = window.setInterval(() => {
-      void listTripMessages(tripId)
-        .then(setMessages)
-        .catch(() => undefined);
-    }, 2000);
+    setRealtimeStatus("connecting");
+    let active = true;
+    const realtimeClient = supabase;
+    const channel = realtimeClient
+      .channel(`trip-room-${tripId}`, {
+        config: {
+          broadcast: {
+            self: false,
+          },
+        },
+      })
+      .on("broadcast", { event: "message" }, (payload) => {
+        const receivedMessage = (payload.payload as { message?: TripMessage }).message;
+        if (!receivedMessage) return;
 
-    return () => window.clearInterval(timer);
-  }, [canChat, tab, tripId]);
+        const message = {
+          ...receivedMessage,
+          own: Boolean(user?.id && receivedMessage.userId === user.id),
+        };
+        addMessages(message);
+      })
+      .on("broadcast", { event: "join_request" }, (payload) => {
+        if (!canManage) return;
+
+        const member = (payload.payload as { member?: TripMember }).member;
+        if (!member || member.status !== "pending" || member.userId === user?.id) {
+          return;
+        }
+
+        addOrUpdateMember(member);
+      })
+      .subscribe((status) => {
+        if (!active) return;
+
+        if (status === "SUBSCRIBED") {
+          setRealtimeStatus("connected");
+        }
+
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          setRealtimeStatus("error");
+        }
+      });
+
+    return () => {
+      active = false;
+      void realtimeClient.removeChannel(channel);
+    };
+  }, [canChat, canManage, tripId, user?.id]);
 
   async function handleJoinRequest() {
     if (!trip || !user) {
@@ -206,7 +296,7 @@ export function TripDetailPage() {
         content: messageInput.trim(),
         profile: profileFromUser(user),
       });
-      setMessages((current) => [...current, message]);
+      addMessages(message);
       setMessageInput("");
     } catch (sendError) {
       setError(sendError instanceof Error ? sendError.message : "Failed to send message.");
@@ -268,6 +358,7 @@ export function TripDetailPage() {
   }
 
   const isPersonalSavedTrip = trip?.visibility === "private" && access?.isOwner;
+  const isPrivateTrip = trip?.visibility === "private";
   const cityName = trip ? tripDisplayCity(trip) : "";
   const routeLabel = trip?.cities?.length
     ? trip.cities.map((city) => city.name).join(" -> ")
@@ -277,11 +368,11 @@ export function TripDetailPage() {
   const tabs: Array<{ id: DetailTab; label: string; icon: typeof Users; hidden?: boolean }> = [
     { id: "overview", label: "Overview", icon: MapPin },
     { id: "itinerary", label: "Itinerary", icon: CalendarDays },
-    { id: "members", label: "Members", icon: Users, hidden: !canManage && access?.membershipStatus !== "accepted" },
-    { id: "chat", label: "Chat", icon: MessageCircle, hidden: !canChat },
+    { id: "members", label: "Members", icon: Users, hidden: isPrivateTrip || (!canManage && access?.membershipStatus !== "accepted") },
+    { id: "chat", label: "Chat", icon: MessageCircle, hidden: isPrivateTrip || !canChat },
   ];
 
-  if (loading || authLoading) {
+  if ((loading || authLoading) && !trip) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navbar />
@@ -311,6 +402,13 @@ export function TripDetailPage() {
       <Navbar />
 
       <PageShell>
+        {refreshing && (
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-black text-sky-700 shadow-sm">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Syncing trip
+          </div>
+        )}
+
         <TripRoomHero
           trip={trip}
           eyebrow={
@@ -525,16 +623,26 @@ export function TripDetailPage() {
           )
         )}
 
-        {tab === "members" && (
-          <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-            <Card padding="lg">
-              <h2 className="text-2xl font-black text-slate-950">Travelers</h2>
-              <div className="mt-5 space-y-3">
-                {acceptedMembers.map((member) => (
-                  <MemberRow key={member.id} member={member} badge={member.role === "owner" ? "Host" : "Member"} onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })} />
-                ))}
+        {tab === "members" && !isPrivateTrip && (
+          <div className="grid gap-4">
+            <section>
+              <CrewSectionTitle />
+              <div className="mt-5">
+                {acceptedMembers.length === 0 ? (
+                  <p className="text-sm font-semibold text-slate-500">No accepted members yet.</p>
+                ) : (
+                  <div className="mx-auto flex max-w-4xl flex-wrap justify-center gap-x-8 gap-y-8">
+                    {acceptedMembers.map((member) => (
+                      <MemberProfileCard
+                        key={member.id}
+                        member={member}
+                        onOpenProfile={() => setProfileOpen({ profile: memberProfile(member), userId: member.userId })}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            </Card>
+            </section>
 
             {canManage && (
               <Card padding="lg">
@@ -576,13 +684,18 @@ export function TripDetailPage() {
           </div>
         )}
 
-        {tab === "chat" && canChat && (
+        {tab === "chat" && canChat && !isPrivateTrip && (
           <Card padding="none" className="overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
               <h2 className="text-xl font-black text-slate-950">Group chat</h2>
               <p className="text-sm font-semibold text-slate-500">Coordinate plans with accepted trip members.</p>
+              {realtimeStatus === "error" && (
+                <p className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-700">
+                  Live updates are not connected. New messages may require refresh until Supabase Realtime reconnects.
+                </p>
+              )}
             </div>
-            <div className="max-h-[420px] space-y-3 overflow-y-auto px-5 py-4">
+            <div ref={chatScrollRef} className="max-h-[420px] space-y-3 overflow-y-auto px-5 py-4">
               {messages.length === 0 ? (
                 <p className="py-8 text-center text-sm font-semibold text-slate-500">No messages yet. Say hello to the group.</p>
               ) : messages.map((message) => (
@@ -602,7 +715,6 @@ export function TripDetailPage() {
                   </div>
                 </div>
               ))}
-              <div ref={chatEndRef} />
             </div>
             <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-slate-100 p-4">
               <input
@@ -753,10 +865,38 @@ function MemberRow({ member, badge, onOpenProfile }: { member: TripMember; badge
   );
 }
 
+function MemberProfileCard({ member, onOpenProfile }: { member: TripMember; onOpenProfile?: () => void }) {
+  return (
+    <div className="w-36 min-w-0 p-3 text-center">
+      <button type="button" onClick={onOpenProfile} className="mx-auto grid h-28 w-28 place-items-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200 transition hover:ring-blue-300" title={`View ${member.displayName}`}>
+        {member.avatarUrl ? (
+          <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <UserRound className="h-8 w-8 text-slate-500" />
+        )}
+      </button>
+      <p className="mt-3 truncate text-sm font-black text-slate-950">{member.displayName}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{member.role === "owner" ? "Host" : "Member"}</p>
+    </div>
+  );
+}
+
+function CrewSectionTitle() {
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <span className="h-px flex-1 bg-linear-to-r from-transparent via-blue-300/70 to-blue-500/50" />
+      <h2 className="shrink-0 text-center text-2xl font-extrabold text-slate-950 md:text-3xl">The Crew</h2>
+      <span className="h-px flex-1 bg-linear-to-l from-transparent via-blue-300/70 to-blue-500/50" />
+    </div>
+  );
+}
+
 function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfileSnapshot; userId?: string; onClose: () => void }) {
   const age = profile.birthDate ? profileAge(profile.birthDate) : "";
   const [trips, setTrips] = useState<SavedTripSummary[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(Boolean(userId));
+  const [missionStats, setMissionStats] = useState<TravelMissionStats | null>(null);
+  const [loadingMissionStats, setLoadingMissionStats] = useState(Boolean(userId));
 
   useEffect(() => {
     let cancelled = false;
@@ -786,6 +926,34 @@ function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfi
     };
   }, [userId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMissionStats() {
+      if (!userId) {
+        setMissionStats(null);
+        setLoadingMissionStats(false);
+        return;
+      }
+
+      setLoadingMissionStats(true);
+      try {
+        const stats = await getTravelMissionStats(userId);
+        if (!cancelled) setMissionStats(stats);
+      } catch {
+        if (!cancelled) setMissionStats(null);
+      } finally {
+        if (!cancelled) setLoadingMissionStats(false);
+      }
+    }
+
+    void loadMissionStats();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-4 sm:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close profile" onClick={onClose} />
@@ -806,10 +974,14 @@ function TravelerProfileModal({ profile, userId, onClose }: { profile: UserProfi
               <h2 className="text-2xl font-black text-slate-950">
                 {profile.displayName}{age ? `, ${age}` : ""}
               </h2>
-              <div className="mt-2">
+              <div className="mt-2 flex flex-wrap gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/85 px-3 py-1.5 text-sm font-black text-slate-700 ring-1 ring-slate-200">
                   <MapPin className="h-4 w-4" />
                   {profile.homeCity || "City not added"}
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/85 px-3 py-1.5 text-sm font-black text-cyan-800 ring-1 ring-cyan-100">
+                  <Globe2 className="h-4 w-4" />
+                  {loadingMissionStats ? "Loading..." : `${missionStats?.unlockedCountries || 0}/${missionStats?.totalCountries || 195} countries`}
                 </span>
               </div>
             </div>
@@ -886,6 +1058,65 @@ function TravelerProfileTripCard({ trip }: { trip: SavedTripSummary }) {
       </div>
     </article>
   );
+}
+
+function tripMessageFromRealtimeRow(row: Record<string, unknown>, currentUserId?: string): TripMessage {
+  const displayName = stringValue(row.display_name) || "Traveler";
+  const avatarUrl = stringValue(row.avatar_url);
+  const profile = profileSnapshotFromRealtimeValue(row.profile, displayName, avatarUrl);
+  const userId = stringValue(row.user_id);
+
+  return {
+    id: stringValue(row.id),
+    tripId: stringValue(row.trip_id),
+    userId,
+    displayName,
+    avatarUrl: avatarUrl || undefined,
+    profile,
+    content: stringValue(row.content),
+    createdAt: stringValue(row.created_at),
+    own: Boolean(currentUserId && userId === currentUserId),
+  };
+}
+
+function tripMemberFromRealtimeRow(row: Record<string, unknown>): TripMember {
+  const displayName = stringValue(row.display_name) || "Traveler";
+  const avatarUrl = stringValue(row.avatar_url);
+
+  return {
+    id: stringValue(row.id),
+    userId: stringValue(row.user_id),
+    role: stringValue(row.role) === "owner" ? "owner" : "member",
+    status: normalizeMemberStatus(row.status),
+    displayName,
+    avatarUrl: avatarUrl || undefined,
+    profile: profileSnapshotFromRealtimeValue(row.profile, displayName, avatarUrl),
+    createdAt: stringValue(row.created_at),
+  };
+}
+
+function profileSnapshotFromRealtimeValue(value: unknown, displayName: string, avatarUrl: string): UserProfileSnapshot {
+  const profile = typeof value === "object" && value ? value as Record<string, unknown> : {};
+  const interests = Array.isArray(profile.interests)
+    ? profile.interests.filter((item): item is string => typeof item === "string")
+    : undefined;
+
+  return {
+    displayName: stringValue(profile.displayName) || displayName,
+    avatarUrl: stringValue(profile.avatarUrl) || avatarUrl || undefined,
+    birthDate: stringValue(profile.birthDate) || undefined,
+    homeCity: stringValue(profile.homeCity) || undefined,
+    bio: stringValue(profile.bio) || undefined,
+    interests,
+  };
+}
+
+function normalizeMemberStatus(value: unknown): TripMember["status"] {
+  return value === "accepted" || value === "declined" ? value : "pending";
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function profileAge(value: string): string {

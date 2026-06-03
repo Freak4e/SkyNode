@@ -1,22 +1,21 @@
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, Loader2, Trash2, X } from "lucide-react";
-import { applyTripChange, loadSavedTrip, listSavedTrips } from "../api/assistantApi";
+import { ArrowLeft, Check, CheckCircle2, Loader2, Send, Trash2, UserRound, X } from "lucide-react";
+import { applyTripChange, loadSavedTrip } from "../api/assistantApi";
 import { listLikedFlights } from "../api/likedFlightsApi";
 import { generateItinerary, saveTrip } from "../api/plannerApi";
-import { profileFromUser, deleteTrip } from "../api/tripsApi";
+import { profileFromUser, deleteTrip, listTripMembers, listTripMessages, sendTripMessage, tripInviteUrl, updateTripMember, updateTripSettings } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { ItineraryMap } from "../components/ItineraryMap";
 import { Navbar } from "../components/Navbar";
-import { Button, PageShell } from "../components/ui";
+import { Button, Card, PageShell } from "../components/ui";
 import { CalendarView } from "../features/planner/CalendarView";
 import { ItineraryTimeline } from "../features/planner/ItineraryTimeline";
 import { PlannerHero } from "../features/planner/PlannerHero";
 import { PlannerRail } from "../features/planner/PlannerRail";
 import { TripSetupForm } from "../features/planner/TripSetupForm";
-import { TripsDrawer } from "../features/planner/TripsDrawer";
 import { SaveTripModal } from "../features/trip-community/SaveTripModal";
 import type { PlannerTab } from "../features/planner/plannerTypes";
 import { assignDayCities, budgetLevelFromAmount, emptyDays, normalizeDays, parseTripCities } from "../features/planner/plannerUtils";
@@ -29,8 +28,9 @@ import type {
   ItineraryItem,
   LikedFlight,
   SavedTripDetail,
-  SavedTripSummary,
   TravelPace,
+  TripMember,
+  TripMessage,
   TripChangeProposal,
   TripHotel,
   TripLocation,
@@ -51,6 +51,7 @@ export function PlannerPage() {
   const initialOriginCode = restoredDraft?.originCode || params.get("from") || "";
   const initialDestination = restoredDraft?.destinationName || params.get("toName") || params.get("destination") || "";
   const initialStartDate = restoredDraft?.startDate || params.get("date") || today;
+  const tripIdToOpen = params.get("tripId") || "";
 
   const [tripTitle, setTripTitle] = useState(restoredDraft?.tripTitle || "");
   const [destinationCode, setDestinationCode] = useState(initialDestinationCode);
@@ -81,18 +82,23 @@ export function PlannerPage() {
   const [tab, setTab] = useState<PlannerTab>("itinerary");
   const [manual, setManual] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [tripsOpen, setTripsOpen] = useState(false);
-  const [savedTrips, setSavedTrips] = useState<SavedTripSummary[]>([]);
-  const [tripSearch, setTripSearch] = useState("");
-  const [loadingTrips, setLoadingTrips] = useState(false);
-  const [loadingTripId, setLoadingTripId] = useState("");
   const [loading, setLoading] = useState(false);
+  const [openingTrip, setOpeningTrip] = useState(Boolean(tripIdToOpen));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [savedTrip, setSavedTrip] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
   const [generalModalOpen, setGeneralModalOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [tripVisibility, setTripVisibility] = useState<TripVisibility>("private");
+  const [tripDescription, setTripDescription] = useState("");
+  const [tripMaxMembers, setTripMaxMembers] = useState(6);
+  const [tripInviteToken, setTripInviteToken] = useState("");
+  const [settingsInitialTab, setSettingsInitialTab] = useState<"general" | "sharing">("general");
+  const [members, setMembers] = useState<TripMember[]>([]);
+  const [messages, setMessages] = useState<TripMessage[]>([]);
+  const [messageInput, setMessageInput] = useState("");
+  const [actionLoading, setActionLoading] = useState("");
   const [deleting, setDeleting] = useState(false);
 
   const request = useMemo<GenerateItineraryRequest>(() => ({
@@ -148,14 +154,16 @@ export function PlannerPage() {
   }), [budget, budgetAmount, days, destinationCode, destinationName, hotelName, loadedHotels, loadedRouteSegments, originCode, pace, selectedFlight, selectedFlights, selectedInterests, startDate, travelers, tripCities, tripNotes]);
 
   const title = tripTitle.trim() || itinerary?.destinationName || destinationName;
+  const showOpeningSavedTrip = Boolean(tripIdToOpen) && openingTrip && !itinerary;
   const tripCityNames = useMemo(() => {
     const cities = parseTripCities(tripCities);
     return cities.length > 0 ? cities : parseTripCities(destinationName);
   }, [destinationName, tripCities]);
-  const filteredTrips = savedTrips.filter((trip) => {
-    const search = tripSearch.trim().toLowerCase();
-    return !search || `${trip.title} ${trip.destinationName} ${trip.destinationCode}`.toLowerCase().includes(search);
-  });
+  useEffect(() => {
+    if (!tripIdToOpen) {
+      setOpeningTrip(false);
+    }
+  }, [tripIdToOpen]);
 
   useEffect(() => {
     if (flightsToAdd.length > 0) {
@@ -196,58 +204,125 @@ export function PlannerPage() {
     };
   }, [authLoading, user]);
 
-  async function loadTrips() {
-    if (authLoading || !user) return;
-    setLoadingTrips(true);
-    setError("");
-
-    try {
-      setSavedTrips(await listSavedTrips());
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load trips.");
-    } finally {
-      setLoadingTrips(false);
+  useEffect(() => {
+    if (!tripIdToOpen || authLoading) {
+      return;
     }
-  }
 
-  async function openTripsDrawer() {
-    setTripsOpen(true);
-    await loadTrips();
-  }
+    if (!user) {
+      navigate("/auth", { state: { from: `/planner?tripId=${encodeURIComponent(tripIdToOpen)}` } });
+      return;
+    }
 
-  async function selectTrip(tripId: string) {
-    setLoadingTripId(tripId);
-    setError("");
+    let cancelled = false;
 
-    try {
-      const trip: SavedTripDetail = await loadSavedTrip(tripId);
-      setSelectedTripId(trip.id);
-      setTripTitle(trip.title);
-      setDestinationName(trip.destinationName);
-      setStartDate(trip.startDate);
-      setDays(trip.days);
-      setBudgetAmount(trip.estimatedTotalCost || 1800);
-      setTripCities(trip.cities?.map((city) => city.name).join(", ") || trip.destinationName);
-      setHotelName(trip.hotels?.[0]?.name || "");
-      setLoadedHotels(trip.hotels);
-      setLoadedRouteSegments(trip.routeSegments);
-      setTripNotes(trip.notes || "");
-      setSelectedFlights(trip.selectedFlights || (trip.selectedFlight ? [trip.selectedFlight] : []));
-      setDestinationCode(trip.destinationCode || "");
-      setOriginCode(trip.routeSegments?.find((segment) => segment.type === "flight")?.from || "");
-      setPace(trip.pace);
-      setSelectedInterests(trip.interests);
-      setItinerary(trip.itinerary);
-      setDraftDays(trip.itinerary.days);
-      setEditing(false);
+    async function openTripInPlanner() {
+      setOpeningTrip(true);
+      setLoading(true);
+      setError("");
+
+      try {
+        const trip: SavedTripDetail = await loadSavedTrip(tripIdToOpen);
+        if (cancelled) return;
+
+        setSelectedTripId(trip.id);
+        setTripTitle(trip.title);
+        setDestinationName(trip.destinationName);
+        setStartDate(trip.startDate);
+        setDays(trip.days);
+        setBudgetAmount(trip.estimatedTotalCost || 1800);
+        setTripCities(trip.cities?.map((city) => city.name).join(", ") || trip.destinationName);
+        setHotelName(trip.hotels?.[0]?.name || "");
+        setLoadedHotels(trip.hotels);
+        setLoadedRouteSegments(trip.routeSegments);
+        setTripNotes(trip.notes || "");
+        setSelectedFlights(trip.selectedFlights || (trip.selectedFlight ? [trip.selectedFlight] : []));
+        setTripVisibility(trip.visibility || "private");
+        setTripDescription(trip.description || "");
+        setTripMaxMembers(trip.maxMembers || 6);
+        setTripInviteToken(trip.inviteToken || "");
+        setDestinationCode(trip.destinationCode || "");
+        setOriginCode(trip.routeSegments?.find((segment) => segment.type === "flight")?.from || "");
+        setPace(trip.pace);
+        setSelectedInterests(trip.interests);
+        setItinerary(trip.itinerary);
+        setDraftDays(trip.itinerary.days);
+        setManual(false);
+        setEditing(false);
+        setTab("itinerary");
+        setSavedTrip(false);
+      } catch (loadError) {
+        if (!cancelled) {
+          setError(loadError instanceof Error ? loadError.message : "Failed to open trip in planner.");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setOpeningTrip(false);
+        }
+      }
+    }
+
+    void openTripInPlanner();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, navigate, tripIdToOpen, user]);
+
+  useEffect(() => {
+    if (!selectedTripId || tripVisibility === "private" || !user) {
+      setMembers([]);
+      setMessages([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSocial() {
+      try {
+        const [nextMembers, nextMessages] = await Promise.all([
+          listTripMembers(selectedTripId),
+          listTripMessages(selectedTripId).catch(() => []),
+        ]);
+        if (!cancelled) {
+          setMembers(nextMembers);
+          setMessages(nextMessages);
+        }
+      } catch {
+        if (!cancelled) {
+          setMembers([]);
+        }
+      }
+    }
+
+    void loadSocial();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedTripId, tripVisibility, user]);
+
+  useEffect(() => {
+    if (tab !== "chat" || !selectedTripId || tripVisibility === "private") {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void listTripMessages(selectedTripId).then(setMessages).catch(() => undefined);
+    }, 2500);
+
+    return () => window.clearInterval(timer);
+  }, [selectedTripId, tab, tripVisibility]);
+
+  useEffect(() => {
+    if (tripVisibility === "private" && (tab === "members" || tab === "chat")) {
       setTab("itinerary");
-      setTripsOpen(false);
-      setSavedTrip(false);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load trip.");
-    } finally {
-      setLoadingTripId("");
     }
+  }, [tab, tripVisibility]);
+
+  function openTripsLibrary() {
+    navigate("/trips");
   }
 
   async function createWithAi(event?: FormEvent) {
@@ -327,12 +402,14 @@ export function PlannerPage() {
         maxMembers: options.maxMembers,
         ownerProfile: profileFromUser(user),
       });
+      setTripVisibility(options.visibility);
+      setTripDescription(options.description);
+      setTripMaxMembers(options.maxMembers);
       setItinerary(cleanItinerary);
       setDraftDays(cleanDays);
       setSavedTrip(true);
       setSaveModalOpen(false);
       sessionStorage.removeItem("skynode:plannerDraft");
-      await loadTrips();
       navigate(`/trips/${response.tripId}`);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to save trip.");
@@ -359,6 +436,11 @@ export function PlannerPage() {
       if (selectedTripId && user) {
         const proposal: TripChangeProposal = { summary: "Updated itinerary from planner.", itinerary: updated };
         const updatedTrip = await applyTripChange(selectedTripId, proposal);
+        await updateTripSettings(selectedTripId, {
+          visibility: tripVisibility,
+          description: tripDescription,
+          maxMembers: tripMaxMembers,
+        });
         setItinerary(updatedTrip.itinerary);
         setDraftDays(updatedTrip.itinerary.days);
         setSavedTrip(true);
@@ -393,12 +475,18 @@ export function PlannerPage() {
     setPace("balanced");
     setSelectedInterests(["culture", "food", "nature"]);
     setSelectedFlights(readSelectedFlightsFromSession());
+    setTripVisibility("private");
+    setTripDescription("");
+    setTripMaxMembers(6);
+    setTripInviteToken("");
+    setMembers([]);
+    setMessages([]);
+    setMessageInput("");
     sessionStorage.removeItem("skynode:plannerDraft");
     setDraftDays(emptyDays(3));
     setItinerary(null);
     setManual(false);
     setEditing(false);
-    setTripsOpen(false);
     setSavedTrip(false);
   }
 
@@ -439,7 +527,6 @@ export function PlannerPage() {
       await deleteTrip(selectedTripId);
       setDeleteOpen(false);
       startNewTrip();
-      await loadTrips();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Failed to delete trip.");
       setDeleteOpen(false);
@@ -548,6 +635,76 @@ export function PlannerPage() {
     setSelectedFlights((current) => mergeFlights(current, flights));
   }
 
+  async function savePlannerSettings(values: GeneralInfoValues & { visibility: TripVisibility; description: string; maxMembers: number }) {
+    applyGeneralInfo(values);
+    setTripVisibility(values.visibility);
+    setTripDescription(values.description);
+    setTripMaxMembers(values.maxMembers);
+
+    if (!selectedTripId || !user) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+
+    try {
+      const updated = await updateTripSettings(selectedTripId, {
+        visibility: values.visibility,
+        description: values.description,
+        maxMembers: values.maxMembers,
+      });
+      setTripVisibility(updated.visibility || values.visibility);
+      setTripDescription(updated.description || "");
+      setTripMaxMembers(updated.maxMembers || values.maxMembers);
+      setTripInviteToken(updated.inviteToken || tripInviteToken);
+      if (values.visibility === "private" && (tab === "members" || tab === "chat")) {
+        setTab("itinerary");
+      }
+    } catch (settingsError) {
+      setError(settingsError instanceof Error ? settingsError.message : "Failed to save trip settings.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleMemberDecision(memberId: string, status: "accepted" | "declined") {
+    if (!selectedTripId) return;
+
+    setActionLoading(memberId);
+    setError("");
+
+    try {
+      await updateTripMember(selectedTripId, memberId, { status });
+      setMembers(await listTripMembers(selectedTripId));
+    } catch (decisionError) {
+      setError(decisionError instanceof Error ? decisionError.message : "Failed to update member.");
+    } finally {
+      setActionLoading("");
+    }
+  }
+
+  async function handleSendMessage(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedTripId || !user || !messageInput.trim()) return;
+
+    setActionLoading("message");
+    setError("");
+
+    try {
+      const message = await sendTripMessage(selectedTripId, {
+        content: messageInput.trim(),
+        profile: profileFromUser(user),
+      });
+      setMessages((current) => [...current, message]);
+      setMessageInput("");
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Failed to send message.");
+    } finally {
+      setActionLoading("");
+    }
+  }
+
   function saveDraftForFlightSearch() {
     writePlannerDraftToSession({
       budgetAmount,
@@ -587,11 +744,15 @@ export function PlannerPage() {
             </button>
           </div>
         )}
-        {itinerary && !editing && (
+        {!showOpeningSavedTrip && itinerary && !editing && (
           <div className="mb-6">
             <button
               type="button"
               onClick={() => {
+                if (selectedTripId) {
+                  navigate("/trips");
+                  return;
+                }
                 setItinerary(null);
                 setEditing(false);
                 setTab("itinerary");
@@ -599,12 +760,14 @@ export function PlannerPage() {
               className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-blue-600"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to trip setup
+              {selectedTripId ? "Back to trip library" : "Back to trip setup"}
             </button>
           </div>
         )}
 
-        {!itinerary ? (
+        {showOpeningSavedTrip ? (
+          <SavedTripOpening />
+        ) : !itinerary ? (
           <TripSetupForm
             addActivity={addActivity}
             addDay={addDay}
@@ -643,7 +806,7 @@ export function PlannerPage() {
             initialStep={initialSetupStep}
             onAddFlight={saveDraftForFlightSearch}
             onAddLikedFlight={addLikedFlight}
-            onOpenTrips={openTripsDrawer}
+            onOpenTrips={openTripsLibrary}
             onRemoveFlight={removeSelectedFlight}
             startDate={startDate}
             toggleInterest={toggleInterest}
@@ -664,7 +827,8 @@ export function PlannerPage() {
               itinerary={itinerary}
               isSavedTrip={Boolean(selectedTripId)}
               onDelete={() => setDeleteOpen(true)}
-              onOpenGeneral={() => setGeneralModalOpen(true)}
+              onOpenSettings={() => { setSettingsInitialTab("general"); setGeneralModalOpen(true); }}
+              onVisibilityChange={setTripVisibility}
               saveTrip={openSaveModal}
               saving={saving}
               setActive={setTab}
@@ -674,6 +838,7 @@ export function PlannerPage() {
               saveEdits={saveEdits}
               title={title}
               travelers={travelers}
+              visibility={tripVisibility}
             />
             {error && <Banner kind="error" text={error} />}
             {savedTrip && <Banner kind="success" text="Trip saved." />}
@@ -698,43 +863,51 @@ export function PlannerPage() {
             )}
             {tab === "calendar" && <CalendarView itinerary={itinerary} />}
             {tab === "map" && <ItineraryMap itinerary={itinerary} hotels={request.hotels} routeSegments={request.routeSegments} />}
+            {tab === "members" && tripVisibility !== "private" && selectedTripId && (
+              <PlannerMembersPanel
+                actionLoading={actionLoading}
+                members={members}
+                onDecision={(memberId, status) => void handleMemberDecision(memberId, status)}
+              />
+            )}
+            {tab === "chat" && tripVisibility !== "private" && selectedTripId && (
+              <PlannerChatPanel
+                actionLoading={actionLoading}
+                hasOtherMembers={members.some((member) => member.status === "accepted" && member.role !== "owner")}
+                messageInput={messageInput}
+                messages={messages}
+                onInput={setMessageInput}
+                onSend={(event) => void handleSendMessage(event)}
+              />
+            )}
           </>
         )}
       </PageShell>
-      {tripsOpen && (
-        <TripsDrawer
-          authLoading={authLoading}
-          filteredTrips={filteredTrips}
-          loadingTripId={loadingTripId}
-          loadingTrips={loadingTrips}
-          onClose={() => setTripsOpen(false)}
-          onNewTrip={startNewTrip}
-          onSearch={setTripSearch}
-          onSelect={selectTrip}
-          savedTrips={savedTrips}
-          search={tripSearch}
-          user={Boolean(user)}
-        />
-      )}
       <SaveTripModal
         open={saveModalOpen}
         saving={saving}
+        initialValues={{ visibility: tripVisibility, description: tripDescription, maxMembers: tripMaxMembers }}
         onClose={() => setSaveModalOpen(false)}
         onConfirm={(values) => void saveTripNow(values)}
       />
       {generalModalOpen && (
-        <GeneralInfoModal
+        <PlannerSettingsModal
           budgetAmount={budgetAmount}
           days={days}
+          description={tripDescription}
           destinationName={destinationName}
           hotelName={hotelName}
+          initialTab={settingsInitialTab}
+          inviteToken={tripInviteToken}
+          maxMembers={tripMaxMembers}
           notes={tripNotes}
           onClose={() => setGeneralModalOpen(false)}
-          onSubmit={applyGeneralInfo}
+          onSubmit={savePlannerSettings}
           startDate={startDate}
           travelers={travelers}
           tripCities={tripCities}
           tripTitle={tripTitle}
+          visibility={tripVisibility}
         />
       )}
 
@@ -770,27 +943,68 @@ export function PlannerPage() {
 type GeneralInfoValues = {
   budgetAmount: number;
   days: number;
+  description?: string;
   destinationName: string;
   hotelName: string;
+  maxMembers?: number;
   notes: string;
   startDate: string;
   travelers: number;
   tripCities: string;
   tripTitle: string;
+  visibility?: TripVisibility;
 };
 
-function GeneralInfoModal(props: GeneralInfoValues & { onClose: () => void; onSubmit: (values: GeneralInfoValues) => void }) {
+function SavedTripOpening() {
+  return (
+    <section className="overflow-hidden rounded-3xl border border-slate-100 bg-white shadow-card">
+      <div className="relative min-h-80 bg-hero-panel p-8 text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.18),transparent_34%),radial-gradient(circle_at_82%_18%,rgba(20,184,166,0.16),transparent_36%)]" />
+        <div className="relative flex min-h-64 flex-col justify-between">
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-slate-100">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Opening saved trip
+          </div>
+          <div>
+            <div className="h-10 w-72 max-w-full animate-pulse rounded-2xl bg-white/20" />
+            <div className="mt-4 h-4 w-96 max-w-full animate-pulse rounded-full bg-white/15" />
+            <div className="mt-8 flex flex-wrap gap-2">
+              <div className="h-10 w-28 animate-pulse rounded-full bg-white/20" />
+              <div className="h-10 w-28 animate-pulse rounded-full bg-white/10" />
+              <div className="h-10 w-28 animate-pulse rounded-full bg-white/10" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlannerSettingsModal(props: GeneralInfoValues & {
+  description: string;
+  initialTab: "general" | "sharing";
+  inviteToken: string;
+  maxMembers: number;
+  onClose: () => void;
+  onSubmit: (values: GeneralInfoValues & { visibility: TripVisibility; description: string; maxMembers: number }) => void;
+  visibility: TripVisibility;
+}) {
   const [values, setValues] = useState<GeneralInfoValues>({
     budgetAmount: props.budgetAmount,
+    description: props.description,
     days: props.days,
     destinationName: props.destinationName,
     hotelName: props.hotelName,
+    maxMembers: props.maxMembers,
     notes: props.notes,
     startDate: props.startDate,
     travelers: props.travelers,
     tripCities: props.tripCities,
     tripTitle: props.tripTitle,
+    visibility: props.visibility,
   });
+  const [tab, setTab] = useState<"general" | "sharing">(props.initialTab);
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   function update<K extends keyof GeneralInfoValues>(key: K, value: GeneralInfoValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -798,58 +1012,129 @@ function GeneralInfoModal(props: GeneralInfoValues & { onClose: () => void; onSu
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    props.onSubmit(values);
+    props.onSubmit({
+      ...values,
+      description: values.description || "",
+      maxMembers: values.maxMembers || 6,
+      visibility: values.visibility || "private",
+    });
   }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/50 p-4 sm:items-center">
-      <button type="button" className="absolute inset-0" aria-label="Close general info" onClick={props.onClose} />
+      <button type="button" className="absolute inset-0" aria-label="Close settings" onClick={props.onClose} />
       <form onSubmit={submit} className="relative w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-          <div>
-            <h2 className="text-2xl font-black text-slate-950">General trip info</h2>
-            <p className="mt-1 text-sm font-semibold text-slate-500">Update the details around your itinerary without rebuilding the trip.</p>
+        <div className="flex items-start justify-between gap-4 px-6 pt-5">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-black text-slate-950">Settings</h2>
+            <div className="mt-4 flex flex-wrap items-end gap-1 border-b border-slate-200">
+              {(["general", "sharing"] as const).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setTab(item)}
+                  className={`relative -mb-px rounded-t-2xl border px-5 py-2.5 text-sm font-black capitalize transition ${
+                    tab === item
+                      ? "border-slate-200 border-b-white bg-white text-slate-950"
+                      : "border-transparent bg-slate-100/80 text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                  }`}
+                >
+                  {item === "sharing" ? "Visibility" : "General"}
+                </button>
+              ))}
+            </div>
           </div>
           <button type="button" onClick={props.onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="grid max-h-[70vh] gap-5 overflow-y-auto p-6 md:grid-cols-2">
-          <ModalField label="Trip name">
-            <input className="form-field" value={values.tripTitle} onChange={(event) => update("tripTitle", event.target.value)} placeholder="Trip name" />
-          </ModalField>
-          <ModalField label="Destination">
-            <input className="form-field" value={values.destinationName} onChange={(event) => update("destinationName", event.target.value)} placeholder="Destination" />
-          </ModalField>
-          <ModalField label="Start date">
-            <input className="form-field" type="date" value={values.startDate} onChange={(event) => update("startDate", event.target.value)} />
-          </ModalField>
-          <ModalField label="Days">
-            <input className="form-field" type="number" min={1} max={14} value={values.days} onChange={(event) => update("days", Number(event.target.value || 1))} />
-          </ModalField>
-          <ModalField label="Travelers">
-            <input className="form-field" type="number" min={1} max={12} value={values.travelers} onChange={(event) => update("travelers", Number(event.target.value || 1))} />
-          </ModalField>
-          <ModalField label="Budget (USD)">
-            <input className="form-field" type="number" min={0} step={50} value={values.budgetAmount} onChange={(event) => update("budgetAmount", Number(event.target.value || 0))} />
-          </ModalField>
-          <ModalField label="Cities">
-            <input className="form-field" value={values.tripCities} onChange={(event) => update("tripCities", event.target.value)} placeholder="Skopje, Ohrid" />
-          </ModalField>
-          <ModalField label="Hotel or neighborhood">
-            <input className="form-field" value={values.hotelName} onChange={(event) => update("hotelName", event.target.value)} placeholder="Hotel or neighborhood" />
-          </ModalField>
-          <div className="md:col-span-2">
-            <ModalField label="Notes">
-              <textarea className="form-field min-h-28 resize-y" value={values.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anything important about the trip" />
-            </ModalField>
-          </div>
+        <div className="max-h-[70vh] overflow-y-auto px-6 py-5">
+          {tab === "general" ? (
+            <div className="grid gap-5 md:grid-cols-2">
+              <ModalField label="Trip name">
+                <input className="form-field" value={values.tripTitle} onChange={(event) => update("tripTitle", event.target.value)} placeholder="Trip name" />
+              </ModalField>
+              <ModalField label="Destination">
+                <input className="form-field" value={values.destinationName} onChange={(event) => update("destinationName", event.target.value)} placeholder="Destination" />
+              </ModalField>
+              <ModalField label="Start date">
+                <input className="form-field" type="date" value={values.startDate} onChange={(event) => update("startDate", event.target.value)} />
+              </ModalField>
+              <ModalField label="Days">
+                <input className="form-field" type="number" min={1} max={14} value={values.days} onChange={(event) => update("days", Number(event.target.value || 1))} />
+              </ModalField>
+              <ModalField label="Travelers">
+                <input className="form-field" type="number" min={1} max={12} value={values.travelers} onChange={(event) => update("travelers", Number(event.target.value || 1))} />
+              </ModalField>
+              <ModalField label="Budget (USD)">
+                <input className="form-field" type="number" min={0} step={50} value={values.budgetAmount} onChange={(event) => update("budgetAmount", Number(event.target.value || 0))} />
+              </ModalField>
+              <ModalField label="Cities">
+                <input className="form-field" value={values.tripCities} onChange={(event) => update("tripCities", event.target.value)} placeholder="Skopje, Ohrid" />
+              </ModalField>
+              <ModalField label="Hotel or neighborhood">
+                <input className="form-field" value={values.hotelName} onChange={(event) => update("hotelName", event.target.value)} placeholder="Hotel or neighborhood" />
+              </ModalField>
+              <div className="md:col-span-2">
+                <ModalField label="Notes">
+                  <textarea className="form-field min-h-28 resize-y" value={values.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anything important about the trip" />
+                </ModalField>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {(["private", "invite", "public"] as TripVisibility[]).map((visibility) => (
+                  <button
+                    key={visibility}
+                    type="button"
+                    onClick={() => update("visibility", visibility)}
+                    className={`rounded-2xl border p-4 text-left transition ${values.visibility === visibility ? "border-blue-300 bg-blue-50 shadow-sm shadow-blue-100" : "border-slate-200 bg-white hover:border-blue-200"}`}
+                  >
+                    <span className="block text-sm font-black capitalize text-slate-950">{visibility === "invite" ? "Invite only" : visibility}</span>
+                    <span className="mt-1 block text-sm font-semibold leading-5 text-slate-500">
+                      {visibility === "private"
+                        ? "Only you can open this itinerary."
+                        : visibility === "invite"
+                        ? "Only people with your invite link can request to join."
+                        : "Visible in Community with members and group chat."}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {values.visibility !== "private" && props.inviteToken && (
+                <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+                  <p className="text-sm font-black text-slate-950">Invite link</p>
+                  <p className="mt-1 break-all text-xs font-semibold text-slate-600">{tripInviteUrl(props.inviteToken)}</p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="mt-3"
+                    icon={copiedInvite ? <Check className="h-4 w-4" /> : undefined}
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(tripInviteUrl(props.inviteToken));
+                      setCopiedInvite(true);
+                      window.setTimeout(() => setCopiedInvite(false), 1600);
+                    }}
+                  >
+                    {copiedInvite ? "Copied" : "Copy invite link"}
+                  </Button>
+                </div>
+              )}
+              <ModalField label="Short description">
+                <textarea className="form-field min-h-28 resize-y" value={values.description || ""} onChange={(event) => update("description", event.target.value)} maxLength={280} placeholder="Tell travelers what this trip is about..." />
+              </ModalField>
+              <ModalField label="Max travelers">
+                <input className="form-field" type="number" min={2} max={20} value={values.maxMembers || 6} onChange={(event) => update("maxMembers", Number(event.target.value || 2))} />
+              </ModalField>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-6 py-4">
           <Button type="button" tone="ghost" onClick={props.onClose}>Cancel</Button>
-          <Button type="submit">Save general info</Button>
+          <Button type="submit">Save settings</Button>
         </div>
       </form>
     </div>
@@ -862,6 +1147,136 @@ function ModalField({ children, label }: { children: ReactNode; label: string })
       <span className="mb-2 block text-sm font-black text-slate-900">{label}</span>
       {children}
     </label>
+  );
+}
+
+function PlannerMembersPanel({ actionLoading, members, onDecision }: { actionLoading: string; members: TripMember[]; onDecision: (memberId: string, status: "accepted" | "declined") => void }) {
+  const accepted = members.filter((member) => member.status === "accepted");
+  const pending = members.filter((member) => member.status === "pending");
+
+  return (
+    <div className="grid gap-4">
+      <section>
+        <CrewSectionTitle />
+        <div className="mt-5">
+          {accepted.length === 0 ? (
+            <p className="text-sm font-semibold text-slate-500">No accepted members yet.</p>
+          ) : (
+            <div className="mx-auto flex max-w-4xl flex-wrap justify-center gap-x-8 gap-y-8">
+              {accepted.map((member) => (
+                <PlannerMemberProfileCard key={member.id} member={member} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <Card padding="lg">
+        <h2 className="text-2xl font-black text-slate-950">Join requests</h2>
+        {pending.length === 0 ? (
+          <p className="mt-4 text-sm font-semibold text-slate-500">No pending requests right now.</p>
+        ) : (
+          <div className="mt-5 space-y-3">
+            {pending.map((member) => (
+              <div key={member.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <PlannerMemberRow member={member} />
+                <div className="mt-3 flex gap-2">
+                  <Button type="button" size="sm" disabled={actionLoading === member.id} icon={actionLoading === member.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} onClick={() => onDecision(member.id, "accepted")}>
+                    Accept
+                  </Button>
+                  <Button type="button" tone="ghost" size="sm" disabled={actionLoading === member.id} icon={<X className="h-4 w-4" />} onClick={() => onDecision(member.id, "declined")}>
+                    Decline
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function PlannerMemberProfileCard({ member }: { member: TripMember }) {
+  return (
+    <div className="w-36 min-w-0 text-center">
+      <div className="mx-auto grid h-28 w-28 place-items-center overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200">
+        {member.avatarUrl ? (
+          <img src={member.avatarUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <UserRound className="h-8 w-8 text-slate-500" />
+        )}
+      </div>
+      <p className="mt-3 truncate text-sm font-black text-slate-950">{member.displayName}</p>
+      <p className="mt-1 text-xs font-semibold text-slate-500">{member.role === "owner" ? "Host" : "Member"}</p>
+    </div>
+  );
+}
+
+function CrewSectionTitle() {
+  return (
+    <div className="flex items-center gap-4 py-2">
+      <span className="h-px flex-1 bg-linear-to-r from-transparent via-blue-300/70 to-blue-500/50" />
+      <h2 className="shrink-0 text-center text-2xl font-extrabold text-slate-950 md:text-3xl">The Crew</h2>
+      <span className="h-px flex-1 bg-linear-to-l from-transparent via-blue-300/70 to-blue-500/50" />
+    </div>
+  );
+}
+
+function PlannerMemberRow({ badge, member }: { badge?: string; member: TripMember }) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-white p-3 ring-1 ring-slate-100">
+      {member.avatarUrl ? (
+        <img src={member.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
+      ) : (
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-white">
+          <UserRound className="h-4 w-4" />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-black text-slate-950">{member.displayName}</p>
+        <p className="text-xs font-semibold capitalize text-slate-500">{member.status}</p>
+      </div>
+      {badge && <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">{badge}</span>}
+    </div>
+  );
+}
+
+function PlannerChatPanel({ actionLoading, hasOtherMembers, messageInput, messages, onInput, onSend }: { actionLoading: string; hasOtherMembers: boolean; messageInput: string; messages: TripMessage[]; onInput: (value: string) => void; onSend: (event: FormEvent) => void }) {
+  return (
+    <Card padding="none" className="overflow-hidden">
+      <div className="border-b border-slate-100 px-5 py-4">
+        <h2 className="text-xl font-black text-slate-950">Group chat</h2>
+        <p className="text-sm font-semibold text-slate-500">Coordinate plans with accepted trip members.</p>
+      </div>
+      <div className="max-h-[420px] space-y-3 overflow-y-auto px-5 py-4">
+        {!hasOtherMembers ? (
+          <p className="py-8 text-center text-sm font-semibold text-slate-500">There are no members yet. Once someone joins, this chat becomes useful for planning together.</p>
+        ) : messages.length === 0 ? (
+          <p className="py-8 text-center text-sm font-semibold text-slate-500">No messages yet. Say hello to the group.</p>
+        ) : messages.map((message) => (
+          <div key={message.id} className={`flex gap-3 ${message.own ? "flex-row-reverse" : ""}`}>
+            {message.avatarUrl ? (
+              <img src={message.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
+            ) : (
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-white">
+                <UserRound className="h-4 w-4" />
+              </span>
+            )}
+            <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${message.own ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-800"}`}>
+              <p className="text-xs font-black opacity-80">{message.displayName}</p>
+              <p className="mt-1 text-sm font-semibold leading-relaxed">{message.content}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <form onSubmit={onSend} className="flex gap-2 border-t border-slate-100 p-4">
+        <input value={messageInput} onChange={(event) => onInput(event.target.value)} placeholder={hasOtherMembers ? "Write a message..." : "No members to message yet"} disabled={!hasOtherMembers} className="form-field flex-1 disabled:cursor-not-allowed disabled:bg-slate-100" />
+        <Button type="submit" disabled={!hasOtherMembers || actionLoading === "message" || !messageInput.trim()} icon={actionLoading === "message" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}>
+          Send
+        </Button>
+      </form>
+    </Card>
   );
 }
 

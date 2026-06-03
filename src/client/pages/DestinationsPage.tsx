@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
@@ -8,23 +8,26 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import {
   ArrowRight,
   CalendarDays,
+  Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Expand,
+  Globe2,
   MapPin,
   Plane,
   Search,
-  Sparkles,
   Ticket,
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
+import { HeroPanel } from "../components/ui";
 import type { CurrencyCode, ExploreDeal, Place } from "../../shared/types.js";
 import { fetchExploreDeals } from "../api/exploreApi";
 import { searchPlaces } from "../api/flightsApi";
-import { currencyOptions, getStoredCurrency } from "../utils/currency.js";
+import { currencyOptions, getStoredCurrency, storeCurrency } from "../utils/currency.js";
 
 type ViewState = "idle" | "loading" | "ready" | "error";
 type DealSortMode = "cheap" | "expensive";
@@ -44,6 +47,8 @@ export function DestinationsPage() {
   const [deals, setDeals] = useState<ExploreDeal[]>([]);
   const [error, setError] = useState("");
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [currencyOpen, setCurrencyOpen] = useState(false);
+  const currencyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!origin) {
@@ -85,51 +90,43 @@ export function DestinationsPage() {
   const cheapest = cityDeals[0];
   const mapReadyCount = mappableDeals.length;
 
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
+        setCurrencyOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function handleCurrencyChange(nextCurrency: CurrencyCode) {
+    setCurrency(nextCurrency);
+    storeCurrency(nextCurrency);
+    setCurrencyOpen(false);
+  }
+
   return (
     <div className="min-h-screen bg-[#f6f8fc] text-slate-950">
       <Navbar />
       <main className="pt-24">
         <section className="px-6 pb-8 pt-8 sm:px-8 lg:px-12">
-          <div className="relative mx-auto max-w-7xl overflow-hidden rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.22),transparent_30%),radial-gradient(circle_at_86%_14%,rgba(20,184,166,0.16),transparent_32%)]" />
-            <div className="relative">
-            <div className="grid gap-8 lg:grid-cols-[1fr_420px] lg:items-center">
-              <div className="text-center lg:text-left">
-                <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-100 ring-1 ring-white/15">
-                  <Sparkles className="h-4 w-4" />
-                  Explore cheap destinations
-                </span>
-                <h1 className="mx-auto mt-5 max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:mx-0">
-                  {origin ? `Find affordable places to fly from ${origin.cityName || origin.name}` : "Find affordable places to fly next"}
-                </h1>
-                <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-300 lg:mx-0">
-                  Choose your departure city first, then explore destination ideas on the map.
-                </p>
-              </div>
-
-              <div className="rounded-4xl border border-white/10 bg-white/10 p-4 shadow-2xl shadow-slate-950/30 backdrop-blur">
+          <HeroPanel
+            className="mx-auto mb-0 max-w-7xl"
+            eyebrow={<><Globe2 className="h-3.5 w-3.5" />Explore cheap destinations</>}
+            title={origin ? `Find affordable places to fly from ${origin.cityName || origin.name}` : "Find affordable places to fly next"}
+            description="Choose your departure city first, then explore destination ideas on the map."
+            actions={
+              <div className="relative z-20 w-full min-w-0 sm:min-w-96 lg:w-[26rem]">
                 <div className="grid gap-3">
-                  <PlaceSearchBox label="From" value={origin} onChange={setOrigin} placeholder="Search departure city" />
-                  <DestinationPicker value={destination} onChange={setDestination} />
-                  <label className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-600">
-                    Currency
-                    <select
-                      value={currency}
-                      onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-900 outline-none"
-                    >
-                      {currencyOptions.map((option) => (
-                        <option key={option.code} value={option.code}>
-                          {option.code}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <PlaceSearchBox label="From" value={origin} onChange={setOrigin} placeholder="Search departure city" variant="dark" />
+                  <DestinationPicker value={destination} onChange={setDestination} variant="dark" />
+                  <CurrencyDropdown refObject={currencyRef} open={currencyOpen} value={currency} onChange={handleCurrencyChange} onToggle={() => setCurrencyOpen((open) => !open)} variant="dark" />
                 </div>
               </div>
-            </div>
-            </div>
-          </div>
+            }
+          />
         </section>
 
         <section className="px-6 py-8 sm:px-8 lg:px-12">
@@ -160,7 +157,7 @@ export function DestinationsPage() {
 
             <aside className="space-y-6">
               {origin && <StatCard label="On the map" value={String(mapReadyCount)} icon={<MapPin className="h-5 w-5" />} />}
-                <div className="flex min-h-130 flex-col rounded-4xl border border-stone-200 bg-white p-5 shadow-xl shadow-stone-200/70">
+                <div className="flex min-h-130 flex-col">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-700">Popular flight boards</p>
@@ -214,12 +211,14 @@ function PlaceSearchBox({
   value,
   onChange,
   placeholder,
+  variant = "light",
   showAirports = true,
 }: {
   label: string;
   value: Place | null;
   onChange: (place: Place | null) => void;
   placeholder: string;
+  variant?: "light" | "dark";
   showAirports?: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -245,11 +244,13 @@ function PlaceSearchBox({
     };
   }, [query]);
 
+  const dark = variant === "dark";
+
   return (
-    <div className="relative rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
+    <div className="relative">
+      <span className={`mb-1 block text-xs font-black uppercase tracking-widest ${dark ? "text-slate-300" : "text-slate-600"}`}>{label}</span>
+      <div className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition ${dark ? "border-white/10 bg-white/10 text-white" : "border-stone-200 bg-stone-50 text-slate-900"}`}>
         <label className="min-w-0 flex-1">
-          <span className="block text-xs font-medium text-slate-400">{label}</span>
           <input
             value={value ? value.cityName || value.name : query}
             onChange={(event) => {
@@ -259,24 +260,24 @@ function PlaceSearchBox({
             }}
             onFocus={() => setOpen(true)}
             placeholder={placeholder}
-            className="mt-1 w-full bg-transparent text-sm font-semibold text-slate-800 outline-none placeholder:text-slate-400"
+            className={`w-full bg-transparent text-sm font-bold outline-none ${dark ? "text-white placeholder:text-slate-400" : "text-slate-800 placeholder:text-slate-400"}`}
           />
         </label>
         {value ? (
-          <button type="button" onClick={() => { onChange(null); setQuery(""); }} className="rounded-full bg-stone-200 p-2 text-slate-600">
+          <button type="button" onClick={() => { onChange(null); setQuery(""); }} className={`rounded-full p-2 ${dark ? "bg-white/10 text-slate-300 hover:bg-white/15" : "bg-stone-200 text-slate-600"}`}>
             <X className="h-4 w-4" />
           </button>
         ) : (
-          <span className="rounded-xl bg-sky-50 px-3 py-2 text-xs font-black text-sky-700">
+          <span className={`rounded-xl px-3 py-2 text-xs font-black ${dark ? "bg-white/10 text-slate-200" : "bg-sky-50 text-sky-700"}`}>
             {label === "From" ? "Required" : "Any"}
           </span>
         )}
       </div>
 
       {open && !value && groupedPlaces.length > 0 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+        <div className={`absolute left-0 right-0 top-full z-50 mt-2 max-h-72 overflow-y-auto rounded-2xl border shadow-xl ${dark ? "border-white/10 bg-slate-950 text-white shadow-black/30" : "border-slate-200 bg-white text-slate-900"}`}>
           {groupedPlaces.slice(0, 8).map((group) => (
-            <div key={group.cityKey} className="border-b border-slate-100 last:border-b-0">
+            <div key={group.cityKey} className={`border-b last:border-b-0 ${dark ? "border-white/10" : "border-slate-100"}`}>
               {group.city && (
                 <PlaceOption
                   place={group.city}
@@ -288,6 +289,7 @@ function PlaceSearchBox({
                     setQuery("");
                     setOpen(false);
                   }}
+                  variant={variant}
                 />
               )}
 
@@ -307,6 +309,7 @@ function PlaceSearchBox({
                     setQuery("");
                     setOpen(false);
                   }}
+                  variant={variant}
                 />
               ))}
             </div>
@@ -323,45 +326,114 @@ function PlaceOption({
   subtitle,
   badge,
   onSelect,
+  variant = "light",
 }: {
   place: Place;
   title: string;
   subtitle: string;
   badge: "City" | "Airport";
   onSelect: () => void;
+  variant?: "light" | "dark";
 }) {
+  const dark = variant === "dark";
+
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-sky-50"
+      className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition ${dark ? "hover:bg-white/10" : "hover:bg-sky-50"}`}
     >
       <span className="min-w-0">
-        <span className="block truncate text-sm font-black text-slate-950">{title}</span>
-        <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">{subtitle}</span>
+        <span className={`block truncate text-sm font-black ${dark ? "text-white" : "text-slate-950"}`}>{title}</span>
+        <span className={`mt-0.5 block truncate text-xs font-semibold ${dark ? "text-slate-400" : "text-slate-500"}`}>{subtitle}</span>
       </span>
       <span className="flex shrink-0 items-center gap-2">
         <span className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${
-          badge === "City" ? "bg-sky-50 text-sky-700" : "bg-stone-100 text-stone-600"
+          badge === "City" ? "bg-sky-50 text-sky-700" : dark ? "bg-white/10 text-slate-300" : "bg-stone-100 text-stone-600"
         }`}
         >
           {badge}
         </span>
-        {badge === "Airport" && <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{place.code}</span>}
+        {badge === "Airport" && (
+          <span className={`rounded-lg px-2 py-1 text-xs font-black ${dark ? "bg-white/10 text-slate-200" : "bg-slate-100 text-slate-700"}`}>{place.code}</span>
+        )}
       </span>
     </button>
   );
 }
 
-function DestinationPicker({ value, onChange }: { value: Place | null; onChange: (place: Place | null) => void }) {
+function DestinationPicker({ value, onChange, variant = "light" }: { value: Place | null; onChange: (place: Place | null) => void; variant?: "light" | "dark" }) {
   return (
     <PlaceSearchBox
       label="Where to"
       value={value}
       onChange={onChange}
       placeholder="Anywhere or search a city"
+      variant={variant}
       showAirports={false}
     />
+  );
+}
+
+function CurrencyDropdown({
+  onChange,
+  onToggle,
+  open,
+  refObject,
+  value,
+  variant = "light",
+}: {
+  onChange: (currency: CurrencyCode) => void;
+  onToggle: () => void;
+  open: boolean;
+  refObject: RefObject<HTMLDivElement | null>;
+  value: CurrencyCode;
+  variant?: "light" | "dark";
+}) {
+  const selected = currencyOptions.find((option) => option.code === value) || currencyOptions[0];
+  const dark = variant === "dark";
+
+  return (
+    <div ref={refObject} className="relative">
+      <span className={`mb-1 block text-xs font-black uppercase tracking-widest ${dark ? "text-slate-300" : "text-slate-600"}`}>Currency</span>
+      <button
+        type="button"
+        onClick={onToggle}
+        className={`flex min-h-[50px] w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors ${
+          dark ? "border-white/20 bg-white/10 text-white hover:bg-white/15" : "border-slate-200 bg-white text-slate-700 shadow-sm hover:border-blue-200 hover:bg-blue-50"
+        }`}
+        aria-label="Currency"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <Globe2 className="h-4 w-4 shrink-0" />
+          <span className="font-black">{selected.code}</span>
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 transition ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className={`absolute right-0 top-full z-60 mt-2 max-h-64 w-48 overflow-y-auto rounded-2xl border p-1.5 shadow-2xl ${
+          dark ? "border-slate-200 bg-white text-slate-900 shadow-slate-900/12" : "border-slate-200 bg-white text-slate-900 shadow-slate-900/12"
+        }`}>
+          <p className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Currency</p>
+          {currencyOptions.map((option) => (
+            <button
+              key={option.code}
+              type="button"
+              onClick={() => onChange(option.code)}
+              className="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-blue-50"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-slate-100 text-[11px] font-black text-slate-700">{option.symbol}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-black leading-tight text-slate-950">{option.code}</span>
+                <span className="block truncate text-[11px] font-semibold text-slate-500">{option.label}</span>
+              </span>
+              {value === option.code && <Check className="h-4 w-4 text-blue-500" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -531,7 +603,7 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
   return (
     <Link
       to={searchLink}
-      className="group relative block h-full min-h-88 w-full overflow-hidden rounded-2xl bg-slate-900 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+      className="group relative block h-96 w-full overflow-hidden rounded-2xl bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
     >
       <DestinationPhoto
         placeName={name}
@@ -541,7 +613,7 @@ function DealBoard({ deal }: { deal: ExploreDeal }) {
         coordinates={coordinates}
       />
       <div className="absolute inset-0 bg-linear-to-t from-slate-950/85 via-slate-950/25 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 p-5 text-white transition duration-300 group-hover:-translate-y-32">
+      <div className="absolute inset-x-0 bottom-0 p-5 text-white transition duration-300 group-hover:opacity-0">
         <div className="flex items-end justify-between gap-4">
           <div className="min-w-0">
             <p className="truncate text-xs font-bold uppercase tracking-[0.14em] text-white/70">{deal.origin} to {deal.destination}</p>
@@ -638,12 +710,12 @@ function DestinationPhoto({
   }, [airportName, code, coordinates, country, placeName]);
 
   return (
-    <div className="relative min-h-full overflow-hidden bg-linear-to-br from-stone-100 via-sky-50 to-cyan-100">
+    <div className="absolute inset-0 overflow-hidden bg-white">
       {imageUrl ? (
         <img
           src={imageUrl}
           alt={`${placeName} destination`}
-          className="h-full min-h-40 w-full object-cover transition duration-300 group-hover:scale-105"
+          className="h-full w-full object-cover object-center transition duration-300 group-hover:scale-105"
           onError={() => {
             setImageUrl(null);
             setPhotoUnavailable(true);
@@ -652,7 +724,7 @@ function DestinationPhoto({
       ) : coordinates ? (
         <CityMapPreview coordinates={coordinates} placeName={placeName} dimmed={!photoUnavailable} />
       ) : (
-        <div className="flex h-full min-h-40 items-center justify-center">
+        <div className="flex h-full items-center justify-center">
           <Plane className="h-8 w-8 text-sky-600/70" />
         </div>
       )}

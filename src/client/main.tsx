@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
+import { GlobalTripNotifications } from "./components/GlobalTripNotifications";
 import { AccountPage } from "./pages/AccountPage";
 import { AssistantPage } from "./pages/AssistantPage";
 import { AuthPage } from "./pages/AuthPage";
@@ -19,6 +20,7 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <GlobalTripNotifications />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/account" element={<AccountPage />} />

@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Globe2, Menu, UserRound } from "lucide-react";
+import { Check, ChevronDown, Globe2, Menu, UserRound, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import type { CurrencyCode } from "../../shared/types.js";
@@ -36,6 +36,7 @@ export function Navbar({ transparent = false }: Props) {
   const { user } = useAuth();
   const [currency, setCurrency] = useState<CurrencyCode>(() => getStoredCurrency());
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const currencyRef = useRef<HTMLDivElement>(null);
   const overlay = transparent && !scrolled;
@@ -62,6 +63,20 @@ export function Navbar({ transparent = false }: Props) {
   }
 
   useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
     function handleClick(event: MouseEvent) {
       if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
         setCurrencyOpen(false);
@@ -76,20 +91,21 @@ export function Navbar({ transparent = false }: Props) {
   const navLinks = user ? [...baseNavLinks, communityNavLink] : baseNavLinks;
 
   return (
+    <>
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-5 py-3 transition-all duration-300 md:px-8 ${
-        overlay ? "bg-transparent" : "bg-white/90 backdrop-blur-md border-b border-slate-100 shadow-sm"
+      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b px-4 py-2.5 transition-all duration-300 sm:px-5 md:px-8 md:py-3 ${
+        overlay ? "border-slate-100 bg-white/90 shadow-sm backdrop-blur-md lg:border-transparent lg:bg-transparent lg:shadow-none lg:backdrop-blur-0" : "border-slate-100 bg-white/90 shadow-sm backdrop-blur-md"
       }`}
     >
       <Link to="/" className="flex items-center gap-2 no-underline">
         <img
           src={logo}
           alt="SkyNode"
-          className={`h-14 w-auto object-contain transition duration-300 ${overlay ? "brightness-0 invert" : ""}`}
+          className={`h-10 w-auto object-contain transition duration-300 sm:h-12 lg:h-14 ${overlay ? "lg:brightness-0 lg:invert" : ""}`}
         />
       </Link>
 
-      <div className="hidden md:flex items-center gap-7">
+      <div className="hidden items-center gap-7 lg:flex">
         {navLinks.map((link) => (
           <Link
             key={link.to}
@@ -119,14 +135,14 @@ export function Navbar({ transparent = false }: Props) {
         ))}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <div ref={currencyRef} className="relative hidden sm:block">
           <button
             type="button"
             onClick={() => setCurrencyOpen((open) => !open)}
             className={`flex items-center gap-1.5 rounded-full border px-3 py-2 text-xs font-bold transition-colors ${
             overlay
-              ? "border-white/20 bg-white/10 text-white"
+              ? "border-slate-200 bg-white text-slate-700 shadow-sm lg:border-white/20 lg:bg-white/10 lg:text-white"
               : "border-slate-200 bg-white text-slate-700 shadow-sm"
           }`}
             aria-label="Currency"
@@ -160,33 +176,116 @@ export function Navbar({ transparent = false }: Props) {
         {user ? (
           <Link
             to="/account"
-            className={`flex items-center gap-2 rounded-full border px-2 py-1.5 no-underline shadow-sm transition ${
-              overlay
-                ? "border-white/25 bg-white/10 text-white hover:bg-white/20"
-                : "border-slate-200 bg-white text-slate-700 hover:border-blue-200 hover:bg-blue-50"
-            }`}
+            className="block rounded-full no-underline transition hover:opacity-85 focus:outline-none focus:ring-4 focus:ring-blue-100"
             title="My account"
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+              <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover sm:h-8 sm:w-8 lg:h-7 lg:w-7" />
             ) : (
-              <span className={`grid h-7 w-7 place-items-center rounded-full ${
-                overlay ? "bg-white/20 text-white" : "bg-slate-900 text-white"
-              }`}>
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-600 text-white sm:h-8 sm:w-8 lg:h-7 lg:w-7">
                 <UserRound className="h-4 w-4" />
               </span>
             )}
-            <Menu className="h-5 w-5" />
           </Link>
         ) : (
           <Link
             to="/auth"
-            className={`text-sm font-medium no-underline transition-colors ${overlay ? "text-white/80 hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
+            className={`hidden text-sm font-medium no-underline transition-colors sm:inline ${overlay ? "text-slate-600 hover:text-slate-900 lg:text-white/80 lg:hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
           >
             Sign in
           </Link>
         )}
+
+        <div className="relative lg:hidden">
+          <button
+            type="button"
+            onClick={() => setMobileOpen((open) => !open)}
+            className="grid h-11 w-11 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50"
+            aria-label="Open navigation menu"
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
+
+        </div>
       </div>
+
     </nav>
+
+    <div className={`fixed inset-0 z-[80] transition lg:hidden ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"}`}>
+          <button
+            type="button"
+            className={`absolute inset-0 bg-slate-950/55 backdrop-blur-sm transition-opacity duration-300 ${mobileOpen ? "opacity-100" : "opacity-0"}`}
+            aria-label="Close navigation menu"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside
+            className={`fixed bottom-0 right-0 top-0 isolate flex h-dvh w-[min(22rem,86vw)] flex-col border-l border-slate-200 bg-white p-5 text-slate-950 shadow-2xl transition-transform duration-300 ease-out ${
+              mobileOpen ? "translate-x-0" : "translate-x-full"
+            }`}
+          >
+            <div className="absolute inset-0 -z-10 bg-white" />
+            <div className="mb-6 flex items-center justify-between gap-4 bg-white">
+              <img src={logo} alt="SkyNode" className="h-12 w-auto object-contain" />
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+                aria-label="Close navigation menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-1 bg-white">
+              {navLinks.map((link) => (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center justify-between rounded-2xl px-4 py-3 text-base font-black no-underline transition ${
+                    location.pathname === link.to
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"
+                  }`}
+                >
+                  {link.label}
+                  {link.accent && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-[10px] uppercase tracking-wider text-cyan-700">Live</span>}
+                </Link>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-3xl border border-slate-100 bg-slate-50 p-3">
+              <p className="px-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Currency</p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {currencyOptions.slice(0, 6).map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => handleCurrencyChange(option.code)}
+                    className={`rounded-2xl px-3 py-2 text-sm font-black transition ${
+                      currency === option.code
+                        ? "bg-slate-950 text-white shadow-sm"
+                        : "bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-950"
+                    }`}
+                  >
+                    {option.code}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!user && (
+              <Link
+                to="/auth"
+                onClick={() => setMobileOpen(false)}
+                className="mt-auto rounded-2xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white no-underline shadow-sm"
+              >
+                Sign in
+              </Link>
+            )}
+          </aside>
+    </div>
+    </>
   );
 }

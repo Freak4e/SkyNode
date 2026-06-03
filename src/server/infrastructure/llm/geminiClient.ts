@@ -9,6 +9,7 @@ import type {
 } from "../../../shared/types.js";
 import {
   buildItineraryPrompt,
+  itineraryOutputTokenBudget,
   normalizeItinerary,
   parseItineraryJson,
 } from "./ollamaClient.js";
@@ -54,7 +55,7 @@ export async function generateItineraryWithGemini(
       },
     ],
     temperature: 0.35,
-    maxOutputTokens: 2600,
+    maxOutputTokens: itineraryOutputTokenBudget(request.days),
     responseMimeType: "application/json",
   });
 

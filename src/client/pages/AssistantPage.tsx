@@ -10,11 +10,13 @@ import {
   RotateCcw,
   Send,
   Sparkles,
+  X,
 } from "lucide-react";
 import { applyTripChange, listSavedTrips, loadSavedTrip, sendTravelChatMessage } from "../api/assistantApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
+import { HeroPanel } from "../components/ui";
 import type { ChatMessage, SavedTripDetail, SavedTripSummary, TripChangeProposal } from "../../shared/types.js";
 
 const quickPromptPool = [
@@ -236,21 +238,12 @@ export function AssistantPage() {
 
       <main className="app-main">
         <div className="mx-auto max-w-7xl">
-          <section className="mb-6 overflow-hidden rounded-3xl bg-linear-to-br from-slate-950 via-blue-950 to-slate-900 p-8 text-white shadow-2xl">
-            <div className="grid gap-8 lg:grid-cols-[1fr_340px] lg:items-end">
-              <div>
-                <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-cyan-200">
-                  <MessageCircle className="h-4 w-4" />
-                  SkyNode assistant
-                </p>
-                <h1 className="max-w-3xl text-4xl font-black leading-tight md:text-6xl">
-                  Chat with a travel assistant that understands your trips.
-                </h1>
-                <p className="mt-4 max-w-2xl text-base leading-relaxed text-slate-300">
-                  Ask general destination questions, or select a saved trip so the assistant can answer with itinerary context.
-                </p>
-              </div>
-
+          <HeroPanel
+            className="mb-6"
+            eyebrow={<><MessageCircle className="h-3.5 w-3.5" />SkyNode assistant</>}
+            title="Chat with a travel assistant that understands your trips."
+            description="Ask general destination questions, or select a saved trip so the assistant can answer with itinerary context."
+            actions={
               <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur">
                 <p className="text-sm text-slate-300">Assistant mode</p>
                 <div className="mt-2 flex items-center gap-3">
@@ -263,8 +256,8 @@ export function AssistantPage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </section>
+            }
+          />
 
           <div className="grid min-h-[720px] gap-6 lg:grid-cols-[330px_1fr]">
             <aside className="rounded-3xl border border-slate-100 bg-white p-5 shadow-xl">
@@ -350,7 +343,15 @@ export function AssistantPage() {
                     </h2>
                   </div>
                   {selectedTrip && (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={startGeneralChat}
+                        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-black text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        General chat
+                      </button>
                       {tripStats.map((stat) => (
                         <span key={stat} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
                           {stat}

@@ -20,6 +20,31 @@ export function emptyDays(count: number): ItineraryDay[] {
   }));
 }
 
+export function parseTripCities(value: string | string[] | undefined): string[] {
+  const values = Array.isArray(value) ? value : (value || "").split(",");
+  const seen = new Set<string>();
+
+  return values
+    .map((city) => city.trim())
+    .filter(Boolean)
+    .filter((city) => {
+      const key = city.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+export function assignDayCities(days: ItineraryDay[], cityNames: string[]): ItineraryDay[] {
+  const cleanCities = parseTripCities(cityNames);
+  if (cleanCities.length === 0) return days;
+
+  return days.map((day, index) => ({
+    ...day,
+    cityName: cleanCities.includes(day.cityName || "") ? day.cityName : cleanCities[Math.min(index, cleanCities.length - 1)],
+  }));
+}
+
 export function cleanTime(value: string): string {
   return ({ morning: "09:00", afternoon: "14:00", evening: "19:00" } as Record<string, string>)[value] || value || "09:00";
 }
@@ -78,6 +103,7 @@ export function normalizeDays(days: ItineraryDay[]): ItineraryDay[] {
     return {
       ...day,
       dayNumber: index + 1,
+      cityName: day.cityName?.trim() || undefined,
       title: day.title.trim() || `Day ${index + 1}`,
       summary: day.summary.trim() || "Custom day plan.",
       estimatedCost: items.reduce((sum, item) => sum + item.estimatedCost, 0),

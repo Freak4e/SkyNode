@@ -20,6 +20,8 @@ type GeoapifyResponse = {
 type GeoapifyGeocodeResponse = {
   features?: Array<{
     properties?: {
+      city?: string;
+      country?: string;
       name?: string;
       formatted?: string;
       lat?: number;
@@ -33,6 +35,7 @@ export type GeoapifyGeocodePoint = {
   address: string;
   lat: number;
   lon: number;
+  country?: string;
 };
 
 type GeocodeTextOptions = {
@@ -118,7 +121,41 @@ export async function geocodeText(
     address: properties.formatted || text,
     lat: properties.lat,
     lon: properties.lon,
+    country: properties.country,
   };
+}
+
+export async function searchCityText(
+  text: string,
+  apiKey = config.geoapify.apiKey,
+): Promise<GeoapifyGeocodePoint[]> {
+  if (!apiKey || text.trim().length < 2) {
+    return [];
+  }
+
+  const response = await axios.get<GeoapifyGeocodeResponse>(
+    "https://api.geoapify.com/v1/geocode/search",
+    {
+      timeout: config.geoapify.timeoutMs,
+      params: {
+        apiKey,
+        text,
+        type: "city",
+        limit: 8,
+      },
+    },
+  );
+
+  return (response.data.features || [])
+    .map((feature) => feature.properties)
+    .filter((properties): properties is NonNullable<typeof properties> & { lat: number; lon: number } => typeof properties?.lat === "number" && typeof properties?.lon === "number")
+    .map((properties) => ({
+      title: properties!.city || properties!.name || properties!.formatted || text,
+      address: properties!.formatted || text,
+      lat: properties!.lat,
+      lon: properties!.lon,
+      country: properties!.country,
+    }));
 }
 
 function normalizeAttraction(feature: GeoapifyFeature, index: number): Attraction | null {

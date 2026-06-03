@@ -508,6 +508,7 @@ export function TripDetailPage() {
                 addDay={() => undefined}
                 moveActivity={() => undefined}
                 removeActivity={() => undefined}
+                removeDay={() => undefined}
                 updateActivity={() => undefined}
                 updateDay={() => undefined}
               />

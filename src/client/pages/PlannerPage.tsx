@@ -1,8 +1,9 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, List, Loader2, Trash2 } from "lucide-react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, CheckCircle2, Loader2, Trash2, X } from "lucide-react";
 import { applyTripChange, loadSavedTrip, listSavedTrips } from "../api/assistantApi";
+import { listLikedFlights } from "../api/likedFlightsApi";
 import { generateItinerary, saveTrip } from "../api/plannerApi";
 import { profileFromUser, deleteTrip } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
@@ -18,7 +19,7 @@ import { TripSetupForm } from "../features/planner/TripSetupForm";
 import { TripsDrawer } from "../features/planner/TripsDrawer";
 import { SaveTripModal } from "../features/trip-community/SaveTripModal";
 import type { PlannerTab } from "../features/planner/plannerTypes";
-import { budgetLevelFromAmount, emptyDays, normalizeDays } from "../features/planner/plannerUtils";
+import { assignDayCities, budgetLevelFromAmount, emptyDays, normalizeDays, parseTripCities } from "../features/planner/plannerUtils";
 import type {
   BudgetLevel,
   FlightOffer,
@@ -26,6 +27,7 @@ import type {
   GeneratedItinerary,
   ItineraryDay,
   ItineraryItem,
+  LikedFlight,
   SavedTripDetail,
   SavedTripSummary,
   TravelPace,
@@ -47,7 +49,7 @@ export function PlannerPage() {
   const flightsToAdd = useMemo(() => readFlightsToAddFromSession(), []);
   const initialDestinationCode = restoredDraft?.destinationCode || params.get("to") || "";
   const initialOriginCode = restoredDraft?.originCode || params.get("from") || "";
-  const initialDestination = restoredDraft?.destinationName || params.get("toName") || params.get("destination") || "Ljubljana";
+  const initialDestination = restoredDraft?.destinationName || params.get("toName") || params.get("destination") || "";
   const initialStartDate = restoredDraft?.startDate || params.get("date") || today;
 
   const [tripTitle, setTripTitle] = useState(restoredDraft?.tripTitle || "");
@@ -58,7 +60,7 @@ export function PlannerPage() {
   const [days, setDays] = useState(restoredDraft?.days || 3);
   const [travelers, setTravelers] = useState(restoredDraft?.travelers || 2);
   const [budgetAmount, setBudgetAmount] = useState(restoredDraft?.budgetAmount || 1800);
-  const [tripCities, setTripCities] = useState(restoredDraft?.tripCities || initialDestination);
+  const [tripCities, setTripCities] = useState(restoredDraft?.tripCities || "");
   const [hotelName, setHotelName] = useState(restoredDraft?.hotelName || "");
   const [tripNotes, setTripNotes] = useState(restoredDraft?.tripNotes || "");
   const [loadedHotels, setLoadedHotels] = useState<TripHotel[] | undefined>();
@@ -67,6 +69,9 @@ export function PlannerPage() {
   const [pace, setPace] = useState<TravelPace>(restoredDraft?.pace || "balanced");
   const [selectedInterests, setSelectedInterests] = useState<string[]>(restoredDraft?.selectedInterests || ["culture", "food", "nature"]);
   const [selectedFlights, setSelectedFlights] = useState<FlightOffer[]>(() => mergeFlights(restoredDraft?.selectedFlights || readSelectedFlightsFromSession(), flightsToAdd));
+  const [likedFlights, setLikedFlights] = useState<LikedFlight[]>([]);
+  const [likedFlightsLoading, setLikedFlightsLoading] = useState(false);
+  const [likedFlightsError, setLikedFlightsError] = useState("");
   const selectedFlight = selectedFlights[0];
   const initialSetupStep = restoredDraft?.returnStep ?? (flightsToAdd.length > 0 ? 2 : 0);
 
@@ -86,6 +91,7 @@ export function PlannerPage() {
   const [error, setError] = useState("");
   const [savedTrip, setSavedTrip] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [generalModalOpen, setGeneralModalOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -142,6 +148,10 @@ export function PlannerPage() {
   }), [budget, budgetAmount, days, destinationCode, destinationName, hotelName, loadedHotels, loadedRouteSegments, originCode, pace, selectedFlight, selectedFlights, selectedInterests, startDate, travelers, tripCities, tripNotes]);
 
   const title = tripTitle.trim() || itinerary?.destinationName || destinationName;
+  const tripCityNames = useMemo(() => {
+    const cities = parseTripCities(tripCities);
+    return cities.length > 0 ? cities : parseTripCities(destinationName);
+  }, [destinationName, tripCities]);
   const filteredTrips = savedTrips.filter((trip) => {
     const search = tripSearch.trim().toLowerCase();
     return !search || `${trip.title} ${trip.destinationName} ${trip.destinationCode}`.toLowerCase().includes(search);
@@ -153,6 +163,38 @@ export function PlannerPage() {
       sessionStorage.removeItem("skynode:selectedFlight");
     }
   }, [flightsToAdd.length]);
+
+  useEffect(() => {
+    if (authLoading || !user) {
+      setLikedFlights([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLikedFlightsLoading(true);
+    setLikedFlightsError("");
+
+    void listLikedFlights()
+      .then((items) => {
+        if (!cancelled) {
+          setLikedFlights(items);
+        }
+      })
+      .catch((loadError) => {
+        if (!cancelled) {
+          setLikedFlightsError(loadError instanceof Error ? loadError.message : "Failed to load liked flights.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLikedFlightsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, user]);
 
   async function loadTrips() {
     if (authLoading || !user) return;
@@ -216,8 +258,9 @@ export function PlannerPage() {
 
     try {
       const generated = await generateItinerary(request);
-      setItinerary(generated);
-      setDraftDays(generated.days);
+      const cityDays = assignDayCities(generated.days, tripCityNames);
+      setItinerary({ ...generated, days: cityDays });
+      setDraftDays(cityDays);
       setSelectedTripId("");
       setLoadedHotels(undefined);
       setLoadedRouteSegments(undefined);
@@ -232,7 +275,7 @@ export function PlannerPage() {
 
   function createManual(event?: FormEvent) {
     event?.preventDefault();
-    const cleanDays = normalizeDays(draftDays);
+    const cleanDays = assignDayCities(normalizeDays(draftDays), tripCityNames);
     setItinerary({
       destinationName,
       startDate,
@@ -266,7 +309,7 @@ export function PlannerPage() {
     setError("");
 
     try {
-      const cleanDays = normalizeDays(itinerary.days);
+      const cleanDays = assignDayCities(normalizeDays(itinerary.days), tripCityNames);
       const cleanItinerary = {
         ...itinerary,
         days: cleanDays,
@@ -301,7 +344,7 @@ export function PlannerPage() {
   async function saveEdits() {
     if (!itinerary) return;
 
-    const cleanDays = normalizeDays(draftDays);
+    const cleanDays = assignDayCities(normalizeDays(draftDays), tripCityNames);
     const updated: GeneratedItinerary = {
       ...itinerary,
       destinationName,
@@ -335,12 +378,14 @@ export function PlannerPage() {
     setSelectedTripId("");
     setDeleteOpen(false);
     setTripTitle("");
-    setDestinationName(initialDestination);
-    setStartDate(initialStartDate);
+    setDestinationCode("");
+    setOriginCode("");
+    setDestinationName("");
+    setStartDate(today);
     setDays(3);
     setTravelers(2);
     setBudgetAmount(1800);
-    setTripCities(initialDestination);
+    setTripCities("");
     setHotelName("");
     setLoadedHotels(undefined);
     setLoadedRouteSegments(undefined);
@@ -363,7 +408,22 @@ export function PlannerPage() {
     setDraftDays(emptyDays(clean));
   }
 
-  function updateDay(dayIndex: number, patch: Partial<Pick<ItineraryDay, "title" | "summary">>) {
+  function resizeItineraryDays(nextDays: number) {
+    const clean = Math.min(Math.max(nextDays || 1, 1), 14);
+    setDays(clean);
+    setDraftDays((current) => resizeDays(current, clean, tripCityNames));
+    setItinerary((current) => {
+      if (!current) return current;
+      const resizedDays = resizeDays(current.days, clean, tripCityNames);
+      return {
+        ...current,
+        days: resizedDays,
+        estimatedTotalCost: resizedDays.reduce((sum, day) => sum + day.estimatedCost, 0),
+      };
+    });
+  }
+
+  function updateDay(dayIndex: number, patch: Partial<Pick<ItineraryDay, "cityName" | "title" | "summary">>) {
     setDraftDays((current) => current.map((day, index) => index === dayIndex ? { ...day, ...patch } : day));
   }
 
@@ -389,7 +449,23 @@ export function PlannerPage() {
   }
 
   function addDay() {
-    setDraftDays((current) => [...current, { dayNumber: current.length + 1, title: `Day ${current.length + 1}`, summary: "", estimatedCost: 0, items: [] }]);
+    setDraftDays((current) => {
+      const cityName = current[current.length - 1]?.cityName || tripCityNames[Math.min(current.length, Math.max(tripCityNames.length - 1, 0))];
+      return [...current, { dayNumber: current.length + 1, cityName, title: `Day ${current.length + 1}`, summary: "", estimatedCost: 0, items: [] }];
+    });
+  }
+
+  function removeDay(dayIndex: number) {
+    setDraftDays((current) => {
+      const next = current.filter((_, index) => index !== dayIndex);
+      const daysToKeep = next.length > 0 ? next : emptyDays(1);
+
+      return daysToKeep.map((day, index) => ({
+        ...day,
+        dayNumber: index + 1,
+        title: /^Day \d+$/i.test(day.title.trim()) ? `Day ${index + 1}` : day.title,
+      }));
+    });
   }
 
   function addActivity(dayIndex: number) {
@@ -409,6 +485,33 @@ export function PlannerPage() {
     if (value.trim() !== initialDestination.trim()) {
       setDestinationCode("");
     }
+  }
+
+  function applyGeneralInfo(values: GeneralInfoValues) {
+    const cleanDays = Math.min(Math.max(values.days || 1, 1), 14);
+    const cleanCities = parseTripCities(values.tripCities).length > 0 ? parseTripCities(values.tripCities) : parseTripCities(values.destinationName);
+    setTripTitle(values.tripTitle);
+    updateDestinationName(values.destinationName);
+    setStartDate(values.startDate);
+    setTravelers(Math.max(values.travelers || 1, 1));
+    setBudgetAmount(Math.max(values.budgetAmount || 0, 0));
+    setTripCities(values.tripCities);
+    setHotelName(values.hotelName);
+    setTripNotes(values.notes);
+    setDays(cleanDays);
+    setDraftDays((current) => resizeDays(current, cleanDays, cleanCities));
+    setItinerary((current) => {
+      if (!current) return current;
+      const resizedDays = resizeDays(current.days, cleanDays, cleanCities);
+      return {
+        ...current,
+        destinationName: values.destinationName,
+        startDate: values.startDate,
+        days: resizedDays,
+        estimatedTotalCost: resizedDays.reduce((sum, day) => sum + day.estimatedCost, 0),
+      };
+    });
+    setGeneralModalOpen(false);
   }
 
   function moveActivity(dayIndex: number, fromIndex: number, toIndex: number) {
@@ -440,6 +543,11 @@ export function PlannerPage() {
     setSelectedFlights((current) => current.filter((_, index) => index !== indexToRemove));
   }
 
+  function addLikedFlight(likedFlight: LikedFlight) {
+    const flights = [likedFlight.outbound, likedFlight.inbound].filter((flight): flight is FlightOffer => Boolean(flight));
+    setSelectedFlights((current) => mergeFlights(current, flights));
+  }
+
   function saveDraftForFlightSearch() {
     writePlannerDraftToSession({
       budgetAmount,
@@ -464,8 +572,8 @@ export function PlannerPage() {
     <div className="min-h-screen bg-slate-50">
       <Navbar />
       <PageShell>
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          {itinerary && editing && manual ? (
+        {itinerary && editing && manual && (
+          <div className="mb-6">
             <button
               type="button"
               onClick={() => {
@@ -477,11 +585,24 @@ export function PlannerPage() {
               <ArrowLeft className="h-4 w-4" />
               Back to general info
             </button>
-          ) : (
-            <Link to="/search" className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-blue-600"><ArrowLeft className="h-4 w-4" />Back to flights</Link>
-          )}
-          <Button type="button" tone="ghost" onClick={openTripsDrawer} icon={<List className="h-4 w-4" />} className="rounded-full">All trips</Button>
-        </div>
+          </div>
+        )}
+        {itinerary && !editing && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setItinerary(null);
+                setEditing(false);
+                setTab("itinerary");
+              }}
+              className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-blue-600"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to trip setup
+            </button>
+          </div>
+        )}
 
         {!itinerary ? (
           <TripSetupForm
@@ -502,8 +623,12 @@ export function PlannerPage() {
             originCode={originCode}
             pace={pace}
             removeActivity={removeActivity}
+            removeDay={removeDay}
             selectedFlight={selectedFlight}
             selectedFlights={selectedFlights}
+            likedFlights={likedFlights}
+            likedFlightsLoading={likedFlightsLoading}
+            likedFlightsError={likedFlightsError}
             selectedInterests={selectedInterests}
             setBudgetAmount={setBudgetAmount}
             setDestinationName={updateDestinationName}
@@ -517,6 +642,8 @@ export function PlannerPage() {
             setTripTitle={setTripTitle}
             initialStep={initialSetupStep}
             onAddFlight={saveDraftForFlightSearch}
+            onAddLikedFlight={addLikedFlight}
+            onOpenTrips={openTripsDrawer}
             onRemoveFlight={removeSelectedFlight}
             startDate={startDate}
             toggleInterest={toggleInterest}
@@ -535,7 +662,9 @@ export function PlannerPage() {
               deleting={deleting}
               editing={editing}
               itinerary={itinerary}
+              isSavedTrip={Boolean(selectedTripId)}
               onDelete={() => setDeleteOpen(true)}
+              onOpenGeneral={() => setGeneralModalOpen(true)}
               saveTrip={openSaveModal}
               saving={saving}
               setActive={setTab}
@@ -543,7 +672,6 @@ export function PlannerPage() {
               startEdit={() => { setDraftDays(itinerary.days); setEditing(true); setTab("itinerary"); }}
               cancelEdit={() => { setDraftDays(itinerary.days); setEditing(false); }}
               saveEdits={saveEdits}
-              startNew={startNewTrip}
               title={title}
               travelers={travelers}
             />
@@ -558,6 +686,7 @@ export function PlannerPage() {
                   editing={editing}
                   addActivity={addActivity}
                   addDay={addDay}
+                  removeDay={removeDay}
                   removeActivity={removeActivity}
                   moveActivity={moveActivity}
                   startDate={itinerary.startDate}
@@ -593,6 +722,21 @@ export function PlannerPage() {
         onClose={() => setSaveModalOpen(false)}
         onConfirm={(values) => void saveTripNow(values)}
       />
+      {generalModalOpen && (
+        <GeneralInfoModal
+          budgetAmount={budgetAmount}
+          days={days}
+          destinationName={destinationName}
+          hotelName={hotelName}
+          notes={tripNotes}
+          onClose={() => setGeneralModalOpen(false)}
+          onSubmit={applyGeneralInfo}
+          startDate={startDate}
+          travelers={travelers}
+          tripCities={tripCities}
+          tripTitle={tripTitle}
+        />
+      )}
 
       {deleteOpen && (
         <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/50 p-4 sm:items-center">
@@ -621,6 +765,124 @@ export function PlannerPage() {
       <Footer />
     </div>
   );
+}
+
+type GeneralInfoValues = {
+  budgetAmount: number;
+  days: number;
+  destinationName: string;
+  hotelName: string;
+  notes: string;
+  startDate: string;
+  travelers: number;
+  tripCities: string;
+  tripTitle: string;
+};
+
+function GeneralInfoModal(props: GeneralInfoValues & { onClose: () => void; onSubmit: (values: GeneralInfoValues) => void }) {
+  const [values, setValues] = useState<GeneralInfoValues>({
+    budgetAmount: props.budgetAmount,
+    days: props.days,
+    destinationName: props.destinationName,
+    hotelName: props.hotelName,
+    notes: props.notes,
+    startDate: props.startDate,
+    travelers: props.travelers,
+    tripCities: props.tripCities,
+    tripTitle: props.tripTitle,
+  });
+
+  function update<K extends keyof GeneralInfoValues>(key: K, value: GeneralInfoValues[K]) {
+    setValues((current) => ({ ...current, [key]: value }));
+  }
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    props.onSubmit(values);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/50 p-4 sm:items-center">
+      <button type="button" className="absolute inset-0" aria-label="Close general info" onClick={props.onClose} />
+      <form onSubmit={submit} className="relative w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+          <div>
+            <h2 className="text-2xl font-black text-slate-950">General trip info</h2>
+            <p className="mt-1 text-sm font-semibold text-slate-500">Update the details around your itinerary without rebuilding the trip.</p>
+          </div>
+          <button type="button" onClick={props.onClose} className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid max-h-[70vh] gap-5 overflow-y-auto p-6 md:grid-cols-2">
+          <ModalField label="Trip name">
+            <input className="form-field" value={values.tripTitle} onChange={(event) => update("tripTitle", event.target.value)} placeholder="Trip name" />
+          </ModalField>
+          <ModalField label="Destination">
+            <input className="form-field" value={values.destinationName} onChange={(event) => update("destinationName", event.target.value)} placeholder="Destination" />
+          </ModalField>
+          <ModalField label="Start date">
+            <input className="form-field" type="date" value={values.startDate} onChange={(event) => update("startDate", event.target.value)} />
+          </ModalField>
+          <ModalField label="Days">
+            <input className="form-field" type="number" min={1} max={14} value={values.days} onChange={(event) => update("days", Number(event.target.value || 1))} />
+          </ModalField>
+          <ModalField label="Travelers">
+            <input className="form-field" type="number" min={1} max={12} value={values.travelers} onChange={(event) => update("travelers", Number(event.target.value || 1))} />
+          </ModalField>
+          <ModalField label="Budget (USD)">
+            <input className="form-field" type="number" min={0} step={50} value={values.budgetAmount} onChange={(event) => update("budgetAmount", Number(event.target.value || 0))} />
+          </ModalField>
+          <ModalField label="Cities">
+            <input className="form-field" value={values.tripCities} onChange={(event) => update("tripCities", event.target.value)} placeholder="Skopje, Ohrid" />
+          </ModalField>
+          <ModalField label="Hotel or neighborhood">
+            <input className="form-field" value={values.hotelName} onChange={(event) => update("hotelName", event.target.value)} placeholder="Hotel or neighborhood" />
+          </ModalField>
+          <div className="md:col-span-2">
+            <ModalField label="Notes">
+              <textarea className="form-field min-h-28 resize-y" value={values.notes} onChange={(event) => update("notes", event.target.value)} placeholder="Anything important about the trip" />
+            </ModalField>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-6 py-4">
+          <Button type="button" tone="ghost" onClick={props.onClose}>Cancel</Button>
+          <Button type="submit">Save general info</Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalField({ children, label }: { children: ReactNode; label: string }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-black text-slate-900">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function resizeDays(existingDays: ItineraryDay[], nextCount: number, cityNames: string[]): ItineraryDay[] {
+  const resized = existingDays.slice(0, nextCount);
+  for (let index = resized.length; index < nextCount; index += 1) {
+    resized.push({
+      dayNumber: index + 1,
+      cityName: cityNames[Math.min(index, Math.max(cityNames.length - 1, 0))],
+      title: `Day ${index + 1}`,
+      summary: "",
+      estimatedCost: 0,
+      items: [],
+    });
+  }
+
+  return resized.map((day, index) => ({
+    ...day,
+    dayNumber: index + 1,
+    title: /^Day \d+$/i.test(day.title.trim()) ? `Day ${index + 1}` : day.title,
+  }));
 }
 
 type PlannerDraftSession = {

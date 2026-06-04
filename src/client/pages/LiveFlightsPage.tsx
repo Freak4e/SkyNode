@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
+import { readApiJson } from "../api/http";
 import type { LiveFlight, LiveFlightsResponse } from "../../shared/types";
 import { formatAltitude, formatHeading, formatSpeed } from "../../shared/liveFlightUtils";
 
@@ -143,7 +144,11 @@ export function LiveFlightsPage() {
       }
 
       const response = await fetch(`/api/live-flights?${params.toString()}`);
-      const data = await response.json() as LiveFlightsResponse;
+      const data = await readApiJson<LiveFlightsResponse>(
+        response,
+        "Could not load live flights before the server returned JSON.",
+        { flights: [], source: "opensky" },
+      );
 
       if (!response.ok) {
         throw new Error(data.warnings?.[0] || "Could not load live flights.");

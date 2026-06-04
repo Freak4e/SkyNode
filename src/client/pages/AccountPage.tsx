@@ -29,6 +29,7 @@ import { zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zo
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import { feature } from "topojson-client";
 import { authHeaders } from "../api/authHeaders.js";
+import { readApiJson } from "../api/http.js";
 import { listSavedTrips } from "../api/assistantApi";
 import { listTravelMissionUnlocks, submitTravelMission } from "../api/travelMissionsApi.js";
 import { syncTripProfile } from "../api/tripsApi";
@@ -338,7 +339,7 @@ export function AccountPage() {
       });
 
       if (!response.ok) {
-        const body = await response.json() as { warnings?: string[] };
+        const body = await readApiJson<{ warnings?: string[] }>(response, "Failed to delete account.");
         throw new Error(body.warnings?.[0] || "Failed to delete account.");
       }
 

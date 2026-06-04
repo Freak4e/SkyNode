@@ -6,10 +6,11 @@ import type {
   SaveTripResponse,
 } from "../../shared/types.js";
 import { authHeaders } from "./authHeaders.js";
+import { readApiJson } from "./http.js";
 
 export async function fetchAttractions(destination: string): Promise<Attraction[]> {
   const response = await fetch(`/api/attractions?destination=${encodeURIComponent(destination)}`);
-  const body = await response.json() as { attractions: Attraction[]; warnings?: string[] };
+  const body = await readApiJson<{ attractions: Attraction[]; warnings?: string[] }>(response, "Failed to fetch attractions.");
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to fetch attractions.");
@@ -24,7 +25,7 @@ export async function generateItinerary(input: GenerateItineraryRequest): Promis
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const body = await readJsonResponse<{ itinerary: GeneratedItinerary | null; warnings?: string[] }>(
+  const body = await readApiJson<{ itinerary: GeneratedItinerary | null; warnings?: string[] }>(
     response,
     "AI itinerary generation failed before the server returned JSON.",
   );
@@ -42,24 +43,11 @@ export async function saveTrip(input: SaveTripRequest): Promise<SaveTripResponse
     headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(input),
   });
-  const body = await response.json() as SaveTripResponse & { warnings?: string[] };
+  const body = await readApiJson<SaveTripResponse & { warnings?: string[] }>(response, "Failed to save trip.");
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to save trip.");
   }
 
   return body;
-}
-
-async function readJsonResponse<T extends { warnings?: string[] }>(response: Response, fallback: string): Promise<T> {
-  const contentType = response.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    return await response.json() as T;
-  }
-
-  const text = await response.text().catch(() => "");
-  return {
-    warnings: [text ? text.slice(0, 180) : fallback],
-  } as T;
 }

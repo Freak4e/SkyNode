@@ -1,4 +1,5 @@
 import type { FlightSearchInput, FlightSearchResponse, Place } from "../../shared/types.js";
+import { readApiJson } from "./http.js";
 
 export async function searchFlights(input: FlightSearchInput & Required<Pick<FlightSearchInput, "from" | "to" | "date" | "provider">>): Promise<FlightSearchResponse> {
   const from = Array.isArray(input.from) ? input.from.join(",") : input.from;
@@ -15,7 +16,11 @@ export async function searchFlights(input: FlightSearchInput & Required<Pick<Fli
   }
 
   const response = await fetch(`/api/flights?${params.toString()}`);
-  const body = await readFlightSearchResponse(response);
+  const body = await readApiJson<FlightSearchResponse>(
+    response,
+    "Flight search failed before the server returned JSON.",
+    { offers: [], source: "none" },
+  );
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Flight search failed.");
@@ -26,22 +31,11 @@ export async function searchFlights(input: FlightSearchInput & Required<Pick<Fli
 
 export async function searchPlaces(term: string, signal?: AbortSignal): Promise<Place[]> {
   const response = await fetch(`/api/places?term=${encodeURIComponent(term)}`, { signal });
-  const body = await response.json() as { places: Place[] };
+  const body = await readApiJson<{ places: Place[]; warnings?: string[] }>(
+    response,
+    "Place search failed before the server returned JSON.",
+    { places: [] },
+  );
 
   return body.places;
-}
-
-async function readFlightSearchResponse(response: Response): Promise<FlightSearchResponse> {
-  const contentType = response.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    return await response.json() as FlightSearchResponse;
-  }
-
-  const text = await response.text().catch(() => "");
-  return {
-    offers: [],
-    warnings: [text ? text.slice(0, 180) : "Flight search failed before the server returned JSON."],
-    source: "none",
-  };
 }

@@ -1,11 +1,12 @@
 import type { AppNotification, AppNotificationType } from "../../shared/types.js";
 import { authHeaders } from "./authHeaders.js";
+import { readApiJson } from "./http.js";
 
 export async function listUnreadNotifications(): Promise<AppNotification[]> {
   const response = await fetch("/api/notifications/unread", {
     headers: await authHeaders(),
   });
-  const body = await response.json() as { notifications: AppNotification[]; warnings?: string[] };
+  const body = await readApiJson<{ notifications: AppNotification[]; warnings?: string[] }>(response, "Failed to load notifications.");
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to load notifications.");

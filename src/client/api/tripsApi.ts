@@ -12,6 +12,7 @@ import type {
 } from "../../shared/types.js";
 import type { User } from "@supabase/supabase-js";
 import { authHeaders } from "./authHeaders.js";
+import { readApiJson } from "./http.js";
 
 async function optionalAuthHeaders(): Promise<HeadersInit> {
   try {
@@ -64,10 +65,18 @@ export async function listPublicTrips(filters: {
     headers: await optionalAuthHeaders(),
     cache: "no-store",
   });
-  const body = await readTripsJson<{ trips: SavedTripSummary[]; warnings?: string[] }>(response, "Failed to load community trips.");
+  const body = await readApiJson<{ trips: SavedTripSummary[]; warnings?: string[] }>(
+    response,
+    "Failed to load community trips.",
+    { trips: [] },
+  );
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to load community trips.");
+  }
+
+  if (!Array.isArray(body.trips)) {
+    throw new Error(body.warnings?.[0] || "Community trips response did not include a trips list.");
   }
 
   return body.trips;
@@ -82,7 +91,7 @@ export async function syncTripProfile(profile: UserProfileSnapshot): Promise<voi
     },
     body: JSON.stringify(profile),
   });
-  const body = await readTripsJson<{ warnings?: string[] }>(response, "Failed to sync trip profile.");
+  const body = await readApiJson<{ warnings?: string[] }>(response, "Failed to sync trip profile.");
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to sync trip profile.");
@@ -94,10 +103,18 @@ export async function listJoinedTrips(): Promise<SavedTripSummary[]> {
     headers: await authHeaders(),
     cache: "no-store",
   });
-  const body = await readTripsJson<{ trips: SavedTripSummary[]; warnings?: string[] }>(response, "Failed to load joined trips.");
+  const body = await readApiJson<{ trips: SavedTripSummary[]; warnings?: string[] }>(
+    response,
+    "Failed to load joined trips.",
+    { trips: [] },
+  );
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to load joined trips.");
+  }
+
+  if (!Array.isArray(body.trips)) {
+    throw new Error(body.warnings?.[0] || "Joined trips response did not include a trips list.");
   }
 
   return body.trips;
@@ -108,7 +125,7 @@ export async function loadTripInvite(token: string): Promise<SavedTripDetail> {
     headers: await optionalAuthHeaders(),
     cache: "no-store",
   });
-  const body = await readTripsJson<{ trip: SavedTripDetail | null; warnings?: string[] }>(response, "Invite link is invalid.");
+  const body = await readApiJson<{ trip: SavedTripDetail | null; warnings?: string[] }>(response, "Invite link is invalid.", { trip: null });
 
   if (!response.ok || !body.trip) {
     throw new Error(body.warnings?.[0] || "Invite link is invalid.");
@@ -118,12 +135,15 @@ export async function loadTripInvite(token: string): Promise<SavedTripDetail> {
 }
 
 export async function requestJoinTrip(tripId: string, profile: TripJoinRequest): Promise<TripMember> {
+  const headers = await authHeaders({ "Content-Type": "application/json" }).catch((error) => {
+    throw new Error(error instanceof Error ? error.message : "Sign in to request joining a trip.");
+  });
   const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}/join`, {
     method: "POST",
-    headers: await authHeaders({ "Content-Type": "application/json" }),
+    headers,
     body: JSON.stringify(profile),
   });
-  const body = await readTripsJson<{ member: TripMember; warnings?: string[] }>(response, "Failed to request join.");
+  const body = await readApiJson<{ member?: TripMember; warnings?: string[] }>(response, "Failed to request join.");
 
   if (!response.ok || !body.member) {
     throw new Error(body.warnings?.[0] || "Failed to request join.");
@@ -142,7 +162,7 @@ export async function updateTripMember(
     headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(request),
   });
-  const body = await readTripsJson<{ member: TripMember; warnings?: string[] }>(response, "Failed to update member.");
+  const body = await readApiJson<{ member?: TripMember; warnings?: string[] }>(response, "Failed to update member.");
 
   if (!response.ok || !body.member) {
     throw new Error(body.warnings?.[0] || "Failed to update member.");
@@ -158,7 +178,7 @@ export async function deleteTrip(tripId: string): Promise<void> {
   });
 
   if (!response.ok) {
-    const body = await readTripsJson<{ warnings?: string[] }>(response, "Failed to delete trip.");
+    const body = await readApiJson<{ warnings?: string[] }>(response, "Failed to delete trip.");
     throw new Error(body.warnings?.[0] || "Failed to delete trip.");
   }
 }
@@ -172,7 +192,7 @@ export async function updateTripSettings(
     headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(request),
   });
-  const body = await readTripsJson<{ trip: SavedTripDetail | null; warnings?: string[] }>(response, "Failed to update trip settings.");
+  const body = await readApiJson<{ trip: SavedTripDetail | null; warnings?: string[] }>(response, "Failed to update trip settings.", { trip: null });
 
   if (!response.ok || !body.trip) {
     throw new Error(body.warnings?.[0] || "Failed to update trip settings.");
@@ -185,7 +205,7 @@ export async function listTripMembers(tripId: string): Promise<TripMember[]> {
   const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}/members`, {
     headers: await authHeaders(),
   });
-  const body = await readTripsJson<{ members: TripMember[]; warnings?: string[] }>(response, "Failed to load members.");
+  const body = await readApiJson<{ members: TripMember[]; warnings?: string[] }>(response, "Failed to load members.", { members: [] });
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to load members.");
@@ -198,7 +218,7 @@ export async function listTripMessages(tripId: string): Promise<TripMessage[]> {
   const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}/messages`, {
     headers: await authHeaders(),
   });
-  const body = await readTripsJson<{ messages: TripMessage[]; warnings?: string[] }>(response, "Failed to load messages.");
+  const body = await readApiJson<{ messages: TripMessage[]; warnings?: string[] }>(response, "Failed to load messages.", { messages: [] });
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Failed to load messages.");
@@ -213,7 +233,7 @@ export async function sendTripMessage(tripId: string, request: SendTripMessageRe
     headers: await authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(request),
   });
-  const body = await readTripsJson<{ message: TripMessage; warnings?: string[] }>(response, "Failed to send message.");
+  const body = await readApiJson<{ message?: TripMessage; warnings?: string[] }>(response, "Failed to send message.");
 
   if (!response.ok || !body.message) {
     throw new Error(body.warnings?.[0] || "Failed to send message.");
@@ -241,16 +261,3 @@ export const visibilityDescriptions: Record<TripVisibility, string> = {
   invite: "Hidden from search. Share a link and approve join requests.",
   public: "Listed in Community. Anyone can request to join.",
 };
-
-async function readTripsJson<T extends { warnings?: string[] }>(response: Response, fallback: string): Promise<T> {
-  const contentType = response.headers.get("content-type") || "";
-
-  if (contentType.includes("application/json")) {
-    return await response.json() as T;
-  }
-
-  const text = await response.text().catch(() => "");
-  return {
-    warnings: [text ? text.slice(0, 180) : fallback],
-  } as T;
-}

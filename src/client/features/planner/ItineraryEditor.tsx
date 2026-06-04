@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "../../components/ui";
+import { readApiJson } from "../../api/http.js";
 import type { GeocodeResponse, ItineraryDay, ItineraryItem } from "../../../shared/types.js";
 import { cleanTime, tripDate } from "./plannerUtils";
 
@@ -322,7 +323,7 @@ function LocationPickerModal({ boundaryCities, destinationName, item, onClose, o
           items: [{ id: "location", title: query, attractionName: query }],
         }),
       });
-      const body = await response.json() as GeocodeResponse;
+      const body = await readApiJson<GeocodeResponse>(response, "Failed to geocode location.", { points: [] });
       const next = body.points[0];
       if (next) {
         setPoint({
@@ -354,7 +355,7 @@ function LocationPickerModal({ boundaryCities, destinationName, item, onClose, o
           items: [{ id: "destination", title: destinationName, attractionName: destinationName }],
         }),
       });
-      const body = await response.json() as GeocodeResponse;
+      const body = await readApiJson<GeocodeResponse>(response, "Failed to geocode destination.", { points: [] });
       const center = body.points[0];
       const map = mapRef.current;
       if (center && map) {

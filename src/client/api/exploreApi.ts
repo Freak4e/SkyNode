@@ -1,4 +1,5 @@
 import type { CurrencyCode, ExploreResponse } from "../../shared/types.js";
+import { readApiJson } from "./http.js";
 
 export async function fetchExploreDeals(input: {
   origin: string;
@@ -15,7 +16,7 @@ export async function fetchExploreDeals(input: {
   if (typeof input.limit === "number") params.set("limit", String(input.limit));
 
   const response = await fetch(`/api/explore?${params.toString()}`);
-  const body = await response.json() as ExploreResponse;
+  const body = await readApiJson<ExploreResponse>(response, "Explore request failed before the server returned JSON.");
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Explore request failed.");

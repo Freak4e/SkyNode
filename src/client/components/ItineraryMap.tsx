@@ -11,6 +11,7 @@ import type {
   TripHotel,
   TripRouteSegment,
 } from "../../shared/types.js";
+import { readApiJson } from "../api/http.js";
 
 type ItineraryMapMarker = {
   id: string;
@@ -100,7 +101,7 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
           }),
           signal: controller.signal,
         });
-        const body = await response.json() as GeocodeResponse;
+        const body = await readApiJson<GeocodeResponse>(response, "Failed to geocode itinerary items.", { points: [] });
 
         if (!response.ok) {
           throw new Error(body.warnings?.[0] || "Failed to geocode itinerary items.");
@@ -218,7 +219,7 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
           }),
           signal: controller.signal,
         });
-        const body = await response.json() as { routes?: DayRoute[] };
+        const body = await readApiJson<{ routes?: DayRoute[]; warnings?: string[] }>(response, "Directions request failed.", { routes: [] });
 
         if (!response.ok) {
           throw new Error("Directions request failed.");

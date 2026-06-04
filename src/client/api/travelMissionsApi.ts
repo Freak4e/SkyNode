@@ -1,5 +1,6 @@
 import type { TravelMissionStats, TravelMissionSubmitRequest, TravelMissionSubmitResponse, TravelMissionUnlock } from "../../shared/types.js";
 import { authHeaders } from "./authHeaders.js";
+import { readApiJson } from "./http.js";
 
 export async function listTravelMissionUnlocks(): Promise<{ totalCountries: number; unlocks: TravelMissionUnlock[] }> {
   const response = await fetch("/api/travel-missions/unlocks", {
@@ -7,11 +8,11 @@ export async function listTravelMissionUnlocks(): Promise<{ totalCountries: numb
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { warnings?: string[] };
+    const body = await readApiJson<{ warnings?: string[] }>(response, "Failed to load travel missions.");
     throw new Error(body.warnings?.[0] || "Failed to load travel missions.");
   }
 
-  return response.json() as Promise<{ totalCountries: number; unlocks: TravelMissionUnlock[] }>;
+  return readApiJson<{ totalCountries: number; unlocks: TravelMissionUnlock[] }>(response, "Failed to load travel missions.");
 }
 
 export async function submitTravelMission(input: TravelMissionSubmitRequest): Promise<TravelMissionSubmitResponse> {
@@ -22,11 +23,11 @@ export async function submitTravelMission(input: TravelMissionSubmitRequest): Pr
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { warnings?: string[] };
+    const body = await readApiJson<{ warnings?: string[] }>(response, "Failed to validate travel proof.");
     throw new Error(body.warnings?.[0] || "Failed to validate travel proof.");
   }
 
-  return response.json() as Promise<TravelMissionSubmitResponse>;
+  return readApiJson<TravelMissionSubmitResponse>(response, "Failed to validate travel proof.");
 }
 
 export async function getTravelMissionStats(userId: string): Promise<TravelMissionStats> {
@@ -35,9 +36,9 @@ export async function getTravelMissionStats(userId: string): Promise<TravelMissi
   });
 
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { warnings?: string[] };
+    const body = await readApiJson<{ warnings?: string[] }>(response, "Failed to load travel mission stats.");
     throw new Error(body.warnings?.[0] || "Failed to load travel mission stats.");
   }
 
-  return response.json() as Promise<TravelMissionStats>;
+  return readApiJson<TravelMissionStats>(response, "Failed to load travel mission stats.");
 }

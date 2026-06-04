@@ -5,7 +5,7 @@ import type { PlannerTab } from "./plannerTypes";
 import { dateRange } from "./plannerUtils";
 import { useDestinationImage } from "../../utils/destinationImage.js";
 
-type PlannerHeroProps = {
+type PlannerHeroProps = Readonly<{
   active: PlannerTab;
   cancelEdit: () => void;
   cost: number;
@@ -26,7 +26,9 @@ type PlannerHeroProps = {
   title: string;
   travelers: number;
   visibility: TripVisibility;
-};
+}>;
+type HeroTabProps = Readonly<{ active: boolean; icon: typeof List; label: string; onClick: () => void }>;
+type VisibilityToggleProps = Readonly<{ onChange: (visibility: TripVisibility) => void; visibility: TripVisibility }>;
 
 export function PlannerHero(props: PlannerHeroProps) {
   const cityName = props.itinerary.destinationName;
@@ -69,54 +71,82 @@ export function PlannerHero(props: PlannerHeroProps) {
             </p>
           </div>
           <div className="flex w-full min-w-0 flex-wrap items-center justify-start gap-2 lg:w-auto lg:justify-end">
-            {props.editing ? (
-              <>
-                {props.isSavedTrip && <Button type="button" tone="light" onClick={props.cancelEdit} className="rounded-full">Cancel</Button>}
-                <VisibilityToggle visibility={props.visibility} onChange={props.onVisibilityChange} />
-                <Button type="button" tone="ghost" onClick={props.saveEdits} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">Save edits</Button>
-              </>
-            ) : (
-              <>
-                <Button type="button" tone="light" onClick={props.onOpenSettings} icon={<Settings2 className="h-4 w-4" />} className="rounded-full">Settings</Button>
-                <Button type="button" tone="ghost" onClick={props.startEdit} icon={<Edit3 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">
-                  {props.isSavedTrip ? "Edit itinerary" : "Edit trip"}
-                </Button>
-                {!props.isSavedTrip ? (
-                  <Button type="button" onClick={props.saveTrip} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full">
-                    Save trip
-                  </Button>
-                ) : null}
-                {props.showDelete && props.onDelete && (
-                  <Button
-                    type="button"
-                    tone="danger"
-                    onClick={props.onDelete}
-                    disabled={props.deleting}
-                    icon={props.deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    className="rounded-full"
-                  >
-                    Delete trip
-                  </Button>
-                )}
-              </>
-            )}
+            {props.editing ? <EditingActions {...props} /> : <ViewActions {...props} />}
           </div>
         </div>
 
         <div className="mt-7 inline-flex rounded-full border border-white/10 bg-slate-950/40 p-1">
-          {tabs.map(({ id, label, icon: Icon }) => (
-            <button key={id} type="button" onClick={() => props.setActive(id)} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${props.active === id ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"}`}>
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          ))}
+          {tabs.map((tab) => <HeroTab key={tab.id} {...tab} active={props.active === tab.id} onClick={() => props.setActive(tab.id)} />)}
         </div>
       </div>
     </section>
   );
 }
 
-function VisibilityToggle({ onChange, visibility }: { onChange: (visibility: TripVisibility) => void; visibility: TripVisibility }) {
+function EditingActions(props: PlannerHeroProps) {
+  return (
+    <>
+      {props.isSavedTrip && <Button type="button" tone="light" onClick={props.cancelEdit} className="rounded-full">Cancel</Button>}
+      <VisibilityToggle visibility={props.visibility} onChange={props.onVisibilityChange} />
+      <Button type="button" tone="ghost" onClick={props.saveEdits} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">Save edits</Button>
+    </>
+  );
+}
+
+function ViewActions(props: PlannerHeroProps) {
+  return (
+    <>
+      <Button type="button" tone="light" onClick={props.onOpenSettings} icon={<Settings2 className="h-4 w-4" />} className="rounded-full">Settings</Button>
+      <Button type="button" tone="ghost" onClick={props.startEdit} icon={<Edit3 className="h-4 w-4" />} className="rounded-full bg-white text-slate-900">
+        {props.isSavedTrip ? "Edit itinerary" : "Edit trip"}
+      </Button>
+      <SaveTripAction {...props} />
+      <DeleteTripAction {...props} />
+    </>
+  );
+}
+
+function SaveTripAction(props: PlannerHeroProps) {
+  if (props.isSavedTrip) {
+    return null;
+  }
+
+  return (
+    <Button type="button" onClick={props.saveTrip} disabled={props.saving} icon={props.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} className="rounded-full">
+      Save trip
+    </Button>
+  );
+}
+
+function DeleteTripAction(props: PlannerHeroProps) {
+  if (!props.showDelete || !props.onDelete) {
+    return null;
+  }
+
+  return (
+    <Button
+      type="button"
+      tone="danger"
+      onClick={props.onDelete}
+      disabled={props.deleting}
+      icon={props.deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+      className="rounded-full"
+    >
+      Delete trip
+    </Button>
+  );
+}
+
+function HeroTab({ active, icon: Icon, label, onClick }: HeroTabProps) {
+  return (
+    <button type="button" onClick={onClick} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold transition ${active ? "bg-white text-slate-900" : "text-slate-300 hover:text-white"}`}>
+      <Icon className="h-4 w-4" />
+      {label}
+    </button>
+  );
+}
+
+function VisibilityToggle({ onChange, visibility }: VisibilityToggleProps) {
   const options = [
     { value: "private" as const, label: "Private", Icon: Lock },
     { value: "invite" as const, label: "Invite", Icon: Link2 },

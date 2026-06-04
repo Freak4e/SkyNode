@@ -72,6 +72,19 @@ type FlightSearchSession = {
   tripType: TripType;
 };
 
+type InitialSearchState = Readonly<{
+  fromPlanner: boolean;
+  hasInitialSearch: boolean;
+  initialDate: string;
+  initialFromCodes: string[];
+  initialFromName: string;
+  initialPassengers: number;
+  initialReturnDate: string;
+  initialToCodes: string[];
+  initialToName: string;
+  initialTripType: TripType;
+}>;
+
 function buildPlace(code: string, name: string): Place {
   return {
     code,
@@ -315,7 +328,7 @@ function formatClockTime(value: string): string {
   const minutes = parseClockMinutes(value);
 
   if (minutes === null) {
-    return value.replace(/\s*\b(?:AM|PM)\b\.?/gi, "").trim();
+    return removeMeridiem(value).trim();
   }
 
   const dayOffset = Math.floor(minutes / (24 * 60));
@@ -483,6 +496,63 @@ function buildPairs(outboundOffers: FlightOffer[], inboundOffers: FlightOffer[],
     .flatMap((outbound) => inboundOffers.slice(0, 12).map((inbound) => ({ outbound, inbound })));
 }
 
+function removeMeridiem(value: string): string {
+  const trimmed = value.trim();
+  const lower = trimmed.toLowerCase();
+
+  for (const suffix of [" a.m.", " p.m.", " am", " pm", "a.m.", "p.m.", "am", "pm"]) {
+    if (lower.endsWith(suffix)) {
+      return trimmed.slice(0, trimmed.length - suffix.length).trimEnd();
+    }
+  }
+
+  return value;
+}
+
+type VisibleFlightGroupsInput = Readonly<{
+  airlineFilters: string[];
+  maxDuration: number;
+  pairs: FlightPair[];
+  selectedMaxPrice: number;
+  sort: SortMode;
+  stopsFilters: StopsFilter[];
+}>;
+
+function visibleFlightGroups(input: VisibleFlightGroupsInput): { flightPairs: FlightPair[]; groundTransportPairs: FlightPair[]; sorted: FlightPair[] } {
+  const sortedByMode = input.pairs
+    .filter((pair) => visibleFlightPair(pair, input))
+    .sort((first, second) => compareFlightPairs(first, second, input.sort));
+  const flightPairs = sortedByMode.filter((pair) => !isGroundTransportPair(pair));
+  const groundTransportPairs = sortedByMode.filter(isGroundTransportPair);
+
+  return {
+    flightPairs,
+    groundTransportPairs,
+    sorted: [...flightPairs, ...groundTransportPairs],
+  };
+}
+
+function visibleFlightPair(pair: FlightPair, input: VisibleFlightGroupsInput): boolean {
+  const pairOffers = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
+
+  return pairPrice(pair) <= input.selectedMaxPrice
+    && pairOffers.every((offer) => estimateOfferDurationHours(offer) <= input.maxDuration)
+    && pairOffers.every((offer) => matchesStopsFilter(offer, input.stopsFilters))
+    && matchesAirlineFilter(pairOffers, input.airlineFilters);
+}
+
+function matchesAirlineFilter(offers: FlightOffer[], airlineFilters: string[]): boolean {
+  return airlineFilters.length === 0
+    || offers.some((offer) => airlineFilters.some((airline) => offer.carrier?.includes(airline)));
+}
+
+function compareFlightPairs(first: FlightPair, second: FlightPair, sort: SortMode): number {
+  if (sort === "price") return pairPrice(first) - pairPrice(second);
+  if (sort === "duration") return pairDurationHours(first) - pairDurationHours(second);
+  if (sort === "earliest") return pairEarliestMinutes(first) - pairEarliestMinutes(second);
+  return pairPrice(first) + pairDurationHours(first) * 12 - (pairPrice(second) + pairDurationHours(second) * 12);
+}
+
 function formatDisplayDate(value: string): string {
   const parsed = new Date(value);
 
@@ -557,76 +627,92 @@ function buildSegmentBlock(
   destination: Place,
 ): SegmentBlock {
   const layovers = layoverDetails(offer, origin, destination);
+  const legs = buildFlightLegs(offer, origin, destination, layovers);
 
+  return { label, date, offer, origin, destination, legs, layovers };
+}
+
+function buildFlightLegs(offer: FlightOffer, origin: Place, destination: Place, layovers: LayoverInfo[]): FlightLeg[] {
   if (offer.segments && offer.segments.length > 1) {
-    const legs: FlightLeg[] = offer.segments.map((segment) => ({
-      departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
-      arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
-      carrier: segment.carrier,
-      departureCity: segment.originAirport || segment.originCode,
-      departureCode: segment.originCode || origin.code,
-      departureAirport: segment.originAirport || origin.name,
-      arrivalCity: segment.destinationAirport || segment.destinationCode,
-      arrivalCode: segment.destinationCode || destination.code,
-      arrivalAirport: segment.destinationAirport || destination.name,
-      flightMinutes: segment.durationMinutes || 60,
-    }));
-
-    return { label, date, offer, origin, destination, legs, layovers };
+    return buildExplicitSegmentLegs(offer.segments, origin, destination);
   }
-
   if (offer.segments?.length === 1 && layovers.length > 0) {
-    const segment = offer.segments[0];
-    const layover = layovers[0];
-    const totalMinutes = offer.durationMinutes || estimateOfferDurationMinutes(offer);
-    const layoverMinutes = layover.durationMinutes || 90;
-    const flightMinutes = Math.max(45, Math.floor((totalMinutes - layoverMinutes) / 2));
-
-    const legs: FlightLeg[] = [
-      {
-        departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
-        arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
-        departureCity: segment.originAirport || origin.cityName || origin.name,
-        departureCode: segment.originCode || origin.code,
-        departureAirport: segment.originAirport || origin.name,
-        arrivalCity: layover.city || layover.airport,
-        arrivalCode: layover.code,
-        arrivalAirport: layover.airport,
-        flightMinutes,
-      },
-      {
-        departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
-        arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
-        departureCity: layover.city || layover.airport,
-        departureCode: layover.code,
-        departureAirport: layover.airport,
-        arrivalCity: segment.destinationAirport || destination.cityName || destination.name,
-        arrivalCode: segment.destinationCode || destination.code,
-        arrivalAirport: segment.destinationAirport || destination.name,
-        flightMinutes,
-      },
-    ];
-
-    return { label, date, offer, origin, destination, legs, layovers };
+    return buildSingleSegmentLayoverLegs(offer, origin, destination, layovers[0]);
+  }
+  if (offer.segments?.length === 1) {
+    return [buildSingleSegmentLeg(offer.segments[0], offer, origin, destination)];
   }
 
-  if (offer.segments?.length === 1) {
-    const segment = offer.segments[0];
-    const legs: FlightLeg[] = [{
+  return buildEstimatedLegs(offer, origin, destination, layovers);
+}
+
+function buildExplicitSegmentLegs(segments: NonNullable<FlightOffer["segments"]>, origin: Place, destination: Place): FlightLeg[] {
+  return segments.map((segment) => ({
+    departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+    arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+    carrier: segment.carrier,
+    departureCity: segment.originAirport || segment.originCode,
+    departureCode: segment.originCode || origin.code,
+    departureAirport: segment.originAirport || origin.name,
+    arrivalCity: segment.destinationAirport || segment.destinationCode,
+    arrivalCode: segment.destinationCode || destination.code,
+    arrivalAirport: segment.destinationAirport || destination.name,
+    flightMinutes: segment.durationMinutes || 60,
+  }));
+}
+
+function buildSingleSegmentLayoverLegs(offer: FlightOffer, origin: Place, destination: Place, layover: LayoverInfo): FlightLeg[] {
+  const segment = offer.segments![0];
+  const totalMinutes = offer.durationMinutes || estimateOfferDurationMinutes(offer);
+  const layoverMinutes = layover.durationMinutes || 90;
+  const flightMinutes = Math.max(45, Math.floor((totalMinutes - layoverMinutes) / 2));
+
+  return [
+    {
       departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
       arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
       departureCity: segment.originAirport || origin.cityName || origin.name,
       departureCode: segment.originCode || origin.code,
       departureAirport: segment.originAirport || origin.name,
+      arrivalCity: layover.city || layover.airport,
+      arrivalCode: layover.code,
+      arrivalAirport: layover.airport,
+      flightMinutes,
+    },
+    {
+      departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+      arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+      departureCity: layover.city || layover.airport,
+      departureCode: layover.code,
+      departureAirport: layover.airport,
       arrivalCity: segment.destinationAirport || destination.cityName || destination.name,
       arrivalCode: segment.destinationCode || destination.code,
       arrivalAirport: segment.destinationAirport || destination.name,
-      flightMinutes: segment.durationMinutes || estimateOfferDurationMinutes(offer),
-    }];
+      flightMinutes,
+    },
+  ];
+}
 
-    return { label, date, offer, origin, destination, legs, layovers };
-  }
+function buildSingleSegmentLeg(
+  segment: NonNullable<FlightOffer["segments"]>[number],
+  offer: FlightOffer,
+  origin: Place,
+  destination: Place,
+): FlightLeg {
+  return {
+    departureTime: segment.departureTime ? formatClockTime(segment.departureTime) : "--:--",
+    arrivalTime: segment.arrivalTime ? formatClockTime(segment.arrivalTime) : "--:--",
+    departureCity: segment.originAirport || origin.cityName || origin.name,
+    departureCode: segment.originCode || origin.code,
+    departureAirport: segment.originAirport || origin.name,
+    arrivalCity: segment.destinationAirport || destination.cityName || destination.name,
+    arrivalCode: segment.destinationCode || destination.code,
+    arrivalAirport: segment.destinationAirport || destination.name,
+    flightMinutes: segment.durationMinutes || estimateOfferDurationMinutes(offer),
+  };
+}
 
+function buildEstimatedLegs(offer: FlightOffer, origin: Place, destination: Place, layovers: LayoverInfo[]): FlightLeg[] {
   const totalDuration = estimateOfferDurationMinutes(offer);
   const totalLayoverMinutes = layovers.reduce((sum, layover) => sum + layover.durationMinutes, 0);
   const segmentCount = layovers.length + 1;
@@ -639,44 +725,86 @@ function buildSegmentBlock(
   const legs: FlightLeg[] = [];
 
   for (let index = 0; index < segmentCount; index += 1) {
-    const isFirst = index === 0;
-    const isLast = index === segmentCount - 1;
-    const layover = layovers[index - 1];
-    const previousLayover = layovers[index];
-
-    const legDepartureTime = isFirst
-      ? currentTime
-      : addMinutesToClock(currentTime, layover.durationMinutes);
-
-    const flightMinutes = flightMinutesBySegment[index] ?? flightMinutesBySegment[flightMinutesBySegment.length - 1] ?? 60;
-    const legArrivalTime = isLast && offer.arrivalTime
-      ? formatClockTime(offer.arrivalTime)
-      : addMinutesToClock(legDepartureTime, flightMinutes);
-
-    const legOriginCity = isFirst ? (origin.cityName || origin.name) : layover.city;
-    const legOriginCode = isFirst ? origin.code : layover.code;
-    const legOriginAirport = isFirst ? origin.name : layover.airport;
-
-    const legDestinationCity = isLast ? (destination.cityName || destination.name) : previousLayover.city;
-    const legDestinationCode = isLast ? destination.code : previousLayover.code;
-    const legDestinationAirport = isLast ? destination.name : previousLayover.airport;
-
-    legs.push({
-      departureTime: legDepartureTime,
-      arrivalTime: legArrivalTime,
-      departureCity: legOriginCity,
-      departureCode: legOriginCode,
-      departureAirport: legOriginAirport,
-      arrivalCity: legDestinationCity,
-      arrivalCode: legDestinationCode,
-      arrivalAirport: legDestinationAirport,
-      flightMinutes,
+    const leg = buildEstimatedLeg({
+      destination,
+      flightMinutes: flightMinutesBySegment[index] ?? flightMinutesBySegment.at(-1) ?? 60,
+      index,
+      layover: layovers[index - 1],
+      offer,
+      origin,
+      previousLayover: layovers[index],
+      segmentCount,
+      startTime: currentTime,
     });
 
-    currentTime = legArrivalTime;
+    legs.push(leg);
+    currentTime = leg.arrivalTime;
   }
 
-  return { label, date, offer, origin, destination, legs, layovers };
+  return legs;
+}
+
+type EstimatedLegInput = Readonly<{
+  destination: Place;
+  flightMinutes: number;
+  index: number;
+  layover?: LayoverInfo;
+  offer: FlightOffer;
+  origin: Place;
+  previousLayover?: LayoverInfo;
+  segmentCount: number;
+  startTime: string;
+}>;
+
+function buildEstimatedLeg(input: EstimatedLegInput): FlightLeg {
+  const isFirst = input.index === 0;
+  const isLast = input.index === input.segmentCount - 1;
+  const departureTime = isFirst
+    ? input.startTime
+    : addMinutesToClock(input.startTime, input.layover?.durationMinutes ?? 0);
+  const arrivalTime = isLast && input.offer.arrivalTime
+    ? formatClockTime(input.offer.arrivalTime)
+    : addMinutesToClock(departureTime, input.flightMinutes);
+
+  return {
+    departureTime,
+    arrivalTime,
+    ...estimatedLegOrigin(input.origin, input.layover, isFirst),
+    ...estimatedLegDestination(input.destination, input.previousLayover, isLast),
+    flightMinutes: input.flightMinutes,
+  };
+}
+
+function estimatedLegOrigin(origin: Place, layover: LayoverInfo | undefined, isFirst: boolean): Pick<FlightLeg, "departureAirport" | "departureCity" | "departureCode"> {
+  if (isFirst || !layover) {
+    return {
+      departureCity: origin.cityName || origin.name,
+      departureCode: origin.code,
+      departureAirport: origin.name,
+    };
+  }
+
+  return {
+    departureCity: layover.city,
+    departureCode: layover.code,
+    departureAirport: layover.airport,
+  };
+}
+
+function estimatedLegDestination(destination: Place, layover: LayoverInfo | undefined, isLast: boolean): Pick<FlightLeg, "arrivalAirport" | "arrivalCity" | "arrivalCode"> {
+  if (isLast || !layover) {
+    return {
+      arrivalCity: destination.cityName || destination.name,
+      arrivalCode: destination.code,
+      arrivalAirport: destination.name,
+    };
+  }
+
+  return {
+    arrivalCity: layover.city,
+    arrivalCode: layover.code,
+    arrivalAirport: layover.airport,
+  };
 }
 
 function TripDetailsModal({
@@ -1199,54 +1327,25 @@ export function SearchResultsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const restoredSearch = useMemo(() => params.toString() ? null : readFlightSearchSession(), [params]);
+  const initialSearch = useMemo(() => initialSearchState(params), [params]);
 
-  const fromPlanner = params.get("source") === "planner";
-  const fromParam = params.has("fromAll") ? params.get("fromAll") ?? "" : params.get("from");
-  const toParam = params.has("toAll") ? params.get("toAll") ?? "" : params.get("to");
-  const parsedFromCodes = fromParam === null ? [] : parseCodeParam(fromParam);
-  const parsedToCodes = toParam === null ? [] : parseCodeParam(toParam);
-  const hasInitialSearch = Boolean(fromParam?.trim() && toParam?.trim());
-  const initialFromCodes = parsedFromCodes.length ? parsedFromCodes : fromParam === null && !fromPlanner ? ["NYC"] : [];
-  const initialToCodes = parsedToCodes.length ? parsedToCodes : toParam === null && !fromPlanner ? ["TYO"] : [];
-  const initialDate = params.get("date") ?? today;
-  const plannerDays = Number(params.get("days") || 0);
-  const initialReturnDate = params.get("returnDate")
-    ?? (plannerDays > 0 ? tripReturnDate(initialDate, plannerDays) : initialDate);
-  const initialTripType = params.get("tripType") === "one-way" ? "one-way" : "return";
-  const parsedPassengers = Number(params.get("passengers") || 1);
-  const initialPassengers = Number.isFinite(parsedPassengers)
-    ? Math.min(Math.max(parsedPassengers, 1), 9)
-    : 1;
-  const initialFromName = params.get("fromName") ?? (fromPlanner ? "" : "New York");
-  const initialToName = params.get("toName") ?? (fromPlanner ? "" : "Tokyo");
-
-  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => restoredSearch?.fromPlaces || buildInitialPlaces(initialFromCodes, initialFromName));
-  const [toPlaces, setToPlaces] = useState<Place[]>(() => {
-    if (restoredSearch?.toPlaces) {
-      return restoredSearch.toPlaces;
-    }
-
-    if (initialToCodes.length) {
-      return buildInitialPlaces(initialToCodes, initialToName);
-    }
-
-    return initialToName ? [buildPlace("", initialToName)] : [];
-  });
+  const [fromPlaces, setFromPlaces] = useState<Place[]>(() => restoredSearch?.fromPlaces || buildInitialPlaces(initialSearch.initialFromCodes, initialSearch.initialFromName));
+  const [toPlaces, setToPlaces] = useState<Place[]>(() => initialToPlaces(restoredSearch, initialSearch));
   const from = fromPlaces[0];
   const to = toPlaces[0];
   const [resultFromPlaces, setResultFromPlaces] = useState<Place[]>(() => restoredSearch?.resultFromPlaces || [...fromPlaces]);
   const [resultToPlaces, setResultToPlaces] = useState<Place[]>(() => restoredSearch?.resultToPlaces || [...toPlaces]);
   const resultFrom = resultFromPlaces[0] || from;
   const resultTo = resultToPlaces[0] || to;
-  const [date, setDate] = useState(restoredSearch?.date || initialDate);
-  const [returnDate, setReturnDate] = useState(restoredSearch?.returnDate || initialReturnDate);
-  const [tripType, setTripType] = useState<TripType>(restoredSearch?.tripType || initialTripType);
-  const [passengers, setPassengers] = useState(restoredSearch?.passengers || initialPassengers);
+  const [date, setDate] = useState(restoredSearch?.date || initialSearch.initialDate);
+  const [returnDate, setReturnDate] = useState(restoredSearch?.returnDate || initialSearch.initialReturnDate);
+  const [tripType, setTripType] = useState<TripType>(restoredSearch?.tripType || initialSearch.initialTripType);
+  const [passengers, setPassengers] = useState(restoredSearch?.passengers || initialSearch.initialPassengers);
 
   const [offers, setOffers] = useState<FlightOffer[]>(() => restoredSearch?.offers || []);
   const [returnOffers, setReturnOffers] = useState<FlightOffer[]>(() => restoredSearch?.returnOffers || []);
-  const [hasSearched, setHasSearched] = useState(restoredSearch?.hasSearched ?? hasInitialSearch);
-  const [loading, setLoading] = useState(restoredSearch ? false : hasInitialSearch);
+  const [hasSearched, setHasSearched] = useState(restoredSearch?.hasSearched ?? initialSearch.hasInitialSearch);
+  const [loading, setLoading] = useState(restoredSearch ? false : initialSearch.hasInitialSearch);
   const [error, setError] = useState(restoredSearch?.error || "");
   const [sort, setSort] = useState<SortMode>(restoredSearch?.sort || "best");
   const [currency, setCurrency] = useState<CurrencyCode>(() => {
@@ -1266,15 +1365,15 @@ export function SearchResultsPage() {
   const canSearch = placeCodes(fromPlaces).length > 0 && placeCodes(toPlaces).length > 0;
 
   useEffect(() => {
-    if (hasInitialSearch && !restoredSearch) {
-      doSearch(initialFromCodes, initialToCodes, initialDate, initialTripType, initialReturnDate);
+    if (initialSearch.hasInitialSearch && !restoredSearch) {
+      doSearch(initialSearch.initialFromCodes, initialSearch.initialToCodes, initialSearch.initialDate, initialSearch.initialTripType, initialSearch.initialReturnDate);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const toName = params.get("toName")?.trim();
 
-    if (!fromPlanner || !toName || initialToCodes.length) {
+    if (!initialSearch.fromPlanner || !toName || initialSearch.initialToCodes.length) {
       return;
     }
 
@@ -1285,21 +1384,13 @@ export function SearchResultsPage() {
         return;
       }
 
-      const normalizedTarget = toName.toLowerCase();
-      const match = places.find((place) => (
-        place.type === "city"
-        && [place.cityName, place.name, place.code].some((value) => value?.toLowerCase().includes(normalizedTarget))
-      )) || places.find((place) => place.type === "city") || places[0];
-
-      if (match) {
-        setToPlaces([match]);
-      }
+      setToPlaces([bestPlannerDestinationMatch(places, toName)]);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [fromPlanner, initialToCodes.length, params]);
+  }, [initialSearch.fromPlanner, initialSearch.initialToCodes.length, params]);
 
   useEffect(() => {
     const handleCurrencyChange = (event: Event) => {
@@ -1475,23 +1566,12 @@ export function SearchResultsPage() {
     setToPlaces([...fromPlaces]);
   }
 
-  function likedRequestForPair(pair: FlightPair): SaveLikedFlightRequest {
-    return {
-      outbound: pair.outbound,
-      inbound: pair.inbound,
-      tripType,
-      departureDate: date,
-      returnDate: tripType === "return" ? returnDate : undefined,
-      totalPriceText: formatDisplayPrice(pair, currency),
-    };
-  }
-
   async function toggleLikedFlight(pair: FlightPair) {
     if (!user) {
       return;
     }
 
-    const request = likedRequestForPair(pair);
+    const request = likedRequestForPair(pair, tripType, date, returnDate, currency);
     const fingerprint = likedFlightFingerprint(request);
     const existing = likedFlights.find((item) => item.fingerprint === fingerprint);
     setLikedFlightBusy(fingerprint);
@@ -1589,30 +1669,14 @@ export function SearchResultsPage() {
   const pairs = buildPairs(offers, returnOffers, tripType);
   const priceRange = priceRangeForPairs(pairs);
   const selectedMaxPrice = Math.min(Math.max(maxPrice, priceRange.min), priceRange.max);
-  const filtered = pairs.filter((pair) => {
-    const pairOffers = [pair.outbound, pair.inbound].filter((offer): offer is FlightOffer => Boolean(offer));
-
-    if (pairPrice(pair) > selectedMaxPrice) return false;
-    if (pairOffers.some((offer) => estimateOfferDurationHours(offer) > maxDuration)) return false;
-    if (!pairOffers.every((offer) => matchesStopsFilter(offer, stopsFilters))) return false;
-    if (
-      airlineFilters.length > 0 &&
-      !pairOffers.some((offer) => airlineFilters.some((airline) => offer.carrier?.includes(airline)))
-    ) {
-      return false;
-    }
-
-    return true;
+  const { flightPairs, groundTransportPairs, sorted } = visibleFlightGroups({
+    airlineFilters,
+    maxDuration,
+    pairs,
+    selectedMaxPrice,
+    sort,
+    stopsFilters,
   });
-  const sortedByMode = [...filtered].sort((a, b) => {
-    if (sort === "price") return pairPrice(a) - pairPrice(b);
-    if (sort === "duration") return pairDurationHours(a) - pairDurationHours(b);
-    if (sort === "earliest") return pairEarliestMinutes(a) - pairEarliestMinutes(b);
-    return pairPrice(a) + pairDurationHours(a) * 12 - (pairPrice(b) + pairDurationHours(b) * 12);
-  });
-  const flightPairs = sortedByMode.filter((pair) => !isGroundTransportPair(pair));
-  const groundTransportPairs = sortedByMode.filter(isGroundTransportPair);
-  const sorted = [...flightPairs, ...groundTransportPairs];
   const currencySymbol = currencyOptions.find((option) => option.code === currency)?.symbol || currency;
 
   return (
@@ -1859,64 +1923,26 @@ export function SearchResultsPage() {
                   {likedFlightError}
                 </div>
               )}
-              {flightPairs.map((pair, index) => {
-                const displayPrice = formatDisplayPrice(pair, currency);
-                const likedRequest = likedRequestForPair(pair);
-                const likedFingerprint = likedFlightFingerprint(likedRequest);
-                const isLiked = likedFlights.some((item) => item.fingerprint === likedFingerprint);
-                const outboundOrigin = resolveOfferPlace(resultFromPlaces, pair.outbound.searchFrom, resultFrom);
-                const outboundDestination = resolveOfferPlace(resultToPlaces, pair.outbound.searchTo, resultTo);
-                const inboundOrigin = resolveOfferPlace(resultToPlaces, pair.inbound?.searchFrom, outboundDestination);
-                const inboundDestination = resolveOfferPlace(resultFromPlaces, pair.inbound?.searchTo, outboundOrigin);
-                return (
-                  <div
-                    key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
-                    className="grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px]"
-                  >
-                    <div className="divide-y divide-dashed divide-slate-200 px-4">
-                      <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={outboundOrigin} destination={outboundDestination} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
-                      {tripType === "return" && (
-                        <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={inboundOrigin} destination={inboundDestination} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
-                      )}
-                      <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
-                        <span className="flex items-center gap-1"><Plane className="h-3.5 w-3.5" /> 1 carry-on</span>
-                        <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Synced route</span>
-                      </div>
-                    </div>
-
-                    <div className="relative flex flex-col justify-center border-t border-slate-200 bg-white p-5 text-center lg:border-l lg:border-t-0">
-                      {user && (
-                        <button
-                          type="button"
-                          onClick={() => void toggleLikedFlight(pair)}
-                          disabled={likedFlightBusy === likedFingerprint}
-                          className={`absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border transition ${
-                            isLiked
-                              ? "border-rose-200 bg-rose-50 text-rose-600"
-                              : "border-slate-200 bg-white text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-                          } disabled:cursor-wait disabled:opacity-60`}
-                          aria-label={isLiked ? "Remove liked flight" : "Like flight"}
-                          title={isLiked ? "Remove liked flight" : "Like flight"}
-                        >
-                          <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
-                        </button>
-                      )}
-                      <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {tripType === "return" ? "Return total estimate" : "One-way estimate"}
-                      </p>
-
-                      <button
-                        type="button"
-                        onClick={() => openPlanner(pair)}
-                        className="mt-8 rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-700"
-                      >
-                        Select and plan trip
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+              {flightPairs.map((pair, index) => (
+                <FlightOfferCard
+                  key={`${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
+                  currency={currency}
+                  date={date}
+                  hasUser={Boolean(user)}
+                  likedFlightBusy={likedFlightBusy}
+                  likedFlights={likedFlights}
+                  onLike={toggleLikedFlight}
+                  onOpenDetails={setDetailsPair}
+                  onOpenPlanner={openPlanner}
+                  pair={pair}
+                  resultFrom={resultFrom}
+                  resultFromPlaces={resultFromPlaces}
+                  resultTo={resultTo}
+                  resultToPlaces={resultToPlaces}
+                  returnDate={returnDate}
+                  tripType={tripType}
+                />
+              ))}
 
               {groundTransportPairs.length > 0 && (
                 <div className="space-y-4 pt-2">
@@ -1925,64 +1951,27 @@ export function SearchResultsPage() {
                     FlixBus / ground transport option shown separately
                   </div>
 
-                  {groundTransportPairs.map((pair, index) => {
-                    const displayPrice = formatDisplayPrice(pair, currency);
-                    const likedRequest = likedRequestForPair(pair);
-                    const likedFingerprint = likedFlightFingerprint(likedRequest);
-                    const isLiked = likedFlights.some((item) => item.fingerprint === likedFingerprint);
-                    const outboundOrigin = resolveOfferPlace(resultFromPlaces, pair.outbound.searchFrom, resultFrom);
-                    const outboundDestination = resolveOfferPlace(resultToPlaces, pair.outbound.searchTo, resultTo);
-                    const inboundOrigin = resolveOfferPlace(resultToPlaces, pair.inbound?.searchFrom, outboundDestination);
-                    const inboundDestination = resolveOfferPlace(resultFromPlaces, pair.inbound?.searchTo, outboundOrigin);
-                    return (
-                      <div
-                        key={`ground-${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
-                        className="grid overflow-hidden rounded-lg border border-amber-200 bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px]"
-                      >
-                        <div className="divide-y divide-dashed divide-slate-200 px-4">
-                          <FlightSegment label="Outbound" date={date} offer={pair.outbound} origin={outboundOrigin} destination={outboundDestination} direction="outbound" onShowDetails={() => setDetailsPair(pair)} />
-                          {tripType === "return" && (
-                            <FlightSegment label="Inbound" date={returnDate} offer={pair.inbound} origin={inboundOrigin} destination={inboundDestination} direction="inbound" onShowDetails={() => setDetailsPair(pair)} />
-                          )}
-                          <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
-                            <span className="flex items-center gap-1"><Bus className="h-3.5 w-3.5" /> Ground transport</span>
-                            <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> Separate route option</span>
-                          </div>
-                        </div>
-
-                        <div className="relative flex flex-col justify-center border-t border-amber-100 bg-amber-50/40 p-5 text-center lg:border-l lg:border-t-0">
-                          {user && (
-                            <button
-                              type="button"
-                              onClick={() => void toggleLikedFlight(pair)}
-                              disabled={likedFlightBusy === likedFingerprint}
-                              className={`absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border transition ${
-                                isLiked
-                                  ? "border-rose-200 bg-rose-50 text-rose-600"
-                                  : "border-slate-200 bg-white text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
-                              } disabled:cursor-wait disabled:opacity-60`}
-                              aria-label={isLiked ? "Remove liked flight" : "Like flight"}
-                              title={isLiked ? "Remove liked flight" : "Like flight"}
-                            >
-                              <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
-                            </button>
-                          )}
-                          <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {tripType === "return" ? "Return total estimate" : "One-way estimate"}
-                          </p>
-
-                          <button
-                            type="button"
-                            onClick={() => openPlanner(pair)}
-                            className="mt-8 rounded-lg bg-amber-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-700"
-                          >
-                            Select and plan trip
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {groundTransportPairs.map((pair, index) => (
+                    <FlightOfferCard
+                      key={`ground-${pair.outbound.carrier}-${pair.outbound.departureTime}-${pair.inbound?.departureTime || "one-way"}-${index}`}
+                      currency={currency}
+                      date={date}
+                      hasUser={Boolean(user)}
+                      likedFlightBusy={likedFlightBusy}
+                      likedFlights={likedFlights}
+                      onLike={toggleLikedFlight}
+                      onOpenDetails={setDetailsPair}
+                      onOpenPlanner={openPlanner}
+                      pair={pair}
+                      resultFrom={resultFrom}
+                      resultFromPlaces={resultFromPlaces}
+                      resultTo={resultTo}
+                      resultToPlaces={resultToPlaces}
+                      returnDate={returnDate}
+                      tripType={tripType}
+                      variant="ground"
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -2008,6 +1997,108 @@ export function SearchResultsPage() {
   );
 }
 
+type FlightOfferCardProps = Readonly<{
+  currency: CurrencyCode;
+  date: string;
+  hasUser: boolean;
+  likedFlightBusy: string;
+  likedFlights: LikedFlight[];
+  onLike: (pair: FlightPair) => Promise<void>;
+  onOpenDetails: (pair: FlightPair) => void;
+  onOpenPlanner: (pair: FlightPair) => void;
+  pair: FlightPair;
+  resultFrom: Place;
+  resultFromPlaces: Place[];
+  resultTo: Place;
+  resultToPlaces: Place[];
+  returnDate: string;
+  tripType: TripType;
+  variant?: "flight" | "ground";
+}>;
+
+function FlightOfferCard(props: FlightOfferCardProps) {
+  const displayPrice = formatDisplayPrice(props.pair, props.currency);
+  const likedRequest = likedRequestForPair(props.pair, props.tripType, props.date, props.returnDate, props.currency);
+  const likedFingerprint = likedFlightFingerprint(likedRequest);
+  const isLiked = props.likedFlights.some((item) => item.fingerprint === likedFingerprint);
+  const outboundOrigin = resolveOfferPlace(props.resultFromPlaces, props.pair.outbound.searchFrom, props.resultFrom);
+  const outboundDestination = resolveOfferPlace(props.resultToPlaces, props.pair.outbound.searchTo, props.resultTo);
+  const inboundOrigin = resolveOfferPlace(props.resultToPlaces, props.pair.inbound?.searchFrom, outboundDestination);
+  const inboundDestination = resolveOfferPlace(props.resultFromPlaces, props.pair.inbound?.searchTo, outboundOrigin);
+  const isGround = props.variant === "ground";
+
+  return (
+    <div className={`grid overflow-hidden rounded-lg border bg-white shadow-sm transition-shadow hover:shadow-md lg:grid-cols-[1fr_240px] ${isGround ? "border-amber-200" : "border-slate-200"}`}>
+      <div className="divide-y divide-dashed divide-slate-200 px-4">
+        <FlightSegment label="Outbound" date={props.date} offer={props.pair.outbound} origin={outboundOrigin} destination={outboundDestination} direction="outbound" onShowDetails={() => props.onOpenDetails(props.pair)} />
+        {props.tripType === "return" && (
+          <FlightSegment label="Inbound" date={props.returnDate} offer={props.pair.inbound} origin={inboundOrigin} destination={inboundDestination} direction="inbound" onShowDetails={() => props.onOpenDetails(props.pair)} />
+        )}
+        <FlightOfferBadges ground={isGround} />
+      </div>
+
+      <div className={`relative flex flex-col justify-center border-t p-5 text-center lg:border-l lg:border-t-0 ${isGround ? "border-amber-100 bg-amber-50/40" : "border-slate-200 bg-white"}`}>
+        {props.hasUser && (
+          <button
+            type="button"
+            onClick={() => void props.onLike(props.pair)}
+            disabled={props.likedFlightBusy === likedFingerprint}
+            className={`absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border transition ${
+              isLiked
+                ? "border-rose-200 bg-rose-50 text-rose-600"
+                : "border-slate-200 bg-white text-slate-400 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600"
+            } disabled:cursor-wait disabled:opacity-60`}
+            aria-label={isLiked ? "Remove liked flight" : "Like flight"}
+            title={isLiked ? "Remove liked flight" : "Like flight"}
+          >
+            <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+          </button>
+        )}
+        <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {props.tripType === "return" ? "Return total estimate" : "One-way estimate"}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => props.onOpenPlanner(props.pair)}
+          className={`mt-8 rounded-lg px-4 py-3 text-sm font-bold text-white transition-colors ${isGround ? "bg-amber-600 hover:bg-amber-700" : "bg-blue-600 hover:bg-blue-700"}`}
+        >
+          Select and plan trip
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function likedRequestForPair(pair: FlightPair, tripType: TripType, date: string, returnDate: string, currency: CurrencyCode): SaveLikedFlightRequest {
+  return {
+    outbound: pair.outbound,
+    inbound: pair.inbound,
+    tripType,
+    departureDate: date,
+    returnDate: tripType === "return" ? returnDate : undefined,
+    totalPriceText: formatDisplayPrice(pair, currency),
+  };
+}
+
+function FlightOfferBadges({ ground }: Readonly<{ ground: boolean }>) {
+  const TransportIcon = ground ? Bus : Plane;
+
+  return (
+    <div className="flex items-center gap-4 py-3 text-xs text-slate-500">
+      <span className="flex items-center gap-1">
+        <TransportIcon className="h-3.5 w-3.5" />
+        {ground ? "Ground transport" : "1 carry-on"}
+      </span>
+      <span className="flex items-center gap-1">
+        <Clock className="h-3.5 w-3.5" />
+        {ground ? "Separate route option" : "Synced route"}
+      </span>
+    </div>
+  );
+}
+
 function parseCodeParam(value: string, fallback?: string): string[] {
   const codes = value
     .split(",")
@@ -2020,6 +2111,72 @@ function parseCodeParam(value: string, fallback?: string): string[] {
   }
 
   return fallback ? [fallback] : [];
+}
+
+function initialSearchState(params: URLSearchParams): InitialSearchState {
+  const fromPlanner = params.get("source") === "planner";
+  const fromParam = params.has("fromAll") ? params.get("fromAll") ?? "" : params.get("from");
+  const toParam = params.has("toAll") ? params.get("toAll") ?? "" : params.get("to");
+  const parsedFromCodes = fromParam === null ? [] : parseCodeParam(fromParam);
+  const parsedToCodes = toParam === null ? [] : parseCodeParam(toParam);
+  const initialDate = params.get("date") ?? today;
+  const plannerDays = Number(params.get("days") || 0);
+
+  return {
+    fromPlanner,
+    hasInitialSearch: Boolean(fromParam?.trim() && toParam?.trim()),
+    initialDate,
+    initialFromCodes: initialPlaceCodes(parsedFromCodes, fromParam, fromPlanner, "NYC"),
+    initialFromName: initialPlaceName(params.get("fromName"), fromPlanner, "New York"),
+    initialPassengers: initialPassengerCount(params.get("passengers")),
+    initialReturnDate: params.get("returnDate") ?? calculateInitialReturnDate(initialDate, plannerDays),
+    initialToCodes: initialPlaceCodes(parsedToCodes, toParam, fromPlanner, "TYO"),
+    initialToName: initialPlaceName(params.get("toName"), fromPlanner, "Tokyo"),
+    initialTripType: params.get("tripType") === "one-way" ? "one-way" : "return",
+  };
+}
+
+function initialPlaceCodes(parsedCodes: string[], rawParam: string | null, fromPlanner: boolean, defaultCode: string): string[] {
+  if (parsedCodes.length) return parsedCodes;
+  if (rawParam === null && !fromPlanner) return [defaultCode];
+  return [];
+}
+
+function initialPlaceName(rawName: string | null, fromPlanner: boolean, defaultName: string): string {
+  return rawName ?? (fromPlanner ? "" : defaultName);
+}
+
+function initialPassengerCount(rawValue: string | null): number {
+  const parsedPassengers = Number(rawValue || 1);
+  return Number.isFinite(parsedPassengers) ? Math.min(Math.max(parsedPassengers, 1), 9) : 1;
+}
+
+function calculateInitialReturnDate(initialDate: string, plannerDays: number): string {
+  return plannerDays > 0 ? tripReturnDate(initialDate, plannerDays) : initialDate;
+}
+
+function initialToPlaces(restoredSearch: FlightSearchSession | null, initialSearch: InitialSearchState): Place[] {
+  if (restoredSearch?.toPlaces) {
+    return restoredSearch.toPlaces;
+  }
+
+  if (initialSearch.initialToCodes.length) {
+    return buildInitialPlaces(initialSearch.initialToCodes, initialSearch.initialToName);
+  }
+
+  return initialSearch.initialToName ? [buildPlace("", initialSearch.initialToName)] : [];
+}
+
+function bestPlannerDestinationMatch(places: Place[], toName: string): Place {
+  const normalizedTarget = toName.toLowerCase();
+  return places.find((place) => isMatchingCityPlace(place, normalizedTarget))
+    || places.find((place) => place.type === "city")
+    || places[0];
+}
+
+function isMatchingCityPlace(place: Place, normalizedTarget: string): boolean {
+  return place.type === "city"
+    && [place.cityName, place.name, place.code].some((value) => value?.toLowerCase().includes(normalizedTarget));
 }
 
 function placeCodes(places: Place[]): string[] {

@@ -12,7 +12,7 @@ type FetchMeta = {
   status?: number;
 };
 
-const debugDir = process.env.VERCEL ? "/tmp/skynode-debug" : path.resolve(process.cwd(), "debug");
+const debugDir = path.resolve(process.cwd(), "debug");
 
 export function buildTargetUrl(from: string, to: string, date: string): string {
   // Prototype target: Kayak flight results page.
@@ -70,6 +70,10 @@ export async function fetchWithScrapingBee(targetUrl: string): Promise<string> {
 }
 
 async function saveDebugFiles(html: string, meta: FetchMeta): Promise<void> {
+  if (process.env.VERCEL) {
+    return;
+  }
+
   await mkdir(debugDir, { recursive: true });
   await writeFile(path.join(debugDir, "last-response.html"), html, "utf8");
   await writeFile(path.join(debugDir, "request-meta.json"), JSON.stringify(meta, null, 2), "utf8");

@@ -136,7 +136,7 @@ export function GlobalTripNotifications() {
     if (notifiedRef.current.has(key)) return;
 
     notifiedRef.current.add(key);
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const id = crypto.randomUUID();
     setNotifications((current) => [...current.slice(-3), { ...notification, id }]);
     window.setTimeout(() => {
       void closeNotification(id);

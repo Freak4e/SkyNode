@@ -46,7 +46,7 @@ function parseKayakResultItem(
   destinationCode?: string,
 ): Omit<FlightOffer, "bookingLink"> | null {
   const timeBlock = cleanText(item.find(".VY2U .vmXl-mod-variant-large").first().text());
-  const timeRange = splitTimeRange(timeBlock.replace(/\s*–\s*/g, " - "));
+  const timeRange = splitTimeRange(normalizeTimeSeparator(timeBlock));
   const carrier =
     cleanText(item.find(".VY2U .c_cgF").first().text()) ||
     item.find(".c5iUd-leg-carrier img").attr("alt") ||
@@ -126,7 +126,7 @@ function extractExpandedLayovers($: cheerio.CheerioAPI, root: cheerio.Cheerio<an
     const durationText = cleanText(layoverRoot.find(".E-1g-duration").first().text());
     const fullText = cleanText(layoverRoot.text());
     const code = parseAirportCode(fullText);
-    const city = fullText.match(/Change planes in\s+(.+?)(?:\s*\([A-Z]{3}\))?$/i)?.[1]?.trim();
+    const city = parseLayoverCity(fullText);
 
     if (!code) return;
 
@@ -155,15 +155,12 @@ function extractLayoversFromJwep(
     const layoverText = cleanText(layoverRoot.text());
     const containerText = cleanText(layoverRoot.parent().text());
     const code = parseAirportCode(containerText);
-    const airportMatch = layoverText.match(/layover,?\s*(.+)$/i);
+    const airportNameFromText = parseLayoverAirportName(layoverText);
 
     if (!code || excluded.has(code)) return;
 
-    const durationMatch = layoverText.match(/(?:(\d+)\s*h\s*)?(?:(\d+)\s*m(?:in)?)?\s*layover/i);
-    const hours = durationMatch?.[1] ? Number(durationMatch[1]) : 0;
-    const minutes = durationMatch?.[2] ? Number(durationMatch[2]) : 0;
-    const durationMinutes = hours * 60 + minutes || undefined;
-    const airportName = airportMatch?.[1]?.trim() || item.find(".JWEO .c_cgF").attr("title") || `Airport ${code}`;
+    const durationMinutes = parseLayoverDuration(layoverText);
+    const airportName = airportNameFromText || item.find(".JWEO .c_cgF").attr("title") || `Airport ${code}`;
 
     layovers.push({
       code,
@@ -187,9 +184,9 @@ function extractLayoversFromJwep(
 }
 
 function parseStation(text: string, fallbackCode: string): { airport: string; code: string } {
-  const match = text.match(/^(.+?)\s*\(([A-Z]{3})\)$/);
+  const parsed = parseTrailingAirportCode(text);
 
-  if (!match) {
+  if (!parsed) {
     return {
       airport: text || `Airport ${fallbackCode}`,
       code: fallbackCode,
@@ -197,8 +194,8 @@ function parseStation(text: string, fallbackCode: string): { airport: string; co
   }
 
   return {
-    airport: match[1].trim(),
-    code: match[2],
+    airport: parsed.airport,
+    code: parsed.code,
   };
 }
 
@@ -211,12 +208,66 @@ function cleanText(value: string): string {
 }
 
 function splitTimeRange(value: string): Pick<FlightOffer, "departureTime" | "arrivalTime"> {
-  const [departureTime = "", arrivalTime = ""] = value.split(/\s+-\s+/, 2);
+  const separatorIndex = value.indexOf(" - ");
+  const departureTime = separatorIndex >= 0 ? value.slice(0, separatorIndex) : value;
+  const arrivalTime = separatorIndex >= 0 ? value.slice(separatorIndex + 3) : "";
 
   return {
     departureTime: cleanText(departureTime),
     arrivalTime: cleanText(arrivalTime),
   };
+}
+
+function normalizeTimeSeparator(value: string): string {
+  return cleanText(value.replaceAll("–", " - ").replaceAll("â€“", " - "));
+}
+
+function parseLayoverCity(text: string): string | undefined {
+  const prefix = "change planes in ";
+  const lower = text.toLowerCase();
+  const prefixIndex = lower.indexOf(prefix);
+  if (prefixIndex < 0) return undefined;
+
+  const cityWithCode = text.slice(prefixIndex + prefix.length).trim();
+  const parsed = parseTrailingAirportCode(cityWithCode);
+  return parsed?.airport || cityWithCode || undefined;
+}
+
+function parseLayoverAirportName(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  const layoverIndex = lower.indexOf("layover");
+  if (layoverIndex < 0) return undefined;
+
+  const afterLayover = text.slice(layoverIndex + "layover".length).trimStart();
+  const airportName = afterLayover.startsWith(",") ? afterLayover.slice(1).trimStart() : afterLayover;
+  return airportName || undefined;
+}
+
+function parseLayoverDuration(text: string): number | undefined {
+  const lower = text.toLowerCase();
+  const layoverIndex = lower.indexOf("layover");
+  const durationText = layoverIndex >= 0 ? lower.slice(0, layoverIndex) : lower;
+  return parseDurationMinutes(durationText) ?? undefined;
+}
+
+function parseTrailingAirportCode(text: string): { airport: string; code: string } | null {
+  const trimmed = text.trim();
+  if (!trimmed.endsWith(")")) return null;
+
+  const openIndex = trimmed.lastIndexOf("(");
+  if (openIndex < 1) return null;
+
+  const code = trimmed.slice(openIndex + 1, -1).trim().toUpperCase();
+  if (code.length !== 3 || !isUppercaseAirportCode(code)) return null;
+
+  return {
+    airport: trimmed.slice(0, openIndex).trim(),
+    code,
+  };
+}
+
+function isUppercaseAirportCode(value: string): boolean {
+  return [...value].every((character) => character >= "A" && character <= "Z");
 }
 
 function absoluteUrl(href: string | undefined, baseUrl: string): string {

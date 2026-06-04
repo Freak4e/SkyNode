@@ -64,7 +64,16 @@ const quickPromptPool = [
 ];
 
 function randomQuickPrompts(count = 4) {
-  return [...quickPromptPool].sort(() => Math.random() - 0.5).slice(0, count);
+  const prompts = [...quickPromptPool];
+
+  for (let index = prompts.length - 1; index > 0; index -= 1) {
+    const randomValues = new Uint32Array(1);
+    crypto.getRandomValues(randomValues);
+    const swapIndex = randomValues[0] % (index + 1);
+    [prompts[index], prompts[swapIndex]] = [prompts[swapIndex], prompts[index]];
+  }
+
+  return prompts.slice(0, count);
 }
 
 export function AssistantPage() {
@@ -481,8 +490,8 @@ function AssistantMessageContent({ content }: { content: string }) {
   return (
     <div className="space-y-2">
       {content.split("\n").map((line, index) => {
-        const numberedItem = line.match(/^(\d+)\.\s+(.*)$/);
-        const bulletItem = line.match(/^[-*]\s+(.*)$/);
+        const numberedItem = parseNumberedMessageLine(line);
+        const bulletItem = parseBulletMessageLine(line);
 
         if (!line.trim()) {
           return <div key={index} className="h-1" />;
@@ -491,8 +500,8 @@ function AssistantMessageContent({ content }: { content: string }) {
         if (numberedItem) {
           return (
             <div key={index} className="grid grid-cols-[1.75rem_1fr] gap-1">
-              <span className="font-black text-blue-500">{numberedItem[1]}.</span>
-              <p>{renderInlineMarkdown(numberedItem[2])}</p>
+              <span className="font-black text-blue-500">{numberedItem.number}.</span>
+              <p>{renderInlineMarkdown(numberedItem.text)}</p>
             </div>
           );
         }
@@ -501,7 +510,7 @@ function AssistantMessageContent({ content }: { content: string }) {
           return (
             <div key={index} className="grid grid-cols-[1.25rem_1fr] gap-1">
               <span className="font-black text-blue-500">-</span>
-              <p>{renderInlineMarkdown(bulletItem[1])}</p>
+              <p>{renderInlineMarkdown(bulletItem)}</p>
             </div>
           );
         }
@@ -510,6 +519,36 @@ function AssistantMessageContent({ content }: { content: string }) {
       })}
     </div>
   );
+}
+
+function parseNumberedMessageLine(line: string): { number: string; text: string } | null {
+  const dotIndex = line.indexOf(".");
+  if (dotIndex <= 0) return null;
+
+  const number = line.slice(0, dotIndex);
+  const text = line.slice(dotIndex + 1);
+
+  if (!number || !isDigitsOnly(number) || !startsWithWhitespace(text)) {
+    return null;
+  }
+
+  return { number, text: text.trimStart() };
+}
+
+function parseBulletMessageLine(line: string): string | null {
+  if (line.length < 3 || (!line.startsWith("-") && !line.startsWith("*")) || !startsWithWhitespace(line.slice(1))) {
+    return null;
+  }
+
+  return line.slice(2).trimStart();
+}
+
+function isDigitsOnly(value: string): boolean {
+  return [...value].every((character) => character >= "0" && character <= "9");
+}
+
+function startsWithWhitespace(value: string): boolean {
+  return value.startsWith(" ") || value.startsWith("\t");
 }
 
 function renderInlineMarkdown(text: string) {

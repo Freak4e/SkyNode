@@ -542,34 +542,25 @@ export function PlannerPage() {
 
   function addDay() {
     setDraftDays((current) => {
-      const cityName = current[current.length - 1]?.cityName || tripCityNames[Math.min(current.length, Math.max(tripCityNames.length - 1, 0))];
-      return [...current, { dayNumber: current.length + 1, cityName, title: `Day ${current.length + 1}`, summary: "", estimatedCost: 0, items: [] }];
+      const cityName = nextDayCityName(current, tripCityNames);
+      return [...current, createDraftDay(current.length + 1, cityName)];
     });
   }
 
   function removeDay(dayIndex: number) {
-    setDraftDays((current) => {
-      const next = current.filter((_, index) => index !== dayIndex);
-      const daysToKeep = next.length > 0 ? next : emptyDays(1);
-
-      return daysToKeep.map((day, index) => ({
-        ...day,
-        dayNumber: index + 1,
-        title: /^Day \d+$/i.test(day.title.trim()) ? `Day ${index + 1}` : day.title,
-      }));
-    });
+    setDraftDays((current) => removeDraftDay(current, dayIndex));
   }
 
   function addActivity(dayIndex: number) {
-    setDraftDays((current) => current.map((day, index) => index === dayIndex ? { ...day, items: [...day.items, { timeOfDay: "09:00", title: "New activity", description: "", estimatedCost: 0 }] } : day));
+    setDraftDays((current) => current.map((day, index) => index === dayIndex ? addActivityToDay(day) : day));
   }
 
   function updateActivity(dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) {
-    setDraftDays((current) => current.map((day, index) => index !== dayIndex ? day : { ...day, items: day.items.map((item, currentIndex) => currentIndex === itemIndex ? { ...item, ...patch } : item) }));
+    setDraftDays((current) => current.map((day, index) => index === dayIndex ? updateDayActivity(day, itemIndex, patch) : day));
   }
 
   function removeActivity(dayIndex: number, itemIndex: number) {
-    setDraftDays((current) => current.map((day, index) => index === dayIndex ? { ...day, items: day.items.filter((_, currentIndex) => currentIndex !== itemIndex) } : day));
+    setDraftDays((current) => current.map((day, index) => index === dayIndex ? removeDayActivity(day, itemIndex) : day));
   }
 
   function updateDestinationName(value: string) {
@@ -607,24 +598,9 @@ export function PlannerPage() {
   }
 
   function moveActivity(dayIndex: number, fromIndex: number, toIndex: number) {
-    setDraftDays((current) => current.map((day, index) => {
-      if (index !== dayIndex || fromIndex === toIndex) {
-        return day;
-      }
-
-      const originalTimes = day.items.map((item) => item.timeOfDay);
-      const items = [...day.items];
-      const [moved] = items.splice(fromIndex, 1);
-      items.splice(toIndex, 0, moved);
-
-      return {
-        ...day,
-        items: items.map((item, itemIndex) => ({
-          ...item,
-          timeOfDay: originalTimes[itemIndex] || item.timeOfDay,
-        })),
-      };
-    }));
+    setDraftDays((current) => current.map((day, index) => (
+      index === dayIndex ? moveDayActivity(day, fromIndex, toIndex) : day
+    )));
   }
 
   function toggleInterest(interest: string) {
@@ -1403,6 +1379,76 @@ function updatePositiveNumber(rawValue: string, min: number, max: number, onChan
   }
 
   onChange(Math.min(max, Math.max(min, Math.round(value))));
+}
+
+function nextDayCityName(current: ItineraryDay[], tripCityNames: string[]): string | undefined {
+  return current.at(-1)?.cityName || tripCityNames[Math.min(current.length, Math.max(tripCityNames.length - 1, 0))];
+}
+
+function createDraftDay(dayNumber: number, cityName?: string): ItineraryDay {
+  return {
+    dayNumber,
+    cityName,
+    title: `Day ${dayNumber}`,
+    summary: "",
+    estimatedCost: 0,
+    items: [],
+  };
+}
+
+function removeDraftDay(days: ItineraryDay[], dayIndex: number): ItineraryDay[] {
+  const next = days.filter((_, index) => index !== dayIndex);
+  const daysToKeep = next.length > 0 ? next : emptyDays(1);
+
+  return daysToKeep.map((day, index) => renumberDraftDay(day, index + 1));
+}
+
+function renumberDraftDay(day: ItineraryDay, dayNumber: number): ItineraryDay {
+  return {
+    ...day,
+    dayNumber,
+    title: /^Day \d+$/i.test(day.title.trim()) ? `Day ${dayNumber}` : day.title,
+  };
+}
+
+function addActivityToDay(day: ItineraryDay): ItineraryDay {
+  return {
+    ...day,
+    items: [...day.items, { timeOfDay: "09:00", title: "New activity", description: "", estimatedCost: 0 }],
+  };
+}
+
+function updateDayActivity(day: ItineraryDay, itemIndex: number, patch: Partial<ItineraryItem>): ItineraryDay {
+  return {
+    ...day,
+    items: day.items.map((item, currentIndex) => currentIndex === itemIndex ? { ...item, ...patch } : item),
+  };
+}
+
+function removeDayActivity(day: ItineraryDay, itemIndex: number): ItineraryDay {
+  return {
+    ...day,
+    items: day.items.filter((_, currentIndex) => currentIndex !== itemIndex),
+  };
+}
+
+function moveDayActivity(day: ItineraryDay, fromIndex: number, toIndex: number): ItineraryDay {
+  if (fromIndex === toIndex) {
+    return day;
+  }
+
+  const originalTimes = day.items.map((item) => item.timeOfDay);
+  const items = [...day.items];
+  const [moved] = items.splice(fromIndex, 1);
+  items.splice(toIndex, 0, moved);
+
+  return {
+    ...day,
+    items: items.map((item, itemIndex) => ({
+      ...item,
+      timeOfDay: originalTimes[itemIndex] || item.timeOfDay,
+    })),
+  };
 }
 
 function Banner({ kind, text }: { kind: "error" | "success"; text: string }) {

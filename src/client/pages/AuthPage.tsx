@@ -6,6 +6,16 @@ import logo from "../../../assets/logo_skynode_horizontal.png";
 
 type AuthMode = "signin" | "signup";
 type Notice = { kind: "error" | "success" | "info"; text: string };
+type SignupResult = "created" | "already_exists" | "confirmation_required";
+type SignupValues = {
+  avatarUrl: string;
+  birthDate: string;
+  confirmPassword: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+};
 
 function ageFromBirthDate(value: string): number {
   const birthDate = new Date(`${value}T00:00:00`);
@@ -87,6 +97,29 @@ function authMessage(error: unknown, mode: AuthMode): string {
   return message;
 }
 
+function validateSignup(values: SignupValues): Notice | null {
+  const age = ageFromBirthDate(values.birthDate);
+  const strength = passwordStrength(values.password);
+
+  if (!values.firstName.trim() || !values.lastName.trim()) {
+    return { kind: "error", text: "Please enter your first and last name." };
+  }
+
+  if (age < 18) {
+    return { kind: "error", text: "You must be at least 18 years old to create a SkyNode account." };
+  }
+
+  if (!strength.valid) {
+    return { kind: "error", text: "Use a stronger password with at least 8 characters, uppercase, lowercase, number, and symbol." };
+  }
+
+  if (values.password !== values.confirmPassword) {
+    return { kind: "error", text: "Passwords do not match." };
+  }
+
+  return null;
+}
+
 export function AuthPage() {
   const { user, loading: authLoading, signIn, signUp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
@@ -130,55 +163,20 @@ export function AuthPage() {
 
     try {
       if (mode === "signin") {
-        await signIn(email, password);
+        await submitSignin(signIn, email, password);
         navigate("/", { replace: true });
-      } else {
-        const age = ageFromBirthDate(birthDate);
-        const strength = passwordStrength(password);
-
-        if (!firstName.trim() || !lastName.trim()) {
-          setNotice({ kind: "error", text: "Please enter your first and last name." });
-          return;
-        }
-
-        if (age < 18) {
-          setNotice({ kind: "error", text: "You must be at least 18 years old to create a SkyNode account." });
-          return;
-        }
-
-        if (!strength.valid) {
-          setNotice({ kind: "error", text: "Use a stronger password with at least 8 characters, uppercase, lowercase, number, and symbol." });
-          return;
-        }
-
-        if (password !== confirmPassword) {
-          setNotice({ kind: "error", text: "Passwords do not match." });
-          return;
-        }
-
-        const signupResult = await signUp(email, password, {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          birthDate,
-          avatarUrl: avatarUrl || undefined,
-        });
-
-        if (signupResult === "already_exists") {
-          setNotice({ kind: "info", text: "An account with this email already exists. Please sign in instead." });
-          setMode("signin");
-          return;
-        }
-
-        if (signupResult === "confirmation_required") {
-          setNotice({ kind: "success", text: "Account created. Check your email to confirm your account, then sign in." });
-          setMode("signin");
-          setPassword("");
-          setConfirmPassword("");
-          return;
-        }
-
-        navigate("/", { replace: true });
+        return;
       }
+
+      const signupValues = { avatarUrl, birthDate, confirmPassword, email, firstName, lastName, password };
+      const validationNotice = validateSignup(signupValues);
+
+      if (validationNotice) {
+        setNotice(validationNotice);
+        return;
+      }
+
+      handleSignupResult(await submitSignup(signUp, signupValues));
     } catch (authError) {
       const message = authMessage(authError, mode);
 
@@ -192,6 +190,37 @@ export function AuthPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function submitSignin(callback: typeof signIn, emailValue: string, passwordValue: string): Promise<void> {
+    await callback(emailValue, passwordValue);
+  }
+
+  async function submitSignup(callback: typeof signUp, values: SignupValues): Promise<SignupResult> {
+    return callback(values.email, values.password, {
+      firstName: values.firstName.trim(),
+      lastName: values.lastName.trim(),
+      birthDate: values.birthDate,
+      avatarUrl: values.avatarUrl || undefined,
+    });
+  }
+
+  function handleSignupResult(signupResult: SignupResult): void {
+    if (signupResult === "already_exists") {
+      setNotice({ kind: "info", text: "An account with this email already exists. Please sign in instead." });
+      setMode("signin");
+      return;
+    }
+
+    if (signupResult === "confirmation_required") {
+      setNotice({ kind: "success", text: "Account created. Check your email to confirm your account, then sign in." });
+      setMode("signin");
+      setPassword("");
+      setConfirmPassword("");
+      return;
+    }
+
+    navigate("/", { replace: true });
   }
 
   async function handleAvatarChange(file: File | undefined) {

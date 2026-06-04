@@ -46,7 +46,7 @@ async function runEnsureSchema(): Promise<void> {
   const { directory, files } = await readMigrationFiles();
   const migrationFiles = files
     .filter((file) => /^\d+_.+\.sql$/i.test(file))
-    .sort();
+    .sort((first, second) => first.localeCompare(second));
   const pool = getDatabasePool();
   const client = await pool.connect();
 

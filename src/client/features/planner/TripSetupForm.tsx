@@ -25,7 +25,7 @@ import { HeroPanel } from "../../components/ui";
 import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, Place, TravelPace } from "../../../shared/types.js";
 import { plannerInterests } from "./plannerUtils";
 
-type TripSetupFormProps = {
+type TripSetupFormProps = Readonly<{
   addActivity: (dayIndex: number) => void;
   addDay: () => void;
   budgetAmount: number;
@@ -72,9 +72,14 @@ type TripSetupFormProps = {
   tripTitle: string;
   updateActivity: (dayIndex: number, itemIndex: number, patch: Partial<ItineraryItem>) => void;
   updateDay: (dayIndex: number, patch: Partial<Pick<ItineraryDay, "cityName" | "title" | "summary">>) => void;
-};
+}>;
 
 type StepId = 0 | 1 | 2 | 3;
+type StepStatus = {
+  active: boolean;
+  canOpen: boolean;
+  completed: boolean;
+};
 
 const steps = [
   { title: "Basics", subtitle: "Where & when", icon: CircleGauge },
@@ -98,7 +103,6 @@ export function TripSetupForm(props: TripSetupFormProps) {
     && props.travelers > 0
     && props.budgetAmount >= 0;
   const styleComplete = props.selectedInterests.length > 0 && Boolean(props.pace);
-  const logisticsComplete = true;
   const canContinue = step === 0 ? basicsComplete : step === 1 ? styleComplete : true;
   const budgetPerDay = Math.round(props.budgetAmount / Math.max(props.days, 1));
   const flightSearchUrl = buildFlightSearchUrl({
@@ -162,43 +166,16 @@ export function TripSetupForm(props: TripSetupFormProps) {
       />
 
       <div className="mb-7 grid gap-3 md:grid-cols-4">
-        {steps.map((item, index) => {
-          const Icon = item.icon;
-          const stepComplete = index === 0 ? basicsComplete : index === 1 ? styleComplete : index === 2 ? logisticsComplete : false;
-          const completed = index < step && stepComplete;
-          const active = index === step;
-          const canOpenStep = index === 0 || (index === 1 && basicsComplete) || (index > 1 && basicsComplete && styleComplete);
-
-          return (
-            <button
-              key={item.title}
-              type="button"
-              onClick={() => {
-                if (canOpenStep) setStep(index as StepId);
-              }}
-              disabled={!canOpenStep}
-              className={`flex min-h-20 items-center gap-3 rounded-2xl border px-4 text-left transition ${
-                completed
-                  ? "border-emerald-300 bg-emerald-50 text-slate-950"
-                  : active
-                    ? "border-blue-600 bg-white text-slate-950 shadow-lg shadow-blue-900/5"
-                    : canOpenStep
-                    ? "border-slate-200 bg-white/80 text-slate-950 hover:border-blue-200"
-                    : "cursor-not-allowed border-slate-200 bg-white/50 text-slate-400"
-              }`}
-            >
-              <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${
-                completed ? "bg-emerald-400 text-slate-950" : active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
-              }`}>
-                {completed ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
-              </span>
-              <span>
-                <span className="block text-sm font-black">{item.title}</span>
-                <span className="mt-0.5 block text-xs font-medium text-slate-600">{item.subtitle}</span>
-              </span>
-            </button>
-          );
-        })}
+        {steps.map((item, index) => (
+          <StepButton
+            key={item.title}
+            icon={item.icon}
+            status={stepStatus(index as StepId, step, basicsComplete, styleComplete)}
+            subtitle={item.subtitle}
+            title={item.title}
+            onClick={() => setStep(index as StepId)}
+          />
+        ))}
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card md:p-8">
@@ -475,6 +452,68 @@ export function TripSetupForm(props: TripSetupFormProps) {
       </div>
     </section>
   );
+}
+
+function stepStatus(index: StepId, currentStep: StepId, basicsComplete: boolean, styleComplete: boolean): StepStatus {
+  const complete = stepComplete(index, basicsComplete, styleComplete);
+
+  return {
+    active: index === currentStep,
+    canOpen: canOpenStep(index, basicsComplete, styleComplete),
+    completed: index < currentStep && complete,
+  };
+}
+
+function canOpenStep(index: StepId, basicsComplete: boolean, styleComplete: boolean): boolean {
+  return index === 0 || (index === 1 && basicsComplete) || (index > 1 && basicsComplete && styleComplete);
+}
+
+function stepComplete(index: StepId, basicsComplete: boolean, styleComplete: boolean): boolean {
+  if (index === 0) return basicsComplete;
+  if (index === 1) return styleComplete;
+  return index === 2;
+}
+
+type StepButtonProps = Readonly<{
+  icon: typeof CircleGauge;
+  onClick: () => void;
+  status: StepStatus;
+  subtitle: string;
+  title: string;
+}>;
+
+function StepButton({ icon: Icon, onClick, status, subtitle, title }: StepButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (status.canOpen) onClick();
+      }}
+      disabled={!status.canOpen}
+      className={`flex min-h-20 items-center gap-3 rounded-2xl border px-4 text-left transition ${stepButtonClassName(status)}`}
+    >
+      <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${stepIconClassName(status)}`}>
+        {status.completed ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+      </span>
+      <span>
+        <span className="block text-sm font-black">{title}</span>
+        <span className="mt-0.5 block text-xs font-medium text-slate-600">{subtitle}</span>
+      </span>
+    </button>
+  );
+}
+
+function stepButtonClassName(status: StepStatus): string {
+  if (status.completed) return "border-emerald-300 bg-emerald-50 text-slate-950";
+  if (status.active) return "border-blue-600 bg-white text-slate-950 shadow-lg shadow-blue-900/5";
+  if (status.canOpen) return "border-slate-200 bg-white/80 text-slate-950 hover:border-blue-200";
+  return "cursor-not-allowed border-slate-200 bg-white/50 text-slate-400";
+}
+
+function stepIconClassName(status: StepStatus): string {
+  if (status.completed) return "bg-emerald-400 text-slate-950";
+  if (status.active) return "bg-blue-600 text-white";
+  return "bg-slate-100 text-slate-500";
 }
 
 function WizardField({ children, icon, label, required }: { children: ReactNode; icon?: ReactNode; label: string; required?: boolean }) {

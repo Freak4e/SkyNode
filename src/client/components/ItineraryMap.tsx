@@ -48,6 +48,11 @@ type ItineraryMapProps = {
   routeSegments?: TripRouteSegment[];
 };
 
+type MarkerData = {
+  matchedMarkers: ItineraryMapMarker[];
+  unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>;
+};
+
 export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: ItineraryMapProps) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -87,62 +92,7 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
       setGeocoding(true);
 
       try {
-        const response = await fetch("/api/geocode", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            destinationName: itinerary.destinationName,
-            items: markerData.unmappedItems.map(({ id, item }) => ({
-              id,
-              title: item.title,
-              description: item.description,
-              attractionName: item.location?.name || item.attractionName,
-            })),
-          }),
-          signal: controller.signal,
-        });
-        const body = await readApiJson<GeocodeResponse>(response, "Failed to geocode itinerary items.", { points: [] });
-
-        if (!response.ok) {
-          throw new Error(body.warnings?.[0] || "Failed to geocode itinerary items.");
-        }
-
-        const localCenter = getLocalCenter(markerData.matchedMarkers);
-        const nextGeocodedMarkers: ItineraryMapMarker[] = body.points.map((point) => {
-          const source = markerData.unmappedItems.find((candidate) => candidate.id === point.id);
-
-          return {
-            id: `geocoded-${point.id}`,
-            label: source ? String(source.day.dayNumber) : "G",
-            dayNumber: source?.day.dayNumber || 0,
-            order: source?.item.order ?? 0,
-            timeOfDay: source?.item.timeOfDay || "morning",
-            title: source?.item.title || point.title,
-            description: source?.item.description || point.address,
-            estimatedCost: source?.item.estimatedCost || 0,
-            category: source?.item.category,
-            attraction: {
-              id: `geocoded-${point.id}`,
-              name: point.title,
-              category: "geocoded",
-              address: point.address,
-              lat: point.lat,
-              lon: point.lon,
-              source: "geoapify" as const,
-            },
-          };
-        }).filter((marker) => {
-          if (!localCenter) {
-            return true;
-          }
-
-          return distanceMeters(localCenter, {
-            lat: marker.attraction.lat!,
-            lon: marker.attraction.lon!,
-          }) <= 80000;
-        });
-
-        setGeocodedMarkers(nextGeocodedMarkers);
+        setGeocodedMarkers(await fetchGeocodedMarkers(itinerary.destinationName, markerData, controller.signal));
       } catch (error) {
         if (!controller.signal.aborted) {
           console.warn("[itinerary-map] geocoding failed", error);
@@ -208,32 +158,11 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
 
     async function loadDirections() {
       try {
-        const response = await fetch("/api/directions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            days: dayPins.map((day) => ({
-              dayNumber: day.dayNumber,
-              points: day.pins.map((pin) => ({ lat: pin.lat, lon: pin.lon })),
-            })),
-          }),
-          signal: controller.signal,
-        });
-        const body = await readApiJson<{ routes?: DayRoute[]; warnings?: string[] }>(response, "Directions request failed.", { routes: [] });
-
-        if (!response.ok) {
-          throw new Error("Directions request failed.");
-        }
-
-        setRoutes(body.routes || []);
+        setRoutes(await fetchDayRoutes(dayPins, controller.signal));
       } catch (error) {
         if (!controller.signal.aborted) {
           console.warn("[itinerary-map] directions failed", error);
-          setRoutes(dayPins.map((day) => ({
-            dayNumber: day.dayNumber,
-            points: day.pins.map((pin) => ({ lat: pin.lat, lon: pin.lon })),
-            source: "fallback",
-          })));
+          setRoutes(buildFallbackRoutes(dayPins));
         }
       }
     }
@@ -349,10 +278,99 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
   );
 }
 
-function buildItineraryMarkerData(itinerary: GeneratedItinerary, hotels: TripHotel[], routeSegments: TripRouteSegment[]): {
-  matchedMarkers: ItineraryMapMarker[];
-  unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>;
-} {
+async function fetchGeocodedMarkers(destinationName: string, markerData: MarkerData, signal: AbortSignal): Promise<ItineraryMapMarker[]> {
+  const response = await fetch("/api/geocode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      destinationName,
+      items: markerData.unmappedItems.map(({ id, item }) => ({
+        id,
+        title: item.title,
+        description: item.description,
+        attractionName: item.location?.name || item.attractionName,
+      })),
+    }),
+    signal,
+  });
+  const body = await readApiJson<GeocodeResponse>(response, "Failed to geocode itinerary items.", { points: [] });
+
+  if (!response.ok) {
+    throw new Error(body.warnings?.[0] || "Failed to geocode itinerary items.");
+  }
+
+  return filterLocalGeocodedMarkers(
+    body.points.map((point) => toGeocodedMarker(point, markerData)),
+    getLocalCenter(markerData.matchedMarkers) || null,
+  );
+}
+
+function toGeocodedMarker(point: GeocodeResponse["points"][number], markerData: MarkerData): ItineraryMapMarker {
+  const source = markerData.unmappedItems.find((candidate) => candidate.id === point.id);
+
+  return {
+    id: `geocoded-${point.id}`,
+    label: source ? String(source.day.dayNumber) : "G",
+    dayNumber: source?.day.dayNumber || 0,
+    order: source?.item.order ?? 0,
+    timeOfDay: source?.item.timeOfDay || "morning",
+    title: source?.item.title || point.title,
+    description: source?.item.description || point.address,
+    estimatedCost: source?.item.estimatedCost || 0,
+    category: source?.item.category,
+    attraction: {
+      id: `geocoded-${point.id}`,
+      name: point.title,
+      category: "geocoded",
+      address: point.address,
+      lat: point.lat,
+      lon: point.lon,
+      source: "geoapify",
+    },
+  };
+}
+
+function filterLocalGeocodedMarkers(markers: ItineraryMapMarker[], localCenter: { lat: number; lon: number } | null): ItineraryMapMarker[] {
+  if (!localCenter) {
+    return markers;
+  }
+
+  return markers.filter((marker) => distanceMeters(localCenter, {
+    lat: marker.attraction.lat!,
+    lon: marker.attraction.lon!,
+  }) <= 80000);
+}
+
+async function fetchDayRoutes(dayPins: Array<{ dayNumber: number; pins: ItineraryMapPin[] }>, signal: AbortSignal): Promise<DayRoute[]> {
+  const response = await fetch("/api/directions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      days: dayPins.map((day) => ({
+        dayNumber: day.dayNumber,
+        points: day.pins.map((pin) => ({ lat: pin.lat, lon: pin.lon })),
+      })),
+    }),
+    signal,
+  });
+  const body = await readApiJson<{ routes?: DayRoute[]; warnings?: string[] }>(response, "Directions request failed.", { routes: [] });
+
+  if (!response.ok) {
+    throw new Error("Directions request failed.");
+  }
+
+  return body.routes || [];
+}
+
+function buildFallbackRoutes(dayPins: Array<{ dayNumber: number; pins: ItineraryMapPin[] }>): DayRoute[] {
+  return dayPins.map((day) => ({
+    dayNumber: day.dayNumber,
+    points: day.pins.map((pin) => ({ lat: pin.lat, lon: pin.lon })),
+    source: "fallback",
+  }));
+}
+
+function buildItineraryMarkerData(itinerary: GeneratedItinerary, hotels: TripHotel[], routeSegments: TripRouteSegment[]): MarkerData {
   const attractionsWithCoordinates = itinerary.attractions.filter(
     (attraction) => typeof attraction.lat === "number" && typeof attraction.lon === "number",
   );
@@ -364,42 +382,82 @@ function buildItineraryMarkerData(itinerary: GeneratedItinerary, hotels: TripHot
 
   itinerary.days.forEach((day) => {
     day.items.forEach((item, itemIndex) => {
-      const order = item.order ?? itemIndex + 1;
-      const itemId = `${day.dayNumber}-${order}-${item.timeOfDay}-${normalizeSearchText(item.location?.name || item.title)}`;
-
-      const attraction = attractionFromItemLocation(item, itemId) || findBestAttraction(item, attractionsWithCoordinates);
-
-      if (!attraction) {
-        if (shouldAttemptGeocode(item, itinerary.destinationName)) {
-          unmappedItems.push({ id: itemId, day, item });
-        }
-
-        return;
-      }
-
-      const key = `${day.dayNumber}-${order}-${item.timeOfDay}-${attraction.id}`;
-
-      if (usedKeys.has(key)) {
-        return;
-      }
-
-      usedKeys.add(key);
-      matchedMarkers.push({
-        id: key,
-        label: String(day.dayNumber),
-        dayNumber: day.dayNumber,
-        order,
-        timeOfDay: item.timeOfDay,
-        title: item.title,
-        description: item.description,
-        estimatedCost: item.estimatedCost,
-        category: item.category,
-        attraction,
+      addItineraryItemMarker({
+        attractionsWithCoordinates,
+        day,
+        destinationName: itinerary.destinationName,
+        item,
+        itemIndex,
+        matchedMarkers,
+        unmappedItems,
+        usedKeys,
       });
     });
   });
 
   return { matchedMarkers, unmappedItems };
+}
+
+function addItineraryItemMarker(input: {
+  attractionsWithCoordinates: Attraction[];
+  day: ItineraryDay;
+  destinationName: string;
+  item: ItineraryItem;
+  itemIndex: number;
+  matchedMarkers: ItineraryMapMarker[];
+  unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>;
+  usedKeys: Set<string>;
+}): void {
+  const order = input.item.order ?? input.itemIndex + 1;
+  const itemId = `${input.day.dayNumber}-${order}-${input.item.timeOfDay}-${normalizeSearchText(input.item.location?.name || input.item.title)}`;
+  const attraction = attractionFromItemLocation(input.item, itemId) || findBestAttraction(input.item, input.attractionsWithCoordinates);
+
+  if (!attraction) {
+    addUnmappedItemIfNeeded(input.unmappedItems, input.day, input.item, itemId, input.destinationName);
+    return;
+  }
+
+  const key = `${input.day.dayNumber}-${order}-${input.item.timeOfDay}-${attraction.id}`;
+
+  if (input.usedKeys.has(key)) {
+    return;
+  }
+
+  input.usedKeys.add(key);
+  input.matchedMarkers.push(toMatchedMarker(input.day, input.item, order, key, attraction));
+}
+
+function addUnmappedItemIfNeeded(
+  unmappedItems: Array<{ id: string; day: ItineraryDay; item: ItineraryItem }>,
+  day: ItineraryDay,
+  item: ItineraryItem,
+  itemId: string,
+  destinationName: string,
+): void {
+  if (shouldAttemptGeocode(item, destinationName)) {
+    unmappedItems.push({ id: itemId, day, item });
+  }
+}
+
+function toMatchedMarker(
+  day: ItineraryDay,
+  item: ItineraryItem,
+  order: number,
+  key: string,
+  attraction: Attraction,
+): ItineraryMapMarker {
+  return {
+    id: key,
+    label: String(day.dayNumber),
+    dayNumber: day.dayNumber,
+    order,
+    timeOfDay: item.timeOfDay,
+    title: item.title,
+    description: item.description,
+    estimatedCost: item.estimatedCost,
+    category: item.category,
+    attraction,
+  };
 }
 
 function addTripContextMarkers(

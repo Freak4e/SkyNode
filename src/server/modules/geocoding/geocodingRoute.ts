@@ -61,23 +61,7 @@ geocodingRoute.post("/", async (req, res) => {
     const radiusMeters = 80000;
 
     for (const item of request.items.slice(0, 24)) {
-      const queries = buildGeocodeQueries(item, request.destinationName, request.boundaryCities, allowOutsideDestination);
-      let point = null;
-
-      for (const query of queries) {
-        point = await geocodeText(
-          query,
-          undefined,
-          allowOutsideDestination
-            ? {}
-            : {
-                center: destinationCenter || undefined,
-                radiusMeters,
-              },
-        );
-        if (point) break;
-      }
-
+      const point = await resolveItemGeocodePoint(item, request, allowOutsideDestination, destinationCenter, radiusMeters);
       if (!point) {
         continue;
       }
@@ -85,7 +69,7 @@ geocodingRoute.post("/", async (req, res) => {
       const boundary = nearestBoundary(point, boundaryCenters);
       const outsideBoundary = Boolean(boundary && boundary.distanceMeters > radiusMeters);
 
-      if (!allowOutsideDestination && destinationCenter && distanceMeters(destinationCenter, point) > radiusMeters) {
+      if (!isPointAllowedForDestination(point, destinationCenter, allowOutsideDestination, radiusMeters)) {
         continue;
       }
 
@@ -93,17 +77,7 @@ geocodingRoute.post("/", async (req, res) => {
         warnings.push(`${point.title} appears to be outside your trip cities.`);
       }
 
-      points.push({
-        id: item.id,
-        title: point.title || item.attractionName || item.title,
-        address: point.address,
-        lat: point.lat,
-        lon: point.lon,
-        source: "geoapify",
-        outsideBoundary,
-        nearestBoundaryCity: boundary?.city,
-        distanceKm: boundary ? Math.round(boundary.distanceMeters / 1000) : undefined,
-      });
+      points.push(toGeocodeResponsePoint(item, point, boundary, outsideBoundary));
     }
 
     return res.json({ points, warnings } satisfies GeocodeResponse);
@@ -114,6 +88,61 @@ geocodingRoute.post("/", async (req, res) => {
     } satisfies GeocodeResponse);
   }
 });
+
+async function resolveItemGeocodePoint(
+  item: GeocodeRequest["items"][number],
+  request: GeocodeRequest,
+  allowOutsideDestination: boolean,
+  destinationCenter: { lat: number; lon: number } | null,
+  radiusMeters: number,
+) {
+  const queries = buildGeocodeQueries(item, request.destinationName, request.boundaryCities, allowOutsideDestination);
+
+  for (const query of queries) {
+    const point = await geocodeText(
+      query,
+      undefined,
+      allowOutsideDestination ? {} : {
+        center: destinationCenter || undefined,
+        radiusMeters,
+      },
+    );
+
+    if (point) {
+      return point;
+    }
+  }
+
+  return null;
+}
+
+function isPointAllowedForDestination(
+  point: { lat: number; lon: number },
+  destinationCenter: { lat: number; lon: number } | null,
+  allowOutsideDestination: boolean,
+  radiusMeters: number,
+): boolean {
+  return allowOutsideDestination || !destinationCenter || distanceMeters(destinationCenter, point) <= radiusMeters;
+}
+
+function toGeocodeResponsePoint(
+  item: GeocodeRequest["items"][number],
+  point: Awaited<ReturnType<typeof geocodeText>> & { lat: number; lon: number },
+  boundary: ReturnType<typeof nearestBoundary>,
+  outsideBoundary: boolean,
+): GeocodeResponse["points"][number] {
+  return {
+    id: item.id,
+    title: point.title || item.attractionName || item.title,
+    address: point.address,
+    lat: point.lat,
+    lon: point.lon,
+    source: "geoapify",
+    outsideBoundary,
+    nearestBoundaryCity: boundary?.city,
+    distanceKm: boundary ? Math.round(boundary.distanceMeters / 1000) : undefined,
+  };
+}
 
 function buildGeocodeQueries(item: GeocodeRequest["items"][number], destinationName: string, boundaryCities: string[] | undefined, allowOutsideDestination: boolean): string[] {
   const mainText = item.attractionName?.trim() || item.title.trim();
@@ -181,6 +210,9 @@ export const __test = {
   buildGeocodeQueries,
   distanceMeters,
   geocodeBoundaryCities,
+  isPointAllowedForDestination,
   nearestBoundary,
+  resolveItemGeocodePoint,
+  toGeocodeResponsePoint,
   toRadians,
 };

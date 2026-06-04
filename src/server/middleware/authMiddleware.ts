@@ -8,7 +8,7 @@ type SupabaseUserResponse = {
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.header("authorization");
-  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const token = bearerToken(authHeader);
 
   if (!token) {
     return res.status(401).json({ warnings: ["Sign in to continue."] });
@@ -42,7 +42,7 @@ export function getOptionalUserId(res: Response): string | undefined {
 
 export function optionalAuth(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.header("authorization");
-  const token = authHeader?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const token = bearerToken(authHeader);
 
   if (!token) {
     next();
@@ -57,6 +57,18 @@ export function optionalAuth(req: Request, res: Response, next: NextFunction) {
     .catch(() => {
       next();
     });
+}
+
+function bearerToken(authHeader: string | undefined): string | undefined {
+  if (!authHeader) return undefined;
+
+  const separatorIndex = authHeader.indexOf(" ");
+  if (separatorIndex < 0) return undefined;
+
+  const scheme = authHeader.slice(0, separatorIndex).toLowerCase();
+  const token = authHeader.slice(separatorIndex + 1).trim();
+
+  return scheme === "bearer" && token ? token : undefined;
 }
 
 async function verifySupabaseToken(token: string): Promise<string> {

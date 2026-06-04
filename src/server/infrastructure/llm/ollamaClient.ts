@@ -226,13 +226,23 @@ export function parseItineraryJson(content: string): RawItinerary {
 }
 
 function extractJsonBlock(content: string): string {
-  const match = content.match(/([\[{][\s\S]*[\]}])/);
+  const objectStart = content.indexOf("{");
+  const arrayStart = content.indexOf("[");
+  const starts = [objectStart, arrayStart].filter((index) => index >= 0);
 
-  if (!match) {
+  if (starts.length === 0) {
     throw new Error("Ollama did not return parseable JSON.");
   }
 
-  return match[1];
+  const start = Math.min(...starts);
+  const endCharacter = content[start] === "{" ? "}" : "]";
+  const end = content.lastIndexOf(endCharacter);
+
+  if (end <= start) {
+    throw new Error("Ollama did not return parseable JSON.");
+  }
+
+  return content.slice(start, end + 1);
 }
 
 function cleanJsonString(content: string): string {

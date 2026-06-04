@@ -88,12 +88,19 @@ export async function validateTravelMissionWithHuggingFace(input: {
 }
 
 function parseValidationJson(content: string): Partial<TravelMissionValidation> {
-  const match = content.match(/({[\s\S]*})/);
-  if (!match) {
+  const jsonBlock = extractObjectBlock(content);
+  if (!jsonBlock) {
     throw new Error("Hugging Face did not return validation JSON.");
   }
 
-  return JSON.parse(match[1]) as Partial<TravelMissionValidation>;
+  return JSON.parse(jsonBlock) as Partial<TravelMissionValidation>;
+}
+
+function extractObjectBlock(content: string): string | null {
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+
+  return start >= 0 && end > start ? content.slice(start, end + 1) : null;
 }
 
 function normalizeValidation(raw: Partial<TravelMissionValidation>): TravelMissionValidation {

@@ -184,14 +184,21 @@ function parseJson(content: string): unknown {
   try {
     return JSON.parse(content);
   } catch {
-    const match = content.match(/\{[\s\S]*\}/);
+    const jsonBlock = extractObjectBlock(content);
 
-    if (!match) {
+    if (!jsonBlock) {
       throw new Error("No JSON object found.");
     }
 
-    return JSON.parse(match[0]);
+    return JSON.parse(jsonBlock);
   }
+}
+
+function extractObjectBlock(content: string): string | null {
+  const start = content.indexOf("{");
+  const end = content.lastIndexOf("}");
+
+  return start >= 0 && end > start ? content.slice(start, end + 1) : null;
 }
 
 function normalizeProposal(raw: unknown, trip: SavedTripDetail): TripChangeProposal {

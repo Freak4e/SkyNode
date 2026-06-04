@@ -441,24 +441,38 @@ export async function updateTripMemberStatus(
   const member = result.rows[0] ? mapMember(result.rows[0]) : null;
 
   if (member) {
-    const tripMeta = await getTripNotificationMeta(tripId);
-
-    if (tripMeta) {
-      await createNotification({
-        userId: member.userId,
-        tripId,
-        type: status === "accepted" ? "join_accepted" : "join_declined",
-        referenceId: member.id,
-        title: status === "accepted" ? "Join request accepted" : "Join request declined",
-        body: status === "accepted"
-          ? `You were accepted into ${tripMeta.title}.`
-          : `Your request to join ${tripMeta.title} was declined.`,
-        targetPath: status === "accepted" ? `/trips/${tripId}?tab=chat` : "/explore-trips",
-      });
-    }
+    await notifyMemberStatusChange(tripId, member, status);
   }
 
   return member;
+}
+
+async function notifyMemberStatusChange(
+  tripId: string,
+  member: TripMember,
+  status: "accepted" | "declined",
+): Promise<void> {
+  const tripMeta = await getTripNotificationMeta(tripId);
+
+  if (!tripMeta) {
+    return;
+  }
+
+  await createNotification({
+    userId: member.userId,
+    tripId,
+    type: status === "accepted" ? "join_accepted" : "join_declined",
+    referenceId: member.id,
+    title: status === "accepted" ? "Join request accepted" : "Join request declined",
+    body: buildMemberStatusNotificationBody(status, tripMeta.title),
+    targetPath: status === "accepted" ? `/trips/${tripId}?tab=chat` : "/explore-trips",
+  });
+}
+
+function buildMemberStatusNotificationBody(status: "accepted" | "declined", title: string): string {
+  return status === "accepted"
+    ? `You were accepted into ${title}.`
+    : `Your request to join ${title} was declined.`;
 }
 
 export async function updateTripSettings(

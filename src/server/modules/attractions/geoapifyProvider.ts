@@ -232,3 +232,10 @@ function formatProviderError(error: unknown): string {
 
   return error instanceof Error ? error.message : "Unknown provider error.";
 }
+
+export const __test = {
+  cleanCategory,
+  fallbackAttractions,
+  formatProviderError,
+  normalizeAttraction,
+};

@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "tsx src/server.ts",
     "dev:web": "vite",
+    "test": "npm run test:unit && npm run test:integration && npm run test:db",
+    "test:unit": "tsc -p tsconfig.test.json && node dist/test/tests/unit/run-tests.js",
+    "test:integration": "tsc -p tsconfig.test.json && node dist/test/tests/integration/run-tests.js",
+    "test:db": "tsc -p tsconfig.test.json && node dist/test/tests/integration/database/run-tests.js",
     "build": "tsc && vite build",
     "start": "node dist/server.js"
   },

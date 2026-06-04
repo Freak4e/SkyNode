@@ -185,3 +185,13 @@ function normalizeCurrency(currency: CurrencyCode | undefined): CurrencyCode {
 
   return "USD";
 }
+
+export const __test = {
+  dedupeOffers,
+  normalizeCodes,
+  normalizeCurrency,
+  normalizeInput,
+  normalizeProvider,
+  priceNumber,
+  tagSearchRoute,
+};

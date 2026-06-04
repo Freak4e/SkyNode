@@ -94,7 +94,13 @@ function searchFallbackPlaces(term: string): Place[] {
       [place.code, place.name, place.cityName, place.countryName]
         .join(" ")
         .toLowerCase()
-        .includes(query),
+    .includes(query),
     )
     .slice(0, 10);
 }
+
+export const __test = {
+  fallbackPlaces,
+  normalizePlace,
+  searchFallbackPlaces,
+};

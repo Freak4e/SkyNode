@@ -291,3 +291,12 @@ function describeAxiosError(error: AxiosError): string {
   const status = error.response?.status ? `status ${error.response.status}` : "no status";
   return `${status}, ${error.code || "no code"}, ${error.message}`;
 }
+
+export const __test = {
+  buildSearchLink,
+  describeError,
+  formatCarrier,
+  formatDateTime,
+  formatPrice,
+  normalizeCheapPrices,
+};

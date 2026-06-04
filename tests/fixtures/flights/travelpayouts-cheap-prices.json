@@ -1,0 +1,16 @@
+{
+  "success": true,
+  "data": {
+    "JFK": {
+      "0": {
+        "price": 450,
+        "airline": "AA",
+        "flight_number": "100",
+        "departure_at": "2026-07-01T10:00:00Z",
+        "return_at": "2026-07-08T17:00:00Z",
+        "expires_at": "2026-06-15T00:00:00Z"
+      }
+    }
+  },
+  "error": null
+}

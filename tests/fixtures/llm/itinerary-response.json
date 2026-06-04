@@ -1,0 +1,38 @@
+{
+  "destinationName": "Skopje",
+  "startDate": "2026-07-01",
+  "days": [
+    {
+      "dayNumber": 1,
+      "title": "Old Bazaar and City Center",
+      "summary": "A balanced first day focused on history, food, and walkable landmarks.",
+      "estimatedCost": 35,
+      "items": [
+        {
+          "timeOfDay": "09:00",
+          "title": "Old Bazaar walk",
+          "description": "Explore the market streets and Ottoman-era architecture.",
+          "attractionName": "Old Bazaar",
+          "estimatedCost": 0
+        },
+        {
+          "timeOfDay": "13:00",
+          "title": "Local lunch",
+          "description": "Try a casual local restaurant near the bazaar.",
+          "attractionName": "Old Bazaar",
+          "estimatedCost": 15
+        },
+        {
+          "timeOfDay": "16:00",
+          "title": "Museum visit",
+          "description": "Visit a central museum before an evening walk.",
+          "attractionName": "Fixture City Museum",
+          "estimatedCost": 20
+        }
+      ]
+    }
+  ],
+  "attractions": [],
+  "estimatedTotalCost": 35,
+  "generationMode": "gemini"
+}

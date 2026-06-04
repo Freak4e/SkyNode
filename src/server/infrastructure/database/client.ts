@@ -7,11 +7,10 @@ let pool: pg.Pool | null = null;
 
 export function getDatabasePool(): pg.Pool {
   if (!pool) {
+    const connectionString = requireDatabaseUrl();
     pool = new Pool({
-      connectionString: requireDatabaseUrl(),
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      connectionString,
+      ssl: shouldUseSsl(connectionString) ? { rejectUnauthorized: false } : false,
     });
   }
 
@@ -24,3 +23,22 @@ export async function query<T extends pg.QueryResultRow = pg.QueryResultRow>(
 ) {
   return getDatabasePool().query<T>(text, values);
 }
+
+function shouldUseSsl(connectionString: string): boolean {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname !== "localhost" && url.hostname !== "127.0.0.1";
+  } catch {
+    return true;
+  }
+}
+
+export const __test = {
+  async closePool(): Promise<void> {
+    if (pool) {
+      await pool.end();
+      pool = null;
+    }
+  },
+  shouldUseSsl,
+};

@@ -1,0 +1,12 @@
+{
+  "accepted": false,
+  "confidence": 0.48,
+  "countryMatched": false,
+  "faceDetected": true,
+  "landmarkDetected": false,
+  "gestureDetected": true,
+  "summary": "The country landmark could not be verified.",
+  "issues": [
+    "Upload a clearer photo with a recognizable landmark from the selected country."
+  ]
+}

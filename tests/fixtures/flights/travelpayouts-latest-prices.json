@@ -1,0 +1,24 @@
+{
+  "success": true,
+  "data": [
+    {
+      "origin": "SKP",
+      "destination": "JFK",
+      "price": 450,
+      "airline": "AA",
+      "flight_number": "100",
+      "depart_date": "2026-07-01",
+      "return_date": "2026-07-08",
+      "expires_at": "2026-06-15T00:00:00Z"
+    },
+    {
+      "origin": "SKP",
+      "destination": "LON",
+      "price": 95,
+      "airline": "W6",
+      "flight_number": "7711",
+      "depart_date": "2026-07-03"
+    }
+  ],
+  "error": null
+}

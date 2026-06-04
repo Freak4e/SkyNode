@@ -340,3 +340,14 @@ function computeSampleSize(totalAvailable: number, sampleRatio: number, hasBbox:
 function windowlessTimeout(callback: () => void, timeoutMs: number): ReturnType<typeof setTimeout> {
   return setTimeout(callback, timeoutMs);
 }
+
+export const __test = {
+  buildOpenSkyStatesUrl,
+  computeSampleSize,
+  dedupeOpenSkyStates,
+  mapOpenSkyState,
+  openSkyAuthWarning,
+  parseBbox,
+  parseExplicitLimit,
+  parseSampleRatio,
+};

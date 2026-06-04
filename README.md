@@ -74,31 +74,35 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 
 ## Application Flow
 
-```text
-Landing page
-  -> Search flights
-  -> Like or select a flight
-  -> Plan trip
-  -> Generate itinerary
-  -> Save trip
-  -> Refine with Assistant
-```
+### 1. Discover Flights
 
-```text
-Destinations
-  -> Pick departure city
-  -> Browse cheapest/priciest boards
-  -> Explore places on the map
-  -> Search flights for selected destination
-```
+![SkyNode landing page flight search](docs/screenshots/01-landing.png)
 
-```text
-Trips
-  -> Save private/public trip
-  -> Invite members
-  -> Join public trips
-  -> Chat and manage trip context
-```
+Users start from the landing page by choosing where they want to fly, comparing trip ideas, and moving into flight search or planning.
+
+### 2. Explore Affordable Destinations
+
+![SkyNode destination discovery map and fare cards](docs/screenshots/02-destinations.png)
+
+The Destinations page helps users pick a departure city, browse cheap route ideas, shift between cheapest and priciest offers, and inspect destination cards on the map.
+
+### 3. Plan the Trip
+
+![SkyNode trip planner with generated itinerary](docs/screenshots/03-planner.png)
+
+After selecting a route, users can generate a day-by-day itinerary, review attractions, adjust plans, and save the trip.
+
+### 4. Refine With the AI Assistant
+
+![SkyNode AI travel assistant](docs/screenshots/04-assistant.png)
+
+The assistant supports destination questions, budget changes, honeymoon planning, food recommendations, relaxed itineraries, and saved-trip context.
+
+### 5. Save and Share Trips
+
+![SkyNode saved and community trips](docs/screenshots/05-trips.png)
+
+Registered users can save private or public trips, browse community trips, invite members, request to join shared trips, and continue planning collaboratively.
 
 ## Architecture
 

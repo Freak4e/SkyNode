@@ -62,6 +62,7 @@ export async function listPublicTrips(filters: {
 
   const response = await fetch(`/api/trips/public?${params.toString()}`, {
     headers: await optionalAuthHeaders(),
+    cache: "no-store",
   });
   const body = await response.json() as { trips: SavedTripSummary[]; warnings?: string[] };
 
@@ -91,6 +92,7 @@ export async function syncTripProfile(profile: UserProfileSnapshot): Promise<voi
 export async function listJoinedTrips(): Promise<SavedTripSummary[]> {
   const response = await fetch("/api/trips/joined", {
     headers: await authHeaders(),
+    cache: "no-store",
   });
   const body = await response.json() as { trips: SavedTripSummary[]; warnings?: string[] };
 
@@ -104,6 +106,7 @@ export async function listJoinedTrips(): Promise<SavedTripSummary[]> {
 export async function loadTripInvite(token: string): Promise<SavedTripDetail> {
   const response = await fetch(`/api/trips/join/${encodeURIComponent(token)}`, {
     headers: await optionalAuthHeaders(),
+    cache: "no-store",
   });
   const body = await response.json() as { trip: SavedTripDetail | null; warnings?: string[] };
 

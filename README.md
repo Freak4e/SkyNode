@@ -263,11 +263,49 @@ SkyNode is configured for Vercel:
 
 Required production environment variables should be added in Vercel Project Settings. Never upload `.env` to Git.
 
+### OpenSky laptop proxy (Cloudflare Tunnel)
+
+When OpenSky blocks or times out from Vercel, run a thin forward proxy on your laptop and point production OpenSky env vars at a Cloudflare Tunnel URL. The site still serves `/api/live-flights` on Vercel; only upstream OpenSky traffic goes through your machine.
+
+**Local development (`npm run dev`):** do not use the tunnel. Your machine talks to OpenSky directly (default `OPENSKY_API_URL`). Do not set tunnel URLs in laptop `.env` unless you are testing the proxy itself. Use tunnel env vars only in **Vercel** for the deployed site.
+
+1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/). If `cloudflared` is not on your PATH (common on Windows), add to `.env`:
+
+```env
+CLOUDFLARED_PATH=C:\Cloudflared\cloudflared.exe
+```
+
+2. In `.env` on the laptop, set `OPENSKY_PROXY_SECRET` to a long random string.
+3. Terminal A:
+
+```powershell
+npm run opensky:proxy
+```
+
+4. Terminal B:
+
+```powershell
+npm run opensky:tunnel
+```
+
+Copy the `https://….trycloudflare.com` URL from the tunnel output.
+
+5. In Vercel → Environment Variables (Production):
+
+| Variable | Example |
+|----------|---------|
+| `OPENSKY_API_URL` | `https://YOUR-TUNNEL.trycloudflare.com/api` |
+| `OPENSKY_TOKEN_URL` | `https://YOUR-TUNNEL.trycloudflare.com/auth/realms/opensky-network/protocol/openid-connect/token` (only if `OPENSKY_USE_AUTH=true`) |
+| `OPENSKY_PROXY_SECRET` | Same value as on the laptop |
+| `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET` | If using authenticated OpenSky |
+
+Redeploy after changing env vars. Keep the laptop awake while you need live radar. Quick tunnels get a new URL each run; update Vercel when it changes.
+
 ## Known Limitations
 
 - SkyNode does not sell tickets or complete bookings. It helps users discover, compare, and plan.
 - Flight prices and route availability depend on third-party providers and may change.
-- OpenSky live aircraft data can be unreliable from serverless environments. The app handles timeouts gracefully, but production live radar may show an empty state if OpenSky does not respond quickly.
+- OpenSky live aircraft data can be unreliable from serverless environments. Use the laptop proxy + Cloudflare Tunnel above, or accept an empty live radar when OpenSky does not respond from Vercel.
 - AI-generated itineraries should be reviewed by the user before travel.
 
 ## Repository Structure

@@ -76,7 +76,7 @@ liveFlightsRoute.get("/", async (req, res) => {
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const { data, warnings: requestWarnings } = await fetchOpenSkyStateGroups(urls, headers);
+    const { data, warnings: requestWarnings } = await fetchOpenSkyStateGroups(urls, openSkyUpstreamHeaders(headers));
     const allStates = data.flatMap((response) => response.states || []);
     const latestTime = data.reduce((latest, response) => Math.max(latest, response.time || 0), 0);
     const mapped = dedupeOpenSkyStates(allStates)
@@ -190,10 +190,10 @@ async function getOpenSkyAccessToken(): Promise<string> {
   try {
     const response = await fetch(config.openSky.tokenUrl, {
       method: "POST",
-      headers: {
+      headers: openSkyUpstreamHeaders({
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
-      },
+      }),
       body,
       signal: controller.signal,
     });
@@ -216,6 +216,17 @@ async function getOpenSkyAccessToken(): Promise<string> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function openSkyUpstreamHeaders(headers: Record<string, string>): Record<string, string> {
+  if (!config.openSky.proxySecret) {
+    return headers;
+  }
+
+  return {
+    ...headers,
+    "x-proxy-secret": config.openSky.proxySecret,
+  };
 }
 
 function openSkyAuthWarning(error: unknown): string {
@@ -347,6 +358,7 @@ export const __test = {
   dedupeOpenSkyStates,
   mapOpenSkyState,
   openSkyAuthWarning,
+  openSkyUpstreamHeaders,
   parseBbox,
   parseExplicitLimit,
   parseSampleRatio,

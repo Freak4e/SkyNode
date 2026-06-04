@@ -6,6 +6,16 @@
       "includeFiles": "dist/server/**",
       "regions": ["fra1"],
       "maxDuration": 60
+    },
+    "api/trips.ts": {
+      "includeFiles": "dist/server/**",
+      "regions": ["fra1"],
+      "maxDuration": 60
+    },
+    "api/trips/[...path].ts": {
+      "includeFiles": "dist/server/**",
+      "regions": ["fra1"],
+      "maxDuration": 60
     }
   },
   "rewrites": [

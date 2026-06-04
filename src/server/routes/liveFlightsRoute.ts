@@ -117,8 +117,13 @@ liveFlightsRoute.get("/", async (req, res) => {
   }
 });
 
+function openSkyApiBaseUrl(): string {
+  const base = config.openSky.apiUrl.replace(/\/$/, "");
+  return base.endsWith("/api") ? base : `${base}/api`;
+}
+
 function buildOpenSkyStatesUrl(bbox: { lamin: number; lomin: number; lamax: number; lomax: number }): URL {
-  const url = new URL(`${config.openSky.apiUrl.replace(/\/$/, "")}/states/all`);
+  const url = new URL(`${openSkyApiBaseUrl()}/states/all`);
   url.searchParams.set("lamin", String(bbox.lamin));
   url.searchParams.set("lomin", String(bbox.lomin));
   url.searchParams.set("lamax", String(bbox.lamax));
@@ -353,6 +358,7 @@ function windowlessTimeout(callback: () => void, timeoutMs: number): ReturnType<
 }
 
 export const __test = {
+  openSkyApiBaseUrl,
   buildOpenSkyStatesUrl,
   computeSampleSize,
   dedupeOpenSkyStates,

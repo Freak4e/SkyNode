@@ -26,6 +26,10 @@ function resolveUpstreamTarget(pathname: string): string | null {
     return `${OPENSKY_API_ORIGIN}${pathname}`;
   }
 
+  if (pathname.startsWith("/states/")) {
+    return `${OPENSKY_API_ORIGIN}/api${pathname}`;
+  }
+
   if (pathname.startsWith("/auth/")) {
     return `${OPENSKY_AUTH_ORIGIN}${pathname}`;
   }

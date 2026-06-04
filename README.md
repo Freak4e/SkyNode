@@ -294,7 +294,7 @@ Copy the `https://….trycloudflare.com` URL from the tunnel output.
 
 | Variable | Example |
 |----------|---------|
-| `OPENSKY_API_URL` | `https://YOUR-TUNNEL.trycloudflare.com/api` |
+| `OPENSKY_API_URL` | `https://YOUR-TUNNEL.trycloudflare.com/api` (must end with `/api`, not the tunnel root alone) |
 | `OPENSKY_TOKEN_URL` | `https://YOUR-TUNNEL.trycloudflare.com/auth/realms/opensky-network/protocol/openid-connect/token` (only if `OPENSKY_USE_AUTH=true`) |
 | `OPENSKY_PROXY_SECRET` | Same value as on the laptop |
 | `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET` | If using authenticated OpenSky |

@@ -24,7 +24,10 @@ export async function generateItinerary(input: GenerateItineraryRequest): Promis
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
-  const body = await response.json() as { itinerary: GeneratedItinerary | null; warnings?: string[] };
+  const body = await readJsonResponse<{ itinerary: GeneratedItinerary | null; warnings?: string[] }>(
+    response,
+    "AI itinerary generation failed before the server returned JSON.",
+  );
 
   if (!response.ok || !body.itinerary) {
     throw new Error(body.warnings?.[0] || "Failed to generate itinerary.");
@@ -46,4 +49,17 @@ export async function saveTrip(input: SaveTripRequest): Promise<SaveTripResponse
   }
 
   return body;
+}
+
+async function readJsonResponse<T extends { warnings?: string[] }>(response: Response, fallback: string): Promise<T> {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return await response.json() as T;
+  }
+
+  const text = await response.text().catch(() => "");
+  return {
+    warnings: [text ? text.slice(0, 180) : fallback],
+  } as T;
 }

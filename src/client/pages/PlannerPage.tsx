@@ -327,6 +327,11 @@ export function PlannerPage() {
 
   async function createWithAi(event?: FormEvent) {
     event?.preventDefault();
+    if (selectedInterests.length === 0) {
+      setError("Choose at least one trip interest before generating with AI.");
+      return;
+    }
+
     setLoading(true);
     setError("");
     setSavedTrip(false);
@@ -768,54 +773,57 @@ export function PlannerPage() {
         {showOpeningSavedTrip ? (
           <SavedTripOpening />
         ) : !itinerary ? (
-          <TripSetupForm
-            addActivity={addActivity}
-            addDay={addDay}
-            budgetAmount={budgetAmount}
-            changeDays={changeDays}
-            createManual={createManual}
-            createWithAi={createWithAi}
-            days={days}
-            destinationCode={destinationCode}
-            destinationName={destinationName}
-            draftDays={draftDays}
-            hotelName={hotelName}
-            loading={loading}
-            manual={manual}
-            notes={tripNotes}
-            originCode={originCode}
-            pace={pace}
-            removeActivity={removeActivity}
-            removeDay={removeDay}
-            selectedFlight={selectedFlight}
-            selectedFlights={selectedFlights}
-            likedFlights={likedFlights}
-            likedFlightsLoading={likedFlightsLoading}
-            likedFlightsError={likedFlightsError}
-            selectedInterests={selectedInterests}
-            setBudgetAmount={setBudgetAmount}
-            setDestinationName={updateDestinationName}
-            setHotelName={setHotelName}
-            setManual={setManual}
-            setNotes={setTripNotes}
-            setPace={setPace}
-            setStartDate={setStartDate}
-            setTripCities={setTripCities}
-            setTravelers={setTravelers}
-            setTripTitle={setTripTitle}
-            initialStep={initialSetupStep}
-            onAddFlight={saveDraftForFlightSearch}
-            onAddLikedFlight={addLikedFlight}
-            onOpenTrips={openTripsLibrary}
-            onRemoveFlight={removeSelectedFlight}
-            startDate={startDate}
-            toggleInterest={toggleInterest}
-            travelers={travelers}
-            tripCities={tripCities}
-            tripTitle={tripTitle}
-            updateActivity={updateActivity}
-            updateDay={updateDay}
-          />
+          <>
+            {error && <Banner kind="error" text={error} />}
+            <TripSetupForm
+              addActivity={addActivity}
+              addDay={addDay}
+              budgetAmount={budgetAmount}
+              changeDays={changeDays}
+              createManual={createManual}
+              createWithAi={createWithAi}
+              days={days}
+              destinationCode={destinationCode}
+              destinationName={destinationName}
+              draftDays={draftDays}
+              hotelName={hotelName}
+              loading={loading}
+              manual={manual}
+              notes={tripNotes}
+              originCode={originCode}
+              pace={pace}
+              removeActivity={removeActivity}
+              removeDay={removeDay}
+              selectedFlight={selectedFlight}
+              selectedFlights={selectedFlights}
+              likedFlights={likedFlights}
+              likedFlightsLoading={likedFlightsLoading}
+              likedFlightsError={likedFlightsError}
+              selectedInterests={selectedInterests}
+              setBudgetAmount={setBudgetAmount}
+              setDestinationName={updateDestinationName}
+              setHotelName={setHotelName}
+              setManual={setManual}
+              setNotes={setTripNotes}
+              setPace={setPace}
+              setStartDate={setStartDate}
+              setTripCities={setTripCities}
+              setTravelers={setTravelers}
+              setTripTitle={setTripTitle}
+              initialStep={initialSetupStep}
+              onAddFlight={saveDraftForFlightSearch}
+              onAddLikedFlight={addLikedFlight}
+              onOpenTrips={openTripsLibrary}
+              onRemoveFlight={removeSelectedFlight}
+              startDate={startDate}
+              toggleInterest={toggleInterest}
+              travelers={travelers}
+              tripCities={tripCities}
+              tripTitle={tripTitle}
+              updateActivity={updateActivity}
+              updateDay={updateDay}
+            />
+          </>
         ) : (
           <>
             <PlannerHero
@@ -1062,10 +1070,10 @@ function PlannerSettingsModal(props: GeneralInfoValues & {
                 <input className="form-field" type="date" value={values.startDate} onChange={(event) => update("startDate", event.target.value)} />
               </ModalField>
               <ModalField label="Days">
-                <input className="form-field" type="number" min={1} max={14} value={values.days} onChange={(event) => update("days", Number(event.target.value || 1))} />
+                <input className="form-field" type="number" min={1} max={14} value={values.days} onChange={(event) => updatePositiveNumber(event.currentTarget.value, 1, 14, (value) => update("days", value))} />
               </ModalField>
               <ModalField label="Travelers">
-                <input className="form-field" type="number" min={1} max={12} value={values.travelers} onChange={(event) => update("travelers", Number(event.target.value || 1))} />
+                <input className="form-field" type="number" min={1} max={12} value={values.travelers} onChange={(event) => updatePositiveNumber(event.currentTarget.value, 1, 12, (value) => update("travelers", value))} />
               </ModalField>
               <ModalField label="Budget (USD)">
                 <input className="form-field" type="number" min={0} step={50} value={values.budgetAmount} onChange={(event) => update("budgetAmount", Number(event.target.value || 0))} />
@@ -1382,6 +1390,19 @@ function mergeFlights(existing: FlightOffer[] = [], incoming: FlightOffer[] = []
   });
 
   return merged;
+}
+
+function updatePositiveNumber(rawValue: string, min: number, max: number, onChange: (value: number) => void): void {
+  if (!rawValue.trim()) {
+    return;
+  }
+
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) {
+    return;
+  }
+
+  onChange(Math.min(max, Math.max(min, Math.round(value))));
 }
 
 function Banner({ kind, text }: { kind: "error" | "success"; text: string }) {

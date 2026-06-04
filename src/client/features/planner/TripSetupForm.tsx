@@ -211,13 +211,13 @@ export function TripSetupForm(props: TripSetupFormProps) {
               <input className="wizard-input" value={props.destinationName} onChange={(event) => props.setDestinationName(event.target.value)} placeholder="Add your destination" required />
             </WizardField>
             <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Days">
-              <input className="wizard-input" type="number" min={1} max={14} value={props.days} onChange={(event) => props.changeDays(Number(event.target.value || 1))} />
+              <input className="wizard-input" type="number" min={1} max={14} value={props.days} onChange={(event) => handlePositiveNumber(event.currentTarget.value, 1, 14, props.changeDays)} />
             </WizardField>
             <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Start date">
               <input className="wizard-input" type="date" value={props.startDate} onChange={(event) => props.setStartDate(event.target.value)} required />
             </WizardField>
             <WizardField icon={<Users className="h-4 w-4" />} label="Travelers">
-              <input className="wizard-input" type="number" min={1} max={12} value={props.travelers} onChange={(event) => props.setTravelers(Number(event.target.value || 1))} />
+              <input className="wizard-input" type="number" min={1} max={12} value={props.travelers} onChange={(event) => handlePositiveNumber(event.currentTarget.value, 1, 12, props.setTravelers)} />
             </WizardField>
             <WizardField icon={<DollarSign className="h-4 w-4" />} label="Budget (USD)">
               <div className="relative">
@@ -412,7 +412,7 @@ export function TripSetupForm(props: TripSetupFormProps) {
                   props.setManual(false);
                   props.createWithAi();
                 }}
-                disabled={props.loading || props.selectedInterests.length === 0}
+                disabled={props.loading}
                 className="rounded-2xl bg-blue-600 p-5 text-left text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="flex items-center gap-3 text-base font-black">
@@ -667,6 +667,19 @@ function parseCities(value: string): string[] {
       seen.add(key);
       return true;
     });
+}
+
+function handlePositiveNumber(rawValue: string, min: number, max: number, onChange: (value: number) => void): void {
+  if (!rawValue.trim()) {
+    return;
+  }
+
+  const value = Number(rawValue);
+  if (!Number.isFinite(value)) {
+    return;
+  }
+
+  onChange(Math.min(max, Math.max(min, Math.round(value))));
 }
 
 function buildFlightSearchUrl(input: { date: string; destinationCode: string; destinationName: string; originCode: string }): string {

@@ -12,7 +12,7 @@ type FetchMeta = {
   status?: number;
 };
 
-const debugDir = path.resolve(process.cwd(), "debug");
+const debugDir = process.env.VERCEL ? "/tmp/skynode-debug" : path.resolve(process.cwd(), "debug");
 
 export function buildTargetUrl(from: string, to: string, date: string): string {
   // Prototype target: Kayak flight results page.
@@ -24,8 +24,9 @@ export async function fetchWithScrapingBee(targetUrl: string): Promise<string> {
   const apiKey = requireScrapingBeeApiKey();
   let attempts = 0;
   let lastError: unknown;
+  const maxAttempts = process.env.VERCEL ? 1 : 2;
 
-  while (attempts < 2) {
+  while (attempts < maxAttempts) {
     attempts += 1;
 
     try {
@@ -49,13 +50,15 @@ export async function fetchWithScrapingBee(targetUrl: string): Promise<string> {
         waitMs: config.scrapingBee.waitMs,
         attempts,
         status: response.status,
+      }).catch((error) => {
+        console.warn(`[scrapingbee] debug write skipped: ${describeError(error)}`);
       });
 
       return response.data;
     } catch (error) {
       lastError = error;
 
-      if (!shouldRetry(error) || attempts >= 2) {
+      if (!shouldRetry(error) || attempts >= maxAttempts) {
         break;
       }
 

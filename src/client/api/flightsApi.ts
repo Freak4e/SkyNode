@@ -15,7 +15,7 @@ export async function searchFlights(input: FlightSearchInput & Required<Pick<Fli
   }
 
   const response = await fetch(`/api/flights?${params.toString()}`);
-  const body = await response.json() as FlightSearchResponse;
+  const body = await readFlightSearchResponse(response);
 
   if (!response.ok) {
     throw new Error(body.warnings?.[0] || "Flight search failed.");
@@ -29,4 +29,19 @@ export async function searchPlaces(term: string, signal?: AbortSignal): Promise<
   const body = await response.json() as { places: Place[] };
 
   return body.places;
+}
+
+async function readFlightSearchResponse(response: Response): Promise<FlightSearchResponse> {
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    return await response.json() as FlightSearchResponse;
+  }
+
+  const text = await response.text().catch(() => "");
+  return {
+    offers: [],
+    warnings: [text ? text.slice(0, 180) : "Flight search failed before the server returned JSON."],
+    source: "none",
+  };
 }

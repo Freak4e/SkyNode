@@ -49,8 +49,15 @@ export const config = {
     tokenUrl: process.env.OPENSKY_TOKEN_URL || "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
     clientId: process.env.OPENSKY_CLIENT_ID,
     clientSecret: process.env.OPENSKY_CLIENT_SECRET,
+    useAuth: process.env.OPENSKY_USE_AUTH === "true",
     authTimeoutMs: Number(process.env.OPENSKY_AUTH_TIMEOUT_MS || 2500),
-    timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 5500),
+    timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 8500),
+  },
+  huggingFace: {
+    apiUrl: process.env.HUGGINGFACE_API_URL || "https://router.huggingface.co/v1/chat/completions",
+    apiToken: process.env.HUGGINGFACE_API_TOKEN || process.env.HF_TOKEN,
+    model: process.env.HUGGINGFACE_VISION_MODEL || "Qwen/Qwen3-VL-8B-Instruct",
+    timeoutMs: Number(process.env.HUGGINGFACE_TIMEOUT_MS || 90000),
   },
   scrapingBee: {
     apiUrl: "https://app.scrapingbee.com/api/v1/",
@@ -135,6 +142,14 @@ export function requireOpenSkyCredentials(): { clientId: string; clientSecret: s
     clientId: config.openSky.clientId,
     clientSecret: config.openSky.clientSecret,
   };
+}
+
+export function requireHuggingFaceApiToken(): string {
+  if (!config.huggingFace.apiToken) {
+    throw new Error("Missing HUGGINGFACE_API_TOKEN. Add your Hugging Face token to server .env only.");
+  }
+
+  return config.huggingFace.apiToken;
 }
 
 export function requireScrapingBeeApiKey(): string {

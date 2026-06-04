@@ -22,6 +22,15 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const productionSiteUrl = "https://sky-node-three.vercel.app";
+
+function authRedirectUrl(path = "/"): string {
+  const configuredSiteUrl = import.meta.env.VITE_PUBLIC_SITE_URL || import.meta.env.VITE_APP_URL;
+  const origin = (configuredSiteUrl || (import.meta.env.PROD ? productionSiteUrl : window.location.origin)).replace(/\/$/, "");
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  return `${origin}${normalizedPath}`;
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -78,17 +87,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: profile
-          ? {
-            data: {
+        options: {
+          emailRedirectTo: authRedirectUrl("/"),
+          data: profile
+            ? {
               first_name: profile.firstName,
               last_name: profile.lastName,
               full_name: fullName,
               birth_date: profile.birthDate,
               avatar_url: profile.avatarUrl,
-            },
-          }
-          : undefined,
+            }
+            : undefined,
+        },
       });
 
       if (error) {

@@ -3,6 +3,7 @@ import { Button } from "../../components/ui";
 import type { GeneratedItinerary, TripVisibility } from "../../../shared/types.js";
 import type { PlannerTab } from "./plannerTypes";
 import { dateRange } from "./plannerUtils";
+import { useDestinationImage } from "../../utils/destinationImage.js";
 
 type PlannerHeroProps = {
   active: PlannerTab;
@@ -29,6 +30,7 @@ type PlannerHeroProps = {
 
 export function PlannerHero(props: PlannerHeroProps) {
   const cityName = props.itinerary.destinationName;
+  const imageUrl = useDestinationImage(cityName);
   const tabs = [
     { id: "itinerary" as const, label: "Itinerary", icon: List },
     { id: "calendar" as const, label: "Calendar", icon: CalendarDays },
@@ -40,6 +42,9 @@ export function PlannerHero(props: PlannerHeroProps) {
 
   return (
     <section className="relative mb-8 min-h-64 overflow-hidden rounded-3xl bg-hero-panel p-6 text-white shadow-card-strong sm:p-8 lg:p-10">
+      {imageUrl && <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+      <div className="absolute inset-0 bg-slate-950/55" />
+      <div className="absolute inset-0 bg-linear-to-r from-slate-950/80 via-slate-950/50 to-slate-950/15" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(56,189,248,0.18),transparent_32%),radial-gradient(circle_at_86%_12%,rgba(20,184,166,0.14),transparent_34%)]" />
 
       <div className="relative">

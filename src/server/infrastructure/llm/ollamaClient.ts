@@ -81,7 +81,7 @@ export async function generateItineraryWithOllama(
       ],
       options: {
         temperature: 0.4,
-        num_predict: 1800,
+        num_predict: itineraryOutputTokenBudget(request.days),
       },
     },
     {
@@ -188,8 +188,13 @@ export function buildItineraryPrompt(request: GenerateItineraryRequest, attracti
       "If interests include nightlife, include one evening bar, music, or nightlife stop on at least one day.",
       "Balance free public sights with paid experiences when the selected interests imply paid activities.",
       "Keep descriptions under 18 words.",
+      "Keep titles, summaries, notes, and addresses compact so the full JSON fits in the response.",
     ],
   });
+}
+
+export function itineraryOutputTokenBudget(days: number): number {
+  return Math.min(8192, Math.max(4200, days * 1500));
 }
 
 export function parseItineraryJson(content: string): RawItinerary {
@@ -205,9 +210,16 @@ export function parseItineraryJson(content: string): RawItinerary {
       return JSON.parse(cleaned) as RawItinerary;
     } catch (innerError) {
       const preview = cleaned.length > 1000 ? `${cleaned.slice(0, 1000)}...` : cleaned;
+      const likelyTruncated =
+        !/[}\]]\s*$/.test(cleaned) ||
+        countCharacter(cleaned, "{") !== countCharacter(cleaned, "}") ||
+        countCharacter(cleaned, "[") !== countCharacter(cleaned, "]");
+      const truncationHint = likelyTruncated
+        ? "\nThe itinerary response appears truncated before valid JSON finished. Increase the provider output token limit or ask for a shorter trip."
+        : "";
       throw new Error(
         `Failed to parse itinerary JSON from LLM response: ${innerError instanceof Error ? innerError.message : String(innerError)}\n` +
-        `Cleaned content preview: ${preview}`,
+        `Cleaned content preview: ${preview}${truncationHint}`,
       );
     }
   }
@@ -229,6 +241,14 @@ function cleanJsonString(content: string): string {
     .replace(/\r?\n/g, " ")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+function countCharacter(value: string, character: string): number {
+  let count = 0;
+  for (const item of value) {
+    if (item === character) count += 1;
+  }
+  return count;
 }
 
 export function normalizeItinerary(

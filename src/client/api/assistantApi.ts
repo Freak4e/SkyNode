@@ -11,6 +11,7 @@ import { authHeaders } from "./authHeaders.js";
 export async function listSavedTrips(): Promise<SavedTripSummary[]> {
   const response = await fetch("/api/trips", {
     headers: await authHeaders(),
+    cache: "no-store",
   });
   const body = await response.json() as { trips: SavedTripSummary[]; warnings?: string[] };
 
@@ -24,6 +25,7 @@ export async function listSavedTrips(): Promise<SavedTripSummary[]> {
 export async function loadSavedTrip(tripId: string): Promise<SavedTripDetail> {
   const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}`, {
     headers: await authHeaders(),
+    cache: "no-store",
   });
   const body = await response.json() as { trip: SavedTripDetail | null; warnings?: string[] };
 

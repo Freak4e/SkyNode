@@ -12,13 +12,22 @@ import { exploreRoute } from "./routes/exploreRoute.js";
 import { liveFlightsRoute } from "./routes/liveFlightsRoute.js";
 import { placesRoute } from "./routes/placesRoute.js";
 import { likedFlightsRoute } from "./modules/flights/likedFlightsRoute.js";
+import { notificationsRoute } from "./modules/notifications/notificationsRoute.js";
+import { travelMissionsRoute } from "./modules/travel-missions/travelMissionsRoute.js";
 
 export function createApp() {
   const app = express();
   const publicDir = path.resolve(process.cwd(), "dist/public");
 
-  app.use(express.json({ limit: "1mb" }));
-  app.use(express.static(publicDir));
+  app.set("etag", false);
+  app.use(express.json({ limit: "6mb" }));
+  app.use("/api", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+    next();
+  });
+
   app.use("/api/flights", flightsRoute);
   app.use("/api/liked-flights", likedFlightsRoute);
   app.use("/api/live-flights", liveFlightsRoute);
@@ -31,6 +40,9 @@ export function createApp() {
   app.use("/api/trips", tripsRoute);
   app.use("/api/chat", chatRoute);
   app.use("/api/account", accountRoute);
+  app.use("/api/notifications", notificationsRoute);
+  app.use("/api/travel-missions", travelMissionsRoute);
+  app.use(express.static(publicDir));
 
   app.get("/test-flight-search", (req, res) => {
     const params = new URLSearchParams(req.query as Record<string, string>);

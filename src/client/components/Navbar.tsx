@@ -63,6 +63,20 @@ export function Navbar({ transparent = false }: Props) {
   }
 
   useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileOpen]);
+
+  useEffect(() => {
     function handleClick(event: MouseEvent) {
       if (currencyRef.current && !currencyRef.current.contains(event.target as Node)) {
         setCurrencyOpen(false);
@@ -79,7 +93,7 @@ export function Navbar({ transparent = false }: Props) {
   return (
     <>
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b px-5 py-3 transition-all duration-300 md:px-8 ${
+      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b px-4 py-2.5 transition-all duration-300 sm:px-5 md:px-8 md:py-3 ${
         overlay ? "border-slate-100 bg-white/90 shadow-sm backdrop-blur-md lg:border-transparent lg:bg-transparent lg:shadow-none lg:backdrop-blur-0" : "border-slate-100 bg-white/90 shadow-sm backdrop-blur-md"
       }`}
     >
@@ -87,7 +101,7 @@ export function Navbar({ transparent = false }: Props) {
         <img
           src={logo}
           alt="SkyNode"
-          className={`h-14 w-auto object-contain transition duration-300 ${overlay ? "lg:brightness-0 lg:invert" : ""}`}
+          className={`h-10 w-auto object-contain transition duration-300 sm:h-12 lg:h-14 ${overlay ? "lg:brightness-0 lg:invert" : ""}`}
         />
       </Link>
 
@@ -121,7 +135,7 @@ export function Navbar({ transparent = false }: Props) {
         ))}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <div ref={currencyRef} className="relative hidden sm:block">
           <button
             type="button"
@@ -166,9 +180,9 @@ export function Navbar({ transparent = false }: Props) {
             title="My account"
           >
             {avatarUrl ? (
-              <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover" />
+              <img src={avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover sm:h-8 sm:w-8 lg:h-7 lg:w-7" />
             ) : (
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-violet-600 text-white">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-violet-600 text-white sm:h-8 sm:w-8 lg:h-7 lg:w-7">
                 <UserRound className="h-4 w-4" />
               </span>
             )}
@@ -176,7 +190,7 @@ export function Navbar({ transparent = false }: Props) {
         ) : (
           <Link
             to="/auth"
-            className={`text-sm font-medium no-underline transition-colors ${overlay ? "text-slate-600 hover:text-slate-900 lg:text-white/80 lg:hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
+            className={`hidden text-sm font-medium no-underline transition-colors sm:inline ${overlay ? "text-slate-600 hover:text-slate-900 lg:text-white/80 lg:hover:text-white" : "text-slate-600 hover:text-slate-900"}`}
           >
             Sign in
           </Link>
@@ -190,7 +204,7 @@ export function Navbar({ transparent = false }: Props) {
             aria-label="Open navigation menu"
             aria-expanded={mobileOpen}
           >
-            <Menu className="h-5 w-5" />
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
 
         </div>
@@ -240,6 +254,36 @@ export function Navbar({ transparent = false }: Props) {
                 </Link>
               ))}
             </div>
+
+            <div className="mt-5 rounded-3xl border border-slate-100 bg-slate-50 p-3">
+              <p className="px-1 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">Currency</p>
+              <div className="mt-2 grid grid-cols-3 gap-2">
+                {currencyOptions.slice(0, 6).map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() => handleCurrencyChange(option.code)}
+                    className={`rounded-2xl px-3 py-2 text-sm font-black transition ${
+                      currency === option.code
+                        ? "bg-slate-950 text-white shadow-sm"
+                        : "bg-white text-slate-600 ring-1 ring-slate-200 hover:text-slate-950"
+                    }`}
+                  >
+                    {option.code}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!user && (
+              <Link
+                to="/auth"
+                onClick={() => setMobileOpen(false)}
+                className="mt-auto rounded-2xl bg-slate-950 px-4 py-3 text-center text-sm font-black text-white no-underline shadow-sm"
+              >
+                Sign in
+              </Link>
+            )}
           </aside>
     </div>
     </>

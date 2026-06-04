@@ -1,146 +1,280 @@
 # SkyNode
 
-SkyNode is a bachelor-project web platform for planning short flight-based trips in Europe. It combines flight search, attraction discovery, AI-style itinerary generation, and saved trip drafts in one workflow.
+> AI-assisted flight discovery and trip planning for fast, affordable getaways.
 
-## Current Sprint Status
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=111)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=fff)](https://www.typescriptlang.org/)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=fff)](https://vite.dev/)
+[![Express](https://img.shields.io/badge/Express-API-111?logo=express&logoColor=fff)](https://expressjs.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-auth%20%2B%20data-3ECF8E?logo=supabase&logoColor=fff)](https://supabase.com/)
 
-The project is currently at the **Sprint 2 MVP** stage.
+SkyNode is a full-stack travel web application for discovering flights, exploring affordable destinations, planning itineraries with AI assistance, and saving trips with collaborative context. It combines flight search, destination boards, maps, saved trips, account profiles, and an assistant-first planning flow into one travel companion.
 
-Sprint 1 established:
+Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app/)
 
-- React + TypeScript frontend.
-- Express REST API.
-- Airport/city autocomplete.
-- Provider-based flight search architecture.
-- ScrapingBee/Kayak live-fetch provider.
-- Travelpayouts cached-data provider as optional fallback.
-- Flight results page with sorting/filtering.
+---
 
-Sprint 2 adds:
+## Table of Contents
 
-- `/planner` page with the current SkyNode visual style.
-- Route from landing page and flight results into the planner.
-- Geoapify attractions integration.
-- Local Ollama itinerary generator that produces structured day-by-day plans.
-- Supabase PostgreSQL persistence for saved trip drafts.
-- Auto-created database tables for trips, attractions, itinerary days, and itinerary items.
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Application Flow](#application-flow)
+- [Architecture](#architecture)
+- [API Surface](#api-surface)
+- [Environment Variables](#environment-variables)
+- [Install](#install)
+- [Usage](#usage)
+- [Deployment](#deployment)
+- [Known Limitations](#known-limitations)
+- [Repository Structure](#repository-structure)
+- [Project Status](#project-status)
 
-This is still a planning prototype. SkyNode does not sell tickets, guarantee live prices, or make real bookings.
+## Features
 
-## Main Product Flow
+- Flight search with city and airport autocomplete.
+- Destination discovery boards for low-fare route ideas.
+- Interactive destination map with city markers, destination images, fare cards, and carousel filtering.
+- AI travel assistant for itinerary questions, budget adjustments, honeymoon planning, relaxed routes, food ideas, and saved-trip context.
+- Trip planner with attractions, day-by-day itinerary generation, editable plans, and trip saving.
+- Saved trips, joined trips, invite links, trip visibility settings, and member/chat support.
+- Account page with profile management, travel mission progress, and trip statistics.
+- Live flights radar powered by OpenSky where available, with production-safe timeout behavior.
+- Supabase authentication with email signup, OAuth sign-in, password recovery, and server-side account deletion.
 
-```text
-Landing search
- -> Search results
- -> Select and plan trip
- -> Planner page
- -> Generate itinerary
- -> Save trip draft to Supabase
-```
+## Tech Stack
 
-The planner can also be opened directly from:
+### Frontend
 
-```text
-/planner
-```
+- React 19
+- TypeScript
+- Vite
+- React Router
+- Tailwind CSS
+- Leaflet and marker clustering
+- D3, TopoJSON, and world-atlas for map/profile visualization
+- Lucide React icons
 
-## Run Locally
+### Backend
 
-Create `.env` locally with:
+- Node.js
+- Express
+- TypeScript
+- PostgreSQL via `pg`
+- Supabase Auth and Supabase-backed trip/account workflows
+
+### External Services
+
+- Travelpayouts for cached flight deal data
+- ScrapingBee/Kayak provider path for live flight search experiments
+- Geoapify for attractions
+- OpenRouteService for route directions
+- OpenSky Network for aircraft telemetry where the network allows it
+- Gemini or Ollama for AI itinerary/chat generation
+- Wikipedia/Wikimedia for destination imagery
+
+## Application Flow
+
+### 1. Discover Flights
+
+![SkyNode landing page flight search](docs/screenshots/01-landing.png)
+
+Users start from the landing page by choosing where they want to fly, comparing trip ideas, and moving into flight search or planning.
+
+### 2. Explore Affordable Destinations
+
+![SkyNode destination discovery map and fare cards](docs/screenshots/02-destinations.png)
+
+The Destinations page helps users pick a departure city, browse cheap route ideas, shift between cheapest and priciest offers, and inspect destination cards on the map.
+
+### 3. Plan the Trip
+
+![SkyNode trip planner with generated itinerary](docs/screenshots/03-planner.png)
+
+After selecting a route, users can generate a day-by-day itinerary, review attractions, adjust plans, and save the trip.
+
+### 4. Refine With the AI Assistant
+
+![SkyNode AI travel assistant](docs/screenshots/04-assistant.png)
+
+The assistant supports destination questions, budget changes, honeymoon planning, food recommendations, relaxed itineraries, and saved-trip context.
+
+### 5. Save and Share Trips
+
+![SkyNode saved and community trips](docs/screenshots/05-trips.png)
+
+Registered users can save private or public trips, browse community trips, invite members, request to join shared trips, and continue planning collaboratively.
+
+## Architecture
+
+SkyNode is organized as a single TypeScript repository with a Vite frontend and an Express backend. The frontend talks to backend routes under `/api/*`. On Vercel, the static client is served from `dist/public`, while API requests are handled by the serverless entry in `api/[...path].ts`.
+
+The backend keeps route adapters thin and delegates feature logic into modules, providers, and infrastructure clients. Shared request and response types live in `src/shared` so the frontend and backend stay aligned.
+
+## API Surface
+
+- `GET /api/places`
+- `GET /api/flights`
+- `GET /api/liked-flights`
+- `POST /api/liked-flights`
+- `DELETE /api/liked-flights/:id`
+- `GET /api/explore`
+- `GET /api/live-flights`
+- `GET /api/attractions`
+- `POST /api/geocode`
+- `GET /api/geocode/cities`
+- `POST /api/directions`
+- `POST /api/itineraries/generate`
+- `GET /api/trips`
+- `POST /api/trips`
+- `GET /api/trips/public`
+- `GET /api/trips/joined`
+- `GET /api/trips/:tripId`
+- `POST /api/trips/:tripId/join`
+- `GET /api/trips/:tripId/messages`
+- `POST /api/trips/:tripId/messages`
+- `POST /api/chat`
+- `DELETE /api/account`
+- `GET /api/notifications/unread`
+- `POST /api/travel-missions/submit`
+
+## Environment Variables
+
+Create a local `.env` file. Do not commit it.
 
 ```env
+# Flight providers
 API_KEY=your_scrapingbee_key
+SCRAPINGBEE_API_KEY=your_scrapingbee_key
 TRAVELPAYOUTS_ACCESS_TOKEN=your_travelpayouts_token
 TRAVELPAYOUTS_CURRENCY=USD
+
+# Maps and places
 GEOAPIFY_API_KEY=your_geoapify_key
+OPENROUTESERVICE_API_KEY=your_openrouteservice_key
+
+# Supabase
 DATABASE_URL=your_supabase_postgres_pooler_url
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SECRET_KEY=your_server_only_supabase_secret_key
+SUPABASE_SECRET_KEY=your_server_only_supabase_service_role_key
+
+# Public app URL
+VITE_PUBLIC_SITE_URL=https://sky-node-three.vercel.app
+
+# AI provider
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=your_google_ai_studio_key
 GEMINI_MODEL=gemini-2.5-flash
 GEMINI_API_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_THINKING_BUDGET=0
 GEMINI_TIMEOUT_MS=120000
+
+# Optional local AI provider
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3:latest
 OLLAMA_TIMEOUT_MS=300000
+
+# Optional live flights
+OPENSKY_CLIENT_ID=your_opensky_client_id
+OPENSKY_CLIENT_SECRET=your_opensky_client_secret
+OPENSKY_USE_AUTH=false
+OPENSKY_TIMEOUT_MS=8500
 ```
 
-Each developer keeps their own `.env` file. It is ignored by Git, so LLM settings can differ per user or machine.
+`VITE_SUPABASE_ANON_KEY` is safe for the browser. `SUPABASE_SECRET_KEY` is not safe for the browser and must never be exposed with a `VITE_` prefix.
 
-`VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` come from Supabase Project Settings -> API. The anon key is safe to use in the browser; do not expose the service role key.
+For Supabase email confirmation in production, configure:
 
-`SUPABASE_SECRET_KEY` is used only by the Express server for account deletion. Keep it in server-side `.env` only; never expose it as a `VITE_` variable.
+- Site URL: `https://sky-node-three.vercel.app`
+- Redirect URLs: `https://sky-node-three.vercel.app/*`
 
-`LLM_PROVIDER=gemini` uses Google Gemini through the API and does not require local model files. `LLM_PROVIDER=ollama` uses a local Ollama server. Do not put the local `ollama.exe` path in `.env`; SkyNode talks to Ollama through the HTTP server at `OLLAMA_BASE_URL`.
-
-If using Ollama, pull the model configured in your own `.env` before generating itineraries:
-
-```powershell
-ollama pull llama3:latest
-```
-
-If PowerShell cannot find `ollama`, use the full local install path or add the Ollama install folder to your user `PATH`.
-
-Then run:
+## Install
 
 ```powershell
 npm install
+```
+
+## Usage
+
+Build and run the production server locally:
+
+```powershell
 npm run build
 npm start
 ```
 
-Open `http://localhost:3000`.
+Open:
 
-For development with Vite hot reload:
+```text
+http://localhost:3000
+```
+
+Run the development server with Vite hot reload:
 
 ```powershell
 npm run dev
 npm run dev:web
 ```
 
-Open `http://localhost:5173`.
+Open:
+
+```text
+http://localhost:5173
+```
+
+If using Ollama locally, pull the configured model first:
+
+```powershell
+ollama pull llama3:latest
+```
+
+## Deployment
+
+SkyNode is configured for Vercel:
+
+- Build command: `npm run build`
+- Output directory: `dist/public`
+- API function: `api/[...path].ts`
+- SPA fallback rewrite to `index.html`
+
+Required production environment variables should be added in Vercel Project Settings. Never upload `.env` to Git.
+
+## Known Limitations
+
+- SkyNode does not sell tickets or complete bookings. It helps users discover, compare, and plan.
+- Flight prices and route availability depend on third-party providers and may change.
+- OpenSky live aircraft data can be unreliable from serverless environments. The app handles timeouts gracefully, but production live radar may show an empty state if OpenSky does not respond quickly.
+- AI-generated itineraries should be reviewed by the user before travel.
 
 ## Repository Structure
 
 ```text
+api/
+  [...path].ts              Vercel serverless API entry
 src/
-  client/                  React frontend
-    api/                   Browser API clients
-    components/            Reusable UI components
-    pages/                 Home, search results, planner pages
-    features/              Planned feature-first frontend modules
-    shared/                Planned frontend utilities/design primitives
-  server/                  Backend application
-    routes/                Flight and place HTTP route adapters
-    services/              Application use-cases
-    providers/             Flight provider integrations
-    modules/               Domain modules
-      attractions/         Geoapify attraction discovery
-      itineraries/         Ollama itinerary generation
-      trips/               Supabase trip persistence
-    infrastructure/        Database/cache/LLM/external API clients
-  shared/                  Shared TypeScript domain/API types
-docs/                      Architecture, sprint plan, API and data model notes
-tests/                     Planned unit/integration test structure
+  client/                   React frontend
+    api/                    Browser API clients
+    auth/                   Supabase auth context/session helpers
+    components/             Shared UI and layout components
+    features/               Feature-specific frontend modules
+    pages/                  Main application pages
+    utils/                  Browser utilities
+  server/                   Express backend
+    infrastructure/         Database, LLM, and external API clients
+    middleware/             Auth and request middleware
+    modules/                Domain modules such as trips, chat, account
+    providers/              Flight provider integrations
+    routes/                 HTTP route adapters
+    services/               Application services
+  shared/                   Shared TypeScript types and utilities
+docs/                       Architecture and sprint notes
+dist/                       Generated build output
 ```
 
-## Current API Surface
+## Project Status
 
-- `GET /api/places`
-- `GET /api/flights`
-- `GET /api/attractions`
-- `POST /api/itineraries/generate`
-- `POST /api/trips`
+SkyNode is an active bachelor-project prototype. The current focus is production polish, deployment readiness, richer travel workflows, and reliable provider behavior.
 
-## Planned Sprints
+---
 
-- Sprint 1: Flight search + architecture.
-- Sprint 2: Itinerary generation + Geoapify attractions + saved trip drafts.
-- Sprint 3: Chat adjustments, itinerary editing, cost overview, public sharing.
-- Sprint 4: Map visualization, optional OpenSky traffic layer, integration tests.
-- Sprint 5: UI polish, deployment, demo flow, presentation readiness.
-
-See [docs/sprint-plan.md](docs/sprint-plan.md), [docs/architecture.md](docs/architecture.md), and [docs/api-contract.md](docs/api-contract.md).
+Built for fast travel planning, affordable discovery, and AI-assisted trip decisions.

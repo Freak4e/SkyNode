@@ -44,30 +44,30 @@ let cachedAccessTokenExpiresAt = 0;
 export const liveFlightsRoute = Router();
 
 const SERVERLESS_AUTH_TIMEOUT_MS = 2500;
-const SERVERLESS_DATA_TIMEOUT_MS = 5500;
+const SERVERLESS_DATA_TIMEOUT_MS = 8500;
+const WORLD_SAMPLE_BBOXES = [
+  { lamin: 35, lomin: -12, lamax: 62, lomax: 35 },
+  { lamin: 24, lomin: -130, lamax: 55, lomax: -60 },
+  { lamin: -10, lomin: 70, lamax: 55, lomax: 145 },
+] as const;
 
 liveFlightsRoute.get("/", async (req, res) => {
   const bbox = parseBbox(req.query);
   const explicitLimit = parseExplicitLimit(req.query.limit);
   const sampleRatio = parseSampleRatio(req.query.samplePercent, Boolean(bbox));
 
-  const url = new URL(`${config.openSky.apiUrl.replace(/\/$/, "")}/states/all`);
-  if (bbox) {
-    url.searchParams.set("lamin", String(bbox.lamin));
-    url.searchParams.set("lomin", String(bbox.lomin));
-    url.searchParams.set("lamax", String(bbox.lamax));
-    url.searchParams.set("lomax", String(bbox.lomax));
-  }
-
-  const controller = new AbortController();
-  const timeout = windowlessTimeout(() => controller.abort(), openSkyDataTimeoutMs());
+  const urls = bbox
+    ? [buildOpenSkyStatesUrl(bbox)]
+    : WORLD_SAMPLE_BBOXES.map((sampleBbox) => buildOpenSkyStatesUrl(sampleBbox));
 
   try {
     const authWarnings: string[] = [];
-    const accessToken = await getOpenSkyAccessToken().catch((error) => {
-      authWarnings.push(openSkyAuthWarning(error));
-      return null;
-    });
+    const accessToken = config.openSky.useAuth
+      ? await getOpenSkyAccessToken().catch((error) => {
+        authWarnings.push(openSkyAuthWarning(error));
+        return null;
+      })
+      : null;
     const headers: Record<string, string> = {
       Accept: "application/json",
     };
@@ -76,25 +76,10 @@ liveFlightsRoute.get("/", async (req, res) => {
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const response = await fetch(url, {
-      headers,
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      const detail = await response.text().catch(() => "");
-      return res.json({
-        flights: [],
-        totalAvailable: 0,
-        samplePercent: 0,
-        updatedAt: new Date().toISOString(),
-        warnings: [`OpenSky request failed with ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`],
-        source: "opensky",
-      } satisfies LiveFlightsResponse);
-    }
-
-    const data = await response.json() as OpenSkyResponse;
-    const mapped = (data.states || [])
+    const { data, warnings: requestWarnings } = await fetchOpenSkyStateGroups(urls, headers);
+    const allStates = data.flatMap((response) => response.states || []);
+    const latestTime = data.reduce((latest, response) => Math.max(latest, response.time || 0), 0);
+    const mapped = dedupeOpenSkyStates(allStates)
       .map(mapOpenSkyState)
       .filter((flight): flight is LiveFlight => Boolean(flight));
 
@@ -108,8 +93,10 @@ liveFlightsRoute.get("/", async (req, res) => {
       flights,
       totalAvailable,
       samplePercent: totalAvailable > 0 ? Math.round((flights.length / totalAvailable) * 1000) / 10 : 0,
-      updatedAt: new Date((data.time || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
-      warnings: flights.length ? authWarnings : [...authWarnings, "OpenSky returned no aircraft positions for this map area."],
+      updatedAt: new Date((latestTime || Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+      warnings: flights.length
+        ? [...authWarnings, ...requestWarnings]
+        : [...authWarnings, ...requestWarnings, "OpenSky returned no aircraft positions for this map area."],
       source: "opensky",
     } satisfies LiveFlightsResponse);
   } catch (error) {
@@ -127,10 +114,62 @@ liveFlightsRoute.get("/", async (req, res) => {
       warnings: [message],
       source: "opensky",
     } satisfies LiveFlightsResponse);
+  }
+});
+
+function buildOpenSkyStatesUrl(bbox: { lamin: number; lomin: number; lamax: number; lomax: number }): URL {
+  const url = new URL(`${config.openSky.apiUrl.replace(/\/$/, "")}/states/all`);
+  url.searchParams.set("lamin", String(bbox.lamin));
+  url.searchParams.set("lomin", String(bbox.lomin));
+  url.searchParams.set("lamax", String(bbox.lamax));
+  url.searchParams.set("lomax", String(bbox.lomax));
+
+  return url;
+}
+
+async function fetchOpenSkyStateGroups(
+  urls: URL[],
+  headers: Record<string, string>,
+): Promise<{ data: OpenSkyResponse[]; warnings: string[] }> {
+  const settled = await Promise.allSettled(urls.map((url) => fetchOpenSkyStates(url, headers)));
+  const data: OpenSkyResponse[] = [];
+  const warnings: string[] = [];
+
+  for (const result of settled) {
+    if (result.status === "fulfilled") {
+      data.push(result.value);
+    } else {
+      warnings.push(result.reason instanceof Error ? result.reason.message : "One OpenSky region request failed.");
+    }
+  }
+
+  if (!data.length) {
+    throw new Error(warnings[0] || "OpenSky request timed out.");
+  }
+
+  return { data, warnings };
+}
+
+async function fetchOpenSkyStates(url: URL, headers: Record<string, string>): Promise<OpenSkyResponse> {
+  const controller = new AbortController();
+  const timeout = windowlessTimeout(() => controller.abort(), openSkyDataTimeoutMs());
+
+  try {
+    const response = await fetch(url, {
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`OpenSky request failed with ${response.status}${detail ? `: ${detail.slice(0, 160)}` : ""}`);
+    }
+
+    return await response.json() as OpenSkyResponse;
   } finally {
     clearTimeout(timeout);
   }
-});
+}
 
 async function getOpenSkyAccessToken(): Promise<string> {
   const now = Date.now();
@@ -197,6 +236,19 @@ function openSkyAuthTimeoutMs(): number {
 
 function openSkyDataTimeoutMs(): number {
   return Math.min(config.openSky.timeoutMs, SERVERLESS_DATA_TIMEOUT_MS);
+}
+
+function dedupeOpenSkyStates(states: OpenSkyState[]): OpenSkyState[] {
+  const seen = new Set<string>();
+  return states.filter((state) => {
+    const id = state[0];
+    if (seen.has(id)) {
+      return false;
+    }
+
+    seen.add(id);
+    return true;
+  });
 }
 
 function mapOpenSkyState(state: OpenSkyState): LiveFlight | null {

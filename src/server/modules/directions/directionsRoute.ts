@@ -139,3 +139,10 @@ async function fetchDayRoute(points: DirectionsPoint[]): Promise<RouteResult> {
     return { points, source: "fallback" };
   }
 }
+
+export const __test = {
+  cacheKey,
+  readCache,
+  routeCache,
+  writeCache,
+};

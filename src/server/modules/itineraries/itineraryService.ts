@@ -29,3 +29,7 @@ function validateRequest(request: GenerateItineraryRequest): void {
     throw new Error("Trip length must be between 1 and 10 days.");
   }
 }
+
+export const __test = {
+  validateRequest,
+};

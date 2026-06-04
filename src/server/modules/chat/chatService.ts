@@ -495,3 +495,15 @@ function buildTripContext(trip: SavedTripDetail) {
     })),
   };
 }
+
+export const __test = {
+  buildFallbackProposal,
+  buildSystemPrompt,
+  buildTripContext,
+  cleanText,
+  isEveningTime,
+  normalizeCost,
+  normalizeProposal,
+  parseJson,
+  shouldProposeTripChange,
+};

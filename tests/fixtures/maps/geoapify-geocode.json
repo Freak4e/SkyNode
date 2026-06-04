@@ -1,0 +1,31 @@
+{
+  "features": [
+    {
+      "properties": {
+        "city": "Paris",
+        "country": "France",
+        "formatted": "Paris, France",
+        "lat": 48.8566,
+        "lon": 2.3522
+      }
+    },
+    {
+      "properties": {
+        "city": "Paris",
+        "country": "France",
+        "formatted": "Paris duplicate",
+        "lat": 48.8566,
+        "lon": 2.3522
+      }
+    },
+    {
+      "properties": {
+        "city": "Paris",
+        "country": "United States",
+        "formatted": "Paris, TX",
+        "lat": 33.66,
+        "lon": -95.55
+      }
+    }
+  ]
+}

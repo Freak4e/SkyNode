@@ -122,3 +122,8 @@ function cacheKey(input: CacheInput): string {
 function toIsoString(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
+
+export const __test = {
+  cacheKey,
+  toIsoString,
+};

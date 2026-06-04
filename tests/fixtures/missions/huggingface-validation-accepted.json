@@ -1,0 +1,10 @@
+{
+  "accepted": true,
+  "confidence": 0.91,
+  "countryMatched": true,
+  "faceDetected": true,
+  "landmarkDetected": true,
+  "gestureDetected": true,
+  "summary": "The photo shows the requested gesture with a recognizable landmark.",
+  "issues": []
+}

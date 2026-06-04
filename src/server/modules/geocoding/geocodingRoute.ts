@@ -176,3 +176,11 @@ function distanceMeters(
 function toRadians(value: number): number {
   return value * Math.PI / 180;
 }
+
+export const __test = {
+  buildGeocodeQueries,
+  distanceMeters,
+  geocodeBoundaryCities,
+  nearestBoundary,
+  toRadians,
+};

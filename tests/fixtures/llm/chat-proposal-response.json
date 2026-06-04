@@ -1,0 +1,34 @@
+{
+  "summary": "Prepared a lower-cost version with more free outdoor activities.",
+  "itinerary": {
+    "destinationName": "Skopje",
+    "startDate": "2026-07-01",
+    "days": [
+      {
+        "dayNumber": 1,
+        "title": "Budget Old Town Walk",
+        "summary": "Keep the day walkable and focus on free public spaces.",
+        "estimatedCost": 10,
+        "items": [
+          {
+            "timeOfDay": "09:00",
+            "title": "Free Old Bazaar walk",
+            "description": "Explore the bazaar independently without paid activities.",
+            "attractionName": "Old Bazaar",
+            "estimatedCost": 0
+          },
+          {
+            "timeOfDay": "13:00",
+            "title": "Casual lunch",
+            "description": "Choose a low-cost local food stop.",
+            "attractionName": "Old Bazaar",
+            "estimatedCost": 10
+          }
+        ]
+      }
+    ],
+    "attractions": [],
+    "estimatedTotalCost": 10,
+    "generationMode": "gemini"
+  }
+}

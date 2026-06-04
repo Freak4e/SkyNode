@@ -89,3 +89,10 @@ async function runEnsureSchema(): Promise<void> {
     client.release();
   }
 }
+
+export const __test = {
+  resetSchemaState(): void {
+    schemaReady = false;
+    schemaPromise = null;
+  },
+};

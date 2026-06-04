@@ -61,3 +61,8 @@ function buildNoOffersWarning(html: string): string {
 
   return "No flight offers extracted. Check debug/last-response.html and selectors.";
 }
+
+export const __test = {
+  buildNoOffersWarning,
+  normalizeOffer,
+};

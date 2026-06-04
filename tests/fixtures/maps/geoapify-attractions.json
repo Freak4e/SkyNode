@@ -1,0 +1,24 @@
+{
+  "features": [
+    {
+      "properties": {
+        "place_id": "fixture-museum",
+        "name": "Fixture City Museum",
+        "formatted": "1 Museum Street, Fixture City",
+        "categories": ["entertainment.museum"],
+        "lat": 41.995,
+        "lon": 21.431
+      }
+    },
+    {
+      "properties": {
+        "place_id": "fixture-market",
+        "name": "Fixture Central Market",
+        "formatted": "2 Market Avenue, Fixture City",
+        "categories": ["catering.restaurant"],
+        "lat": 41.996,
+        "lon": 21.432
+      }
+    }
+  ]
+}

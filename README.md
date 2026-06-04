@@ -19,6 +19,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Application Flow](#application-flow)
+- [Project Documentation](#project-documentation)
 - [Architecture](#architecture)
 - [API Surface](#api-surface)
 - [Environment Variables](#environment-variables)
@@ -103,6 +104,29 @@ The assistant supports destination questions, budget changes, honeymoon planning
 ![SkyNode saved and community trips](docs/screenshots/05-trips.png)
 
 Registered users can save private or public trips, browse community trips, invite members, request to join shared trips, and continue planning collaboratively.
+
+## Project Documentation
+
+The repository includes supporting project documents and diagrams for presentation, review, and thesis-style documentation.
+
+### Word Documents
+
+- [SkyNode User Manual](docs/SkyNode_User_Manual.docx)
+- [SkyNode Technical Documentation](docs/SkyNode_Technical_Documentation.docx)
+
+### Diagrams
+
+#### Use Case Diagram
+
+![SkyNode use case diagram](docs/diagrams/01-UseCase.png)
+
+#### System Structure Diagram
+
+![SkyNode system structure diagram](docs/diagrams/02-SystemStructure.png)
+
+#### Database Schema Diagram
+
+![SkyNode database schema diagram](docs/diagrams/03-DbSchema.png)
 
 ## Architecture
 

@@ -39,7 +39,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - Trip planner with attractions, day-by-day itinerary generation, editable plans, and trip saving.
 - Saved trips, joined trips, invite links, trip visibility settings, and member/chat support.
 - Account page with profile management, travel mission progress, and trip statistics.
-- Live flights radar powered by OpenSky where available, with production-safe timeout behavior.
+- Live flights radar powered by OpenSky, with production traffic routed through a Cloudflare Tunnel proxy when Vercel cannot reach OpenSky reliably.
 - Supabase authentication with email signup, OAuth sign-in, password recovery, and server-side account deletion.
 
 ## Tech Stack
@@ -69,7 +69,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - ScrapingBee/Kayak provider path for live flight search experiments
 - Geoapify for attractions
 - OpenRouteService for route directions
-- OpenSky Network for aircraft telemetry where the network allows it
+- OpenSky Network for aircraft telemetry, optionally reached through a Cloudflare Tunnel proxy in production
 - Gemini or Ollama for AI itinerary/chat generation
 - Wikipedia/Wikimedia for destination imagery
 
@@ -113,6 +113,9 @@ The repository includes supporting project documents and diagrams for presentati
 
 - [SkyNode User Manual](docs/SkyNode_User_Manual.docx)
 - [SkyNode Technical Documentation](docs/SkyNode_Technical_Documentation.docx)
+- [SkyNode System Limitations](docs/SkyNode_System_Limitations.docx)
+- [SkyNode Future Improvements](docs/SkyNode_Future_Improvements.docx)
+- [SkyNode SonarQube Report](docs/SkyNode_SonarQube_Report.docx)
 
 ### Diagrams
 
@@ -127,6 +130,18 @@ The repository includes supporting project documents and diagrams for presentati
 #### Database Schema Diagram
 
 ![SkyNode database schema diagram](docs/diagrams/03-DbSchema.png)
+
+#### Sequence Diagram
+
+![SkyNode sequence diagram](docs/diagrams/04-SequenceDiagram.png)
+
+#### Activity Diagram
+
+![SkyNode activity diagram](docs/diagrams/05-ActivityDiagram.png)
+
+#### Deployment Diagram
+
+![SkyNode deployment diagram](docs/diagrams/06-DeploymentDiagram.png)
 
 ## Architecture
 
@@ -199,9 +214,13 @@ OLLAMA_MODEL=llama3:latest
 OLLAMA_TIMEOUT_MS=300000
 
 # Optional live flights
+OPENSKY_API_URL=https://opensky-network.org/api
+OPENSKY_TOKEN_URL=https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token
 OPENSKY_CLIENT_ID=your_opensky_client_id
 OPENSKY_CLIENT_SECRET=your_opensky_client_secret
 OPENSKY_USE_AUTH=false
+OPENSKY_PROXY_SECRET=only_needed_when_using_the_cloudflare_tunnel_proxy
+OPENSKY_AUTH_TIMEOUT_MS=2500
 OPENSKY_TIMEOUT_MS=8500
 ```
 
@@ -263,11 +282,11 @@ SkyNode is configured for Vercel:
 
 Required production environment variables should be added in Vercel Project Settings. Never upload `.env` to Git.
 
-### OpenSky laptop proxy (Cloudflare Tunnel)
+### OpenSky proxy tunnel for production
 
-When OpenSky blocks or times out from Vercel, run a thin forward proxy on your laptop and point production OpenSky env vars at a Cloudflare Tunnel URL. The site still serves `/api/live-flights` on Vercel; only upstream OpenSky traffic goes through your machine.
+Live flight requests always enter the app through Vercel at `/api/live-flights`. In production, the backend can then forward the upstream OpenSky request through a small local proxy exposed with Cloudflare Tunnel. This avoids the Vercel-to-OpenSky timeout/blocking issue while keeping the public app URL unchanged.
 
-**Local development (`npm run dev`):** do not use the tunnel. Your machine talks to OpenSky directly (default `OPENSKY_API_URL`). Do not set tunnel URLs in laptop `.env` unless you are testing the proxy itself. Use tunnel env vars only in **Vercel** for the deployed site.
+**Local development (`npm run dev`):** do not use the tunnel. Your machine talks to OpenSky directly through the default `OPENSKY_API_URL`. Set the tunnel URL only in **Vercel** for the deployed site, unless you are testing the proxy itself.
 
 1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/). If `cloudflared` is not on your PATH (common on Windows), add to `.env`:
 
@@ -288,9 +307,9 @@ npm run opensky:proxy
 npm run opensky:tunnel
 ```
 
-Copy the `https://….trycloudflare.com` URL from the tunnel output.
+Copy the `https://....trycloudflare.com` URL from the tunnel output.
 
-5. In Vercel → Environment Variables (Production):
+5. In Vercel -> Environment Variables (Production):
 
 | Variable | Example |
 |----------|---------|
@@ -299,7 +318,7 @@ Copy the `https://….trycloudflare.com` URL from the tunnel output.
 | `OPENSKY_PROXY_SECRET` | Same value as on the laptop |
 | `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET` | If using authenticated OpenSky |
 
-Redeploy after changing env vars. Keep the laptop awake while you need live radar. Quick tunnels get a new URL each run; update Vercel when it changes.
+Redeploy after changing env vars. Keep the proxy machine awake while live radar is needed. Quick Cloudflare tunnels get a new URL each run, so update `OPENSKY_API_URL` in Vercel whenever the tunnel URL changes.
 
 ## Known Limitations
 

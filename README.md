@@ -615,6 +615,14 @@ docs/                       Architecture and sprint notes
 dist/                       Generated build output
 ```
 
+## Presentation
+
+The final project presentation is available in the documentation folder:
+
+- [SkyNode Presentation](docs/SkyNode_Presentation.pptx)
+
+Open the PowerPoint file locally or download it from the repository to review the project overview, implementation summary, diagrams, and final delivery material.
+
 ## Authors
 
 SkyNode was developed as a final bachelor’s project by a team:

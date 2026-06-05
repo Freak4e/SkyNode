@@ -52,6 +52,7 @@ export function PlannerPage() {
   const initialOriginCode = restoredDraft?.originCode || params.get("from") || "";
   const initialDestination = restoredDraft?.destinationName || params.get("toName") || params.get("destination") || "";
   const initialStartDate = restoredDraft?.startDate || params.get("date") || today;
+  const initialTravelers = restoredDraft?.travelers || normalizeTravelerCount(params.get("travelers"), 2);
   const tripIdToOpen = params.get("tripId") || "";
 
   const [tripTitle, setTripTitle] = useState(restoredDraft?.tripTitle || "");
@@ -60,7 +61,7 @@ export function PlannerPage() {
   const [destinationName, setDestinationName] = useState(initialDestination);
   const [startDate, setStartDate] = useState(initialStartDate);
   const [days, setDays] = useState(restoredDraft?.days || 3);
-  const [travelers, setTravelers] = useState(restoredDraft?.travelers || 2);
+  const [travelers, setTravelers] = useState(initialTravelers);
   const [budgetAmount, setBudgetAmount] = useState(restoredDraft?.budgetAmount || 1800);
   const [budgetCategories, setBudgetCategories] = useState<TripBudgetCategory[]>(() => normalizeBudgetCategories(restoredDraft?.budgetCategories, restoredDraft?.budgetAmount || 1800));
   const [tripCities, setTripCities] = useState(restoredDraft?.tripCities || "");
@@ -228,6 +229,7 @@ export function PlannerPage() {
         setDestinationName(trip.destinationName);
         setStartDate(trip.startDate);
         setDays(trip.days);
+        setTravelers(normalizeTravelerCount(trip.travelers, 1));
         setBudgetAmount(trip.budgetAmount || trip.estimatedTotalCost || 1800);
         setBudgetCategories(normalizeBudgetCategories(trip.budgetCategories, trip.budgetAmount || trip.estimatedTotalCost || 1800));
         setTripCities(trip.cities?.map((city) => city.name).join(", ") || trip.destinationName);
@@ -1111,7 +1113,7 @@ function PlannerSettingsModal(props: GeneralInfoValues & {
               <ModalField label="Short description">
                 <textarea className="form-field min-h-28 resize-y" value={values.description || ""} onChange={(event) => update("description", event.target.value)} maxLength={280} placeholder="Tell travelers what this trip is about..." />
               </ModalField>
-              <ModalField label="Max travelers">
+              <ModalField label="Community capacity">
                 <input className="form-field" type="number" min={2} max={20} value={values.maxMembers || 6} onChange={(event) => update("maxMembers", Number(event.target.value || 2))} />
               </ModalField>
             </div>
@@ -1382,6 +1384,15 @@ function updatePositiveNumber(rawValue: string, min: number, max: number, onChan
   }
 
   onChange(Math.min(max, Math.max(min, Math.round(value))));
+}
+
+function normalizeTravelerCount(value: string | number | null | undefined, fallback: number): number {
+  const parsed = typeof value === "number" ? value : Number(value || fallback);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(12, Math.max(1, Math.round(parsed)));
 }
 
 function nextDayCityName(current: ItineraryDay[], tripCityNames: string[]): string | undefined {

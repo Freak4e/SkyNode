@@ -109,7 +109,7 @@ export function SaveTripModal({ open, saving, mode = "save", initialValues, onCl
           <label className="block">
             <span className="mb-1.5 flex items-center gap-2 text-sm font-bold text-slate-600">
               <Users className="h-4 w-4 text-blue-500" />
-              Max travelers
+              Community capacity
             </span>
             <input
               type="number"

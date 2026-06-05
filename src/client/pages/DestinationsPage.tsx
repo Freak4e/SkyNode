@@ -18,12 +18,13 @@ import {
   Plane,
   Search,
   Ticket,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
-import { HeroPanel } from "../components/ui";
+import { AccentCard, HeroPanel, SectionHeader } from "../components/ui";
 import type { CurrencyCode, ExploreDeal, Place } from "../../shared/types.js";
 import { fetchExploreDeals } from "../api/exploreApi";
 import { searchPlaces } from "../api/flightsApi";
@@ -38,6 +39,27 @@ type PlaceGroup = {
 };
 
 const exploreDealLimit = 100;
+const defaultOriginCode = "ANY";
+
+const trendingDepartures: Place[] = [
+  createTrendingDeparture("NYC", "New York", "USA", 40.7128, -74.006),
+  createTrendingDeparture("LON", "London", "United Kingdom", 51.5072, -0.1276),
+  createTrendingDeparture("TYO", "Tokyo", "Japan", 35.6764, 139.65),
+  createTrendingDeparture("PAR", "Paris", "France", 48.8566, 2.3522),
+  createTrendingDeparture("DXB", "Dubai", "United Arab Emirates", 25.2048, 55.2708),
+  createTrendingDeparture("BER", "Berlin", "Germany", 52.52, 13.405),
+  createTrendingDeparture("LIS", "Lisbon", "Portugal", 38.7223, -9.1393),
+  createTrendingDeparture("BCN", "Barcelona", "Spain", 41.3874, 2.1686),
+];
+
+const defaultDestinationDeals: ExploreDeal[] = [
+  createDefaultDeal("LIS", "Lisbon", "Portugal", 38.7223, -9.1393, 98, "Lisbon Airport", "TAP Air Portugal", "2026-07-09"),
+  createDefaultDeal("BCN", "Barcelona", "Spain", 41.3874, 2.1686, 112, "Barcelona-El Prat", "Vueling", "2026-07-14"),
+  createDefaultDeal("BER", "Berlin", "Germany", 52.52, 13.405, 89, "Berlin Brandenburg", "easyJet", "2026-06-27"),
+  createDefaultDeal("ATH", "Athens", "Greece", 37.9838, 23.7275, 134, "Athens International", "Aegean", "2026-08-03"),
+  createDefaultDeal("PRG", "Prague", "Czechia", 50.0755, 14.4378, 76, "Václav Havel Airport Prague", "Ryanair", "2026-07-20"),
+  createDefaultDeal("MLA", "Valletta", "Malta", 35.8989, 14.5146, 121, "Malta International", "Wizz Air", "2026-08-11"),
+];
 
 export function DestinationsPage() {
   const [origin, setOrigin] = useState<Place | null>(null);
@@ -86,9 +108,21 @@ export function DestinationsPage() {
   }, [currency, destination?.code, origin]);
 
   const cityDeals = useMemo(() => deals.filter(hasCityDestination), [deals]);
-  const mappableDeals = useMemo(() => cityDeals.filter(hasCoordinates), [cityDeals]);
-  const cheapest = cityDeals[0];
+  const showDefaultDeals = !origin || state === "idle" || state === "loading" || state === "error" || cityDeals.length === 0;
+  const visibleDeals = showDefaultDeals ? defaultDestinationDeals : cityDeals;
+  const mappableDeals = useMemo(() => visibleDeals.filter(hasCoordinates), [visibleDeals]);
+  const cheapest = useMemo(() => [...visibleDeals].sort((a, b) => a.price - b.price)[0], [visibleDeals]);
   const mapReadyCount = mappableDeals.length;
+  const dealsStatLabel = showDefaultDeals ? "Popular deals today" : "Deals found";
+  const dealsFoundLabel = showDefaultDeals ? "50+" : String(cityDeals.length);
+  const mapStatLabel = showDefaultDeals ? "Airports worldwide" : "On the map";
+  const mapReadyLabel = showDefaultDeals ? "4,400+" : String(mapReadyCount);
+  const fareStatLabel = showDefaultDeals ? "Lowest recorded fare" : "Cheapest fare";
+  const fareStatValue = showDefaultDeals
+    ? `From ${formatMoney(9, currency)}`
+    : cheapest
+    ? formatMoney(cheapest.price, cheapest.currency)
+    : "-";
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -129,58 +163,57 @@ export function DestinationsPage() {
           />
         </section>
 
-        <section className="px-6 py-8 sm:px-8 lg:px-12">
-          <div className="mx-auto grid max-w-7xl items-start gap-6 xl:grid-cols-[1fr_430px]">
+        <section className="px-6 pb-8 pt-0 sm:px-8 lg:px-12">
+          <div className="mx-auto max-w-7xl">
+            <TrendingDepartures value={origin} onChange={setOrigin} />
+          </div>
+
+          <div className="mx-auto mt-6 grid max-w-7xl items-start gap-6 xl:grid-cols-[1fr_430px]">
             <div className="space-y-6">
-                  {origin && <div className="grid gap-4 md:grid-cols-2">
-                <StatCard label="Deals found" value={String(cityDeals.length)} icon={<Ticket className="h-5 w-5" />} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <StatCard label={dealsStatLabel} value={dealsFoundLabel} icon={<Ticket className="h-5 w-5" />} />
                 <StatCard
-                  label="Cheapest fare"
-                  value={cheapest ? formatMoney(cheapest.price, cheapest.currency) : "—"}
+                  label={fareStatLabel}
+                  value={fareStatValue}
                   icon={<Plane className="h-5 w-5" />}
                 />
-              </div>}
+              </div>
 
-              <section className="relative min-h-130 overflow-hidden rounded-4xl border border-stone-200 bg-white shadow-xl shadow-stone-200/70">
-                <button
-                  type="button"
-                  onClick={() => setMapExpanded(true)}
-                  disabled={mappableDeals.length === 0}
-                  className="absolute right-5 top-5 z-20 inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-sm font-black text-slate-700 shadow-lg ring-1 ring-stone-200 backdrop-blur transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Expand className="h-4 w-4" />
-                  Expand map
-                </button>
-                {origin ? <ExploreMap deals={mappableDeals} /> : <EmptyMapState />}
-              </section>
+              <AccentCard as="section" padding="none" className="min-h-130 hover:translate-y-0">
+                <div className="relative min-h-130 overflow-hidden rounded-3xl">
+                  <button
+                    type="button"
+                    onClick={() => setMapExpanded(true)}
+                    disabled={mappableDeals.length === 0}
+                    className="absolute right-5 top-5 z-20 inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-sm font-black text-slate-700 shadow-lg ring-1 ring-stone-200 backdrop-blur transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Expand className="h-4 w-4" />
+                    Expand map
+                  </button>
+                  <ExploreMap deals={mappableDeals} />
+                </div>
+              </AccentCard>
             </div>
 
             <aside className="space-y-6">
-              {origin && <StatCard label="On the map" value={String(mapReadyCount)} icon={<MapPin className="h-5 w-5" />} />}
-                <div className="flex min-h-130 flex-col">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-black uppercase tracking-[0.18em] text-sky-700">Popular flight boards</p>
-                    <h2 className="mt-1 text-xl font-black text-slate-950">Best current offers</h2>
-                  </div>
-                  <Search className="h-5 w-5 text-slate-400" />
-                </div>
+              <StatCard label={mapStatLabel} value={mapReadyLabel} icon={<MapPin className="h-5 w-5" />} />
+              <div className="flex min-h-130 flex-col">
+                <SectionHeader
+                  eyebrow="Popular flight boards"
+                  icon={<Search className="h-4 w-4" />}
+                  title={showDefaultDeals ? "Popular sample offers" : "Best current offers"}
+                />
 
-                  {state === "idle" && (
-                    <p className="mt-4 rounded-2xl bg-stone-50 p-4 text-sm font-semibold text-slate-600">
-                      Select a departure city to load destination deals.
-                    </p>
-                  )}
-                  {state === "loading" && <LoadingBoards />}
+                {state === "loading" && (
+                  <StatusNote text={`Loading current offers from ${origin?.cityName || origin?.name || origin?.code}...`} />
+                )}
                 {state === "error" && <p className="mt-4 rounded-2xl bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</p>}
                 {state === "ready" && cityDeals.length === 0 && (
                   <p className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm font-semibold text-amber-800">
-                    No destination deals were returned for this route. Try a larger origin city like Vienna, Zagreb, Belgrade, London, or Paris.
+                    No destination deals were returned for this route, so sample offers remain visible. Try a larger origin city like Vienna, Zagreb, Belgrade, London, or Paris.
                   </p>
                 )}
-                {state === "ready" && cityDeals.length > 0 && (
-                  <DealCarousel deals={cityDeals} />
-                )}
+                <DealCarousel deals={visibleDeals} />
               </div>
             </aside>
           </div>
@@ -488,15 +521,96 @@ function distanceKm(a?: { lat: number; lon: number }, b?: { lat: number; lon: nu
   return Math.round(2 * earthRadiusKm * Math.asin(Math.sqrt(h)));
 }
 
+function createTrendingDeparture(code: string, cityName: string, countryName: string, lat: number, lon: number): Place {
+  return {
+    code,
+    name: cityName,
+    cityName,
+    countryName,
+    type: "city",
+    cityCode: code,
+    coordinates: { lat, lon },
+  };
+}
+
+function createDefaultDeal(
+  destination: string,
+  cityName: string,
+  countryName: string,
+  lat: number,
+  lon: number,
+  price: number,
+  airportName: string,
+  airline: string,
+  departDate: string,
+): ExploreDeal {
+  return {
+    origin: defaultOriginCode,
+    destination,
+    price,
+    currency: "USD",
+    departDate,
+    airline,
+    stopsText: "Sample fare",
+    destinationPlace: {
+      code: destination,
+      name: airportName,
+      cityName,
+      countryName,
+      type: "city",
+      cityCode: destination,
+      mainAirportName: airportName,
+      coordinates: { lat, lon },
+    },
+  };
+}
+
+function TrendingDepartures({ onChange, value }: { onChange: (place: Place) => void; value: Place | null }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="inline-flex shrink-0 items-center gap-1.5 px-1 text-xs font-black uppercase tracking-[0.12em] text-slate-600">
+        <TrendingUp className="h-3.5 w-3.5 text-blue-600" />
+        Trending departures
+      </span>
+      {trendingDepartures.map((place) => {
+        const active = value?.code === place.code;
+
+        return (
+          <button
+            key={place.code}
+            type="button"
+            onClick={() => onChange(place)}
+            className={`rounded-full border px-4 py-2 text-xs font-bold transition ${
+              active
+                ? "border-transparent bg-linear-to-r from-blue-500 via-cyan-400 to-indigo-500 text-white shadow-md shadow-blue-500/25 ring-1 ring-white/60"
+                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+            }`}
+          >
+            {place.cityName}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function StatusNote({ text }: { text: string }) {
+  return (
+    <p className="mt-4 rounded-2xl bg-stone-50 p-4 text-sm font-semibold text-slate-600">
+      {text}
+    </p>
+  );
+}
+
 function StatCard({ label, value, icon }: { label: string; value: string; icon: ReactNode }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-lg shadow-slate-200/60">
+    <AccentCard as="article" className="min-h-36">
       <div className="flex items-center justify-between">
-        <span className="rounded-2xl bg-sky-50 p-3 text-sky-700">{icon}</span>
+        <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-cyan-400 text-white shadow-lg shadow-cyan-500/20 transition group-hover:rotate-3 group-hover:scale-105">{icon}</span>
         <p className="text-2xl font-black text-slate-950">{value}</p>
       </div>
-      <p className="mt-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">{label}</p>
-    </div>
+      <p className="mt-4 text-xs font-black uppercase tracking-[0.16em] text-slate-500">{label}</p>
+    </AccentCard>
   );
 }
 

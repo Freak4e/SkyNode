@@ -350,7 +350,7 @@ export function TripDetailPage() {
 
     try {
       await deleteTrip(trip.id);
-      navigate("/trips");
+      navigate("/trip-library");
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Failed to delete trip.");
       setDeleteOpen(false);
@@ -390,7 +390,7 @@ export function TripDetailPage() {
       <div className="min-h-screen bg-slate-50">
         <Navbar />
         <PageShell>
-          <EmptyState title="Trip not found." action={<Button type="button" onClick={() => navigate("/trips")}>Back to trips</Button>}>
+          <EmptyState title="Trip not found." action={<Button type="button" onClick={() => navigate("/trip-library")}>Back to trips</Button>}>
             {error || "This trip may be private or you may not have access."}
           </EmptyState>
         </PageShell>

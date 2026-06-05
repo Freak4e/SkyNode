@@ -91,6 +91,57 @@ export function Card({ as: Tag = "section", children, className, padding = "md",
   return <Component className={cx("rounded-3xl", toneClass, paddingClass, className)} {...props}>{children}</Component>;
 }
 
+type AccentCardProps = HTMLAttributes<HTMLElement> & {
+  as?: "article" | "aside" | "div" | "section";
+  children: ReactNode;
+  className?: string;
+  padding?: "none" | "sm" | "md" | "lg";
+};
+
+export function AccentCard({ as: Tag = "section", children, className, padding = "md", ...props }: AccentCardProps) {
+  const Component = Tag as ElementType;
+  const paddingClass = padding === "none" ? "" : padding === "sm" ? "p-4" : padding === "lg" ? "p-8" : "p-6";
+
+  return (
+    <Component
+      className={cx(
+        "group relative overflow-hidden rounded-3xl border border-white/80 bg-white shadow-xl shadow-slate-200/70 transition hover:-translate-y-1 hover:border-blue-100 hover:shadow-2xl hover:shadow-blue-200/50",
+        paddingClass,
+        className,
+      )}
+      {...props}
+    >
+      <span className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-linear-to-br from-blue-400/20 to-cyan-300/20 blur-2xl transition group-hover:scale-125" />
+      <span className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-linear-to-r from-blue-500 via-cyan-400 to-indigo-500 opacity-70" />
+      <div className="relative">{children}</div>
+    </Component>
+  );
+}
+
+type SectionHeaderProps = {
+  align?: "left" | "center";
+  className?: string;
+  eyebrow: ReactNode;
+  icon?: ReactNode;
+  subtitle?: ReactNode;
+  title: ReactNode;
+};
+
+export function SectionHeader({ align = "left", className, eyebrow, icon, subtitle, title }: SectionHeaderProps) {
+  const centered = align === "center";
+
+  return (
+    <div className={cx(centered && "text-center", className)}>
+      <p className={cx("mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-blue-500", centered && "justify-center")}>
+        {icon}
+        {eyebrow}
+      </p>
+      <h2 className="text-2xl font-black text-slate-950 md:text-3xl">{title}</h2>
+      {subtitle && <p className="mt-2 text-base text-slate-600">{subtitle}</p>}
+    </div>
+  );
+}
+
 type PageShellProps = {
   children: ReactNode;
   className?: string;

@@ -191,7 +191,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
       </div>
 
       {open && query.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12" style={{ minWidth: 390 }}>
+        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 min-w-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12 sm:min-w-96">
           {groupedPlaces.length === 0 ? (
             <p className="px-4 py-3 text-sm font-bold text-slate-500">No cities or airports found</p>
           ) : groupedPlaces.slice(0, 8).map((group) => {

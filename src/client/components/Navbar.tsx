@@ -9,7 +9,7 @@ import logo from "../../../assets/logo_skynode_horizontal.png";
 const baseNavLinks: Array<{ label: string; to: string; accent?: boolean }> = [
   { label: "Flights", to: "/search" },
   { label: "Live Flights", to: "/live-flights", accent: true },
-  { label: "Trips", to: "/planner" },
+  { label: "Trips", to: "/trips" },
   { label: "Destinations", to: "/destinations" },
   { label: "Assistant", to: "/assistant" },
 ];
@@ -93,19 +93,19 @@ export function Navbar({ transparent = false }: Props) {
   return (
     <>
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 flex items-center justify-between border-b px-4 py-2.5 transition-all duration-300 sm:px-5 md:px-8 md:py-3 ${
+      className={`fixed left-0 right-0 top-0 z-50 flex w-full max-w-full items-center justify-between border-b px-4 py-2.5 transition-all duration-300 sm:px-5 md:px-8 md:py-3 ${
         overlay ? "border-slate-100 bg-white/90 shadow-sm backdrop-blur-md lg:border-transparent lg:bg-transparent lg:shadow-none lg:backdrop-blur-0" : "border-slate-100 bg-white/90 shadow-sm backdrop-blur-md"
       }`}
     >
-      <Link to="/" className="flex items-center gap-2 no-underline">
+      <Link to="/" className="flex min-w-0 items-center gap-2 no-underline">
         <img
           src={logo}
           alt="SkyNode"
-          className={`h-10 w-auto object-contain transition duration-300 sm:h-12 lg:h-14 ${overlay ? "lg:brightness-0 lg:invert" : ""}`}
+          className={`h-10 max-w-[10rem] object-contain transition duration-300 sm:h-12 sm:max-w-none lg:h-14 ${overlay ? "lg:brightness-0 lg:invert" : ""}`}
         />
       </Link>
 
-      <div className="hidden items-center gap-7 lg:flex">
+      <div className="hidden min-w-0 items-center gap-7 lg:flex">
         {navLinks.map((link) => (
           <Link
             key={link.to}
@@ -135,7 +135,7 @@ export function Navbar({ transparent = false }: Props) {
         ))}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <div ref={currencyRef} className="relative hidden sm:block">
           <button
             type="button"

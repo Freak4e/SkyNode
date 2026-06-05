@@ -639,7 +639,7 @@ export function AccountPage() {
                 <h2 className="mt-2 text-2xl font-black text-slate-950">Trips you created</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-500">A cleaner view of your saved itineraries and trip rooms.</p>
               </div>
-              <ButtonLink to="/trips" tone="ghost">Open all trips</ButtonLink>
+              <ButtonLink to="/trip-library" tone="ghost">Open all trips</ButtonLink>
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

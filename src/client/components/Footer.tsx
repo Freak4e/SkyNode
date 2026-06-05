@@ -3,16 +3,28 @@ import logo from "../../../assets/logo_skynode.png";
 
 const columns = [
   {
-    heading: "PRODUCT",
-    links: ["Flights", "AI Planner", "Assistant", "Dashboard"],
+    heading: "PLAN",
+    links: [
+      { label: "Search flights", to: "/search" },
+      { label: "Trip planner", to: "/planner" },
+      { label: "AI assistant", to: "/assistant" },
+    ],
   },
   {
-    heading: "EXPLORE",
-    links: ["Tokyo", "Santorini", "Bali", "Iceland"],
+    heading: "DISCOVER",
+    links: [
+      { label: "Destinations", to: "/destinations" },
+      { label: "Community trips", to: "/explore-trips" },
+      { label: "Live flights", to: "/live-flights" },
+    ],
   },
   {
-    heading: "COMPANY",
-    links: ["About", "Careers", "Press", "Contact"],
+    heading: "ACCOUNT",
+    links: [
+      { label: "My trips", to: "/trip-library" },
+      { label: "Profile", to: "/account" },
+      { label: "Sign in", to: "/auth" },
+    ],
   },
 ];
 
@@ -26,15 +38,8 @@ export function Footer() {
               <img src={logo} alt="SkyNode" className="h-20 w-auto max-w-full object-contain brightness-0 invert sm:h-24" />
             </div>
             <p className="text-sm leading-relaxed text-slate-400">
-              The intelligent travel companion. Plan, book and explore the world with AI-powered insight.
+              Search flights, plan itineraries, save trips, and coordinate travel ideas in one workspace.
             </p>
-            <div className="mt-4 flex gap-3">
-              {["𝕏", "✈", "◎"].map((icon) => (
-                <button key={icon} className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-slate-400 hover:bg-slate-700 hover:text-white transition-colors text-sm">
-                  {icon}
-                </button>
-              ))}
-            </div>
           </div>
 
           {columns.map((col) => (
@@ -42,9 +47,9 @@ export function Footer() {
               <p className="mb-4 text-xs font-semibold tracking-widest text-slate-500">{col.heading}</p>
               <ul className="space-y-2.5">
                 {col.links.map((link) => (
-                  <li key={link}>
-                    <Link to="#" className="text-sm text-slate-400 no-underline transition-colors hover:text-white">
-                      {link}
+                  <li key={link.to}>
+                    <Link to={link.to} className="text-sm text-slate-400 no-underline transition-colors hover:text-white">
+                      {link.label}
                     </Link>
                   </li>
                 ))}
@@ -54,8 +59,8 @@ export function Footer() {
         </div>
 
         <div className="flex flex-col items-start justify-between gap-3 border-t border-slate-800 pt-6 text-xs text-slate-500 sm:flex-row sm:items-center">
-          <span>© 2026 SkyNode Labs. All rights reserved.</span>
-          <span>Designed for the next generation of travelers ✦</span>
+          <span>© 2026 SkyNode. All rights reserved.</span>
+          <span>Built for flight search, itinerary planning, and saved trips.</span>
         </div>
       </div>
     </footer>

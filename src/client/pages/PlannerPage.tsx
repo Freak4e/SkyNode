@@ -322,7 +322,7 @@ export function PlannerPage() {
   }, [tab, tripVisibility]);
 
   function openTripsLibrary() {
-    navigate("/trips");
+    navigate("/trip-library");
   }
 
   async function createWithAi(event?: FormEvent) {
@@ -731,7 +731,7 @@ export function PlannerPage() {
               type="button"
               onClick={() => {
                 if (selectedTripId) {
-                  navigate("/trips");
+                  navigate("/trip-library");
                   return;
                 }
                 setItinerary(null);

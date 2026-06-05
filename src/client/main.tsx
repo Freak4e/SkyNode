@@ -13,6 +13,7 @@ import { SearchResultsPage } from "./pages/SearchResultsPage";
 import { ExploreTripsPage } from "./pages/ExploreTripsPage";
 import { TripDetailPage } from "./pages/TripDetailPage";
 import { TripJoinPage } from "./pages/TripJoinPage";
+import { TripLibraryPage } from "./pages/TripLibraryPage";
 import { TripsPage } from "./pages/TripsPage";
 import "./styles.css";
 
@@ -29,6 +30,7 @@ function App() {
           <Route path="/live-flights" element={<LiveFlightsPage />} />
           <Route path="/destinations" element={<DestinationsPage />} />
           <Route path="/planner" element={<PlannerPage />} />
+          <Route path="/trip-library" element={<TripLibraryPage />} />
           <Route path="/trips/join/:token" element={<TripJoinPage />} />
           <Route path="/trips/:tripId" element={<TripDetailPage />} />
           <Route path="/trips" element={<TripsPage />} />

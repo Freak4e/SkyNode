@@ -120,9 +120,11 @@ jobs:
 
       - name: Build Vercel artifacts
         run: |
+          cp .vercel/.env.preview.local .env.production.local
           set -a
           source .vercel/.env.preview.local
           set +a
+          node -e "const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_AVATAR_BUCKET']; const missing = required.filter((key) => !process.env[key]); if (missing.length) { console.error('Missing Vite build variables:', missing.join(', ')); process.exit(1); } console.log('Vite build variables are present.');"
           vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy preview
@@ -195,9 +197,11 @@ jobs:
 
       - name: Build Vercel artifacts
         run: |
+          cp .vercel/.env.production.local .env.production.local
           set -a
           source .vercel/.env.production.local
           set +a
+          node -e "const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_AVATAR_BUCKET']; const missing = required.filter((key) => !process.env[key]); if (missing.length) { console.error('Missing Vite build variables:', missing.join(', ')); process.exit(1); } console.log('Vite build variables are present.');"
           vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy production

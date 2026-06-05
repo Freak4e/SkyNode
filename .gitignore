@@ -2,6 +2,7 @@ node_modules/
 dist/
 debug/
 .env
+.env*.local
 .scannerwork/
 .vercel/
 

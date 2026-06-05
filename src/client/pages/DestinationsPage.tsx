@@ -166,20 +166,20 @@ export function DestinationsPage() {
         <section className="px-6 pb-8 pt-0 sm:px-8 lg:px-12">
           <div className="mx-auto max-w-7xl">
             <TrendingDepartures value={origin} onChange={setOrigin} />
+
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
+              <StatCard label={dealsStatLabel} value={dealsFoundLabel} icon={<Ticket className="h-5 w-5" />} />
+              <StatCard
+                label={fareStatLabel}
+                value={fareStatValue}
+                icon={<Plane className="h-5 w-5" />}
+              />
+              <StatCard label={mapStatLabel} value={mapReadyLabel} icon={<MapPin className="h-5 w-5" />} />
+            </div>
           </div>
 
           <div className="mx-auto mt-6 grid max-w-7xl items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_430px]">
             <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-3">
-                <StatCard label={dealsStatLabel} value={dealsFoundLabel} icon={<Ticket className="h-5 w-5" />} />
-                <StatCard
-                  label={fareStatLabel}
-                  value={fareStatValue}
-                  icon={<Plane className="h-5 w-5" />}
-                />
-                <StatCard label={mapStatLabel} value={mapReadyLabel} icon={<MapPin className="h-5 w-5" />} />
-              </div>
-
               <AccentCard as="section" padding="none" className="min-h-130 hover:translate-y-0">
                 <div className="relative min-h-130 overflow-hidden rounded-3xl">
                   <button

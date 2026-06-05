@@ -22,13 +22,14 @@ import {
 import { searchPlaces } from "../../api/flightsApi";
 import { searchCities, type CitySearchResult } from "../../api/geocodeApi";
 import { HeroPanel } from "../../components/ui";
-import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, Place, TravelPace } from "../../../shared/types.js";
-import { plannerInterests } from "./plannerUtils";
+import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, Place, TravelPace, TripBudgetCategory } from "../../../shared/types.js";
+import { budgetCategoriesFromPercentages, budgetCategoryDefinitions, normalizeBudgetCategories, plannerInterests } from "./plannerUtils";
 
 type TripSetupFormProps = Readonly<{
   addActivity: (dayIndex: number) => void;
   addDay: () => void;
   budgetAmount: number;
+  budgetCategories: TripBudgetCategory[];
   changeDays: (nextDays: number) => void;
   createManual: () => void;
   createWithAi: () => void;
@@ -56,6 +57,7 @@ type TripSetupFormProps = Readonly<{
   selectedFlights: FlightOffer[];
   selectedInterests: string[];
   setBudgetAmount: (value: number) => void;
+  setBudgetCategories: (value: TripBudgetCategory[]) => void;
   setDestinationName: (value: string) => void;
   setHotelName: (value: string) => void;
   setManual: (value: boolean) => void;
@@ -180,28 +182,33 @@ export function TripSetupForm(props: TripSetupFormProps) {
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-card md:p-8">
         {step === 0 && (
-          <div className="grid gap-6 md:grid-cols-2">
-            <WizardField icon={<FilePenLine className="h-4 w-4" />} label="Trip name">
-              <input className="wizard-input" value={props.tripTitle} onChange={(event) => props.setTripTitle(event.target.value)} placeholder={props.destinationName ? `${props.destinationName} trip` : "Trip name"} />
-            </WizardField>
-            <WizardField icon={<MapPin className="h-4 w-4" />} label="Destination" required>
-              <input className="wizard-input" value={props.destinationName} onChange={(event) => props.setDestinationName(event.target.value)} placeholder="Add your destination" required />
-            </WizardField>
-            <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Days">
-              <input className="wizard-input" type="number" min={1} max={14} value={props.days} onChange={(event) => handlePositiveNumber(event.currentTarget.value, 1, 14, props.changeDays)} />
-            </WizardField>
-            <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Start date">
-              <input className="wizard-input" type="date" value={props.startDate} onChange={(event) => props.setStartDate(event.target.value)} required />
-            </WizardField>
-            <WizardField icon={<Users className="h-4 w-4" />} label="Travelers">
-              <input className="wizard-input" type="number" min={1} max={12} value={props.travelers} onChange={(event) => handlePositiveNumber(event.currentTarget.value, 1, 12, props.setTravelers)} />
-            </WizardField>
-            <WizardField icon={<DollarSign className="h-4 w-4" />} label="Budget (USD)">
-              <div className="relative">
-                <input className="wizard-input pr-28" type="number" min={0} step={50} value={props.budgetAmount} onChange={(event) => props.setBudgetAmount(Number(event.target.value || 0))} />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">~ ${budgetPerDay}/day</span>
-              </div>
-            </WizardField>
+          <div className="grid gap-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              <WizardField icon={<FilePenLine className="h-4 w-4" />} label="Trip name">
+                <input className="wizard-input" value={props.tripTitle} onChange={(event) => props.setTripTitle(event.target.value)} placeholder={props.destinationName ? `${props.destinationName} trip` : "Trip name"} />
+              </WizardField>
+              <WizardField icon={<MapPin className="h-4 w-4" />} label="Destination" required>
+                <input className="wizard-input" value={props.destinationName} onChange={(event) => props.setDestinationName(event.target.value)} placeholder="Add your destination" required />
+              </WizardField>
+            </div>
+            <div className="grid gap-6 md:grid-cols-3">
+              <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Days">
+                <input className="wizard-input" type="number" min={1} max={14} value={props.days} onChange={(event) => handlePositiveNumber(event.currentTarget.value, 1, 14, props.changeDays)} />
+              </WizardField>
+              <WizardField icon={<CalendarDays className="h-4 w-4" />} label="Start date">
+                <input className="wizard-input" type="date" value={props.startDate} onChange={(event) => props.setStartDate(event.target.value)} required />
+              </WizardField>
+              <WizardField icon={<Users className="h-4 w-4" />} label="Travelers">
+                <input className="wizard-input" type="number" min={1} max={12} value={props.travelers} onChange={(event) => handlePositiveNumber(event.currentTarget.value, 1, 12, props.setTravelers)} />
+              </WizardField>
+            </div>
+            <BudgetAllocationSection
+              budgetAmount={props.budgetAmount}
+              budgetPerDay={budgetPerDay}
+              categories={props.budgetCategories}
+              onBudgetAmountChange={props.setBudgetAmount}
+              onCategoriesChange={props.setBudgetCategories}
+            />
           </div>
         )}
 
@@ -451,6 +458,155 @@ export function TripSetupForm(props: TripSetupFormProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+function BudgetAllocationSection({
+  budgetAmount,
+  budgetPerDay,
+  categories,
+  onBudgetAmountChange,
+  onCategoriesChange,
+}: {
+  budgetAmount: number;
+  budgetPerDay: number;
+  categories: TripBudgetCategory[];
+  onBudgetAmountChange: (value: number) => void;
+  onCategoriesChange: (value: TripBudgetCategory[]) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="flex items-center gap-2 text-sm font-black text-slate-950">
+            <span className="text-slate-500"><DollarSign className="h-4 w-4" /></span>
+            Budget allocation
+          </p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">Drag the dots to split your planning budget.</p>
+        </div>
+        <label className="block sm:w-80">
+          <span className="sr-only">Budget</span>
+          <div className="relative">
+            <input className="wizard-input pr-28" type="number" min={0} step={50} value={budgetAmount} onChange={(event) => onBudgetAmountChange(Number(event.target.value || 0))} />
+            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-semibold text-slate-500">~ ${budgetPerDay}/day</span>
+          </div>
+        </label>
+      </div>
+      <BudgetAllocationSlider
+        categories={categories}
+        totalBudget={budgetAmount}
+        onChange={onCategoriesChange}
+      />
+    </div>
+  );
+}
+
+function BudgetAllocationSlider({
+  categories,
+  onChange,
+  totalBudget,
+}: {
+  categories: TripBudgetCategory[];
+  onChange: (value: TripBudgetCategory[]) => void;
+  totalBudget: number;
+}) {
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [draggingHandle, setDraggingHandle] = useState<number | null>(null);
+  const normalized = useMemo(() => normalizeBudgetCategories(categories, totalBudget), [categories, totalBudget]);
+  const total = Math.max(0, Math.round(totalBudget || 0));
+  const percentages = useMemo(() => {
+    if (total <= 0) return [25, 35, 20, 20];
+    return normalized.map((category) => (category.amount / total) * 100);
+  }, [normalized, total]);
+  const handles = [
+    percentages[0],
+    percentages[0] + percentages[1],
+    percentages[0] + percentages[1] + percentages[2],
+  ].map((value) => Math.max(0, Math.min(100, value)));
+
+  useEffect(() => {
+    if (draggingHandle === null) return;
+    const handleIndex = draggingHandle;
+
+    function handlePointerMove(event: PointerEvent) {
+      if (!barRef.current) return;
+      const rect = barRef.current.getBoundingClientRect();
+      const rawPercent = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * 100;
+      const nextHandles = [...handles];
+      const minGap = 5;
+      const min = handleIndex === 0 ? minGap : nextHandles[handleIndex - 1] + minGap;
+      const max = handleIndex === 2 ? 100 - minGap : nextHandles[handleIndex + 1] - minGap;
+      nextHandles[handleIndex] = Math.max(min, Math.min(max, rawPercent));
+      const nextPercentages = [
+        nextHandles[0],
+        nextHandles[1] - nextHandles[0],
+        nextHandles[2] - nextHandles[1],
+        100 - nextHandles[2],
+      ];
+      onChange(budgetCategoriesFromPercentages(total, nextPercentages));
+    }
+
+    function stopDragging() {
+      setDraggingHandle(null);
+    }
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopDragging, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopDragging);
+    };
+  }, [draggingHandle, handles, onChange, total]);
+
+  return (
+    <div>
+      <div ref={barRef} className="relative h-8 touch-none rounded-full bg-white shadow-inner ring-1 ring-slate-200">
+        <div className="absolute inset-1 flex overflow-hidden rounded-full">
+          {normalized.map((category, index) => {
+            const definition = budgetCategoryDefinitions[index];
+            const width = total > 0 ? Math.max(0, (category.amount / total) * 100) : 25;
+            return (
+              <span
+                key={category.id}
+                className={`${definition.color} h-full`}
+                style={{ width: `${width}%` }}
+              />
+            );
+          })}
+        </div>
+        {handles.map((position, index) => (
+          <button
+            key={index}
+            type="button"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setDraggingHandle(index);
+            }}
+            className="absolute top-1/2 z-10 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-slate-950 shadow-lg shadow-slate-950/20 transition hover:scale-110 focus:outline-none focus:ring-4 focus:ring-blue-100"
+            style={{ left: `${position}%` }}
+            aria-label={`Adjust ${budgetCategoryDefinitions[index].label} budget divider`}
+          />
+        ))}
+      </div>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {normalized.map((category, index) => {
+          const definition = budgetCategoryDefinitions[index];
+          const percent = total > 0 ? Math.round((category.amount / total) * 100) : 0;
+          return (
+            <div key={category.id} className="rounded-2xl bg-white p-3 ring-1 ring-slate-100">
+              <div className="flex items-center gap-2">
+                <span className={`h-2.5 w-2.5 rounded-full ${definition.color}`} />
+                <p className="text-xs font-black uppercase tracking-widest text-slate-500">{definition.label}</p>
+              </div>
+              <p className="mt-2 text-lg font-black text-slate-950">${category.amount.toLocaleString()}</p>
+              <p className="text-xs font-bold text-slate-500">{percent}% of budget</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

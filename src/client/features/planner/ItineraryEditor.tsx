@@ -41,6 +41,7 @@ type ItineraryEditorProps = Readonly<{
 
 type DragState = { dayIndex: number; itemIndex: number } | null;
 type IconChoice = { id: string; label: string; Icon: typeof Camera };
+type TagChoice = { id: string; label: string };
 type LocationTarget = { dayIndex: number; itemIndex: number; item: ItineraryItem } | null;
 type LocationPoint = { title: string; address: string; lat: number; lon: number; outsideBoundary?: boolean; nearestBoundaryCity?: string; distanceKm?: number };
 type EditableDayProps = Readonly<ItineraryEditorProps & {
@@ -78,6 +79,18 @@ const iconChoices: IconChoice[] = [
   { id: "nightlife", label: "Music", Icon: Music },
   { id: "hotel", label: "Hotel", Icon: Bed },
   { id: "transport", label: "Transit", Icon: Train },
+];
+
+const activityTagChoices: TagChoice[] = [
+  { id: "hotel", label: "Hotel" },
+  { id: "food", label: "Food" },
+  { id: "transport", label: "Transport" },
+  { id: "culture", label: "Culture" },
+  { id: "nature", label: "Nature" },
+  { id: "shopping", label: "Shopping" },
+  { id: "beach", label: "Beach" },
+  { id: "nightlife", label: "Nightlife" },
+  { id: "free", label: "Free" },
 ];
 
 export function ItineraryEditor(props: ItineraryEditorProps) {
@@ -290,6 +303,45 @@ function ActivityTextFields(props: ActivityRowProps) {
         <MapPin className="h-3.5 w-3.5" />
         <span className="truncate">{props.item.location?.name || props.item.attractionName || props.item.location?.address || "Add location"}</span>
       </button>
+      <ActivityTagPicker {...props} />
+    </div>
+  );
+}
+
+function ActivityTagPicker(props: ActivityRowProps) {
+  const selectedTags = Array.from(new Set((props.item.tags || []).map((tag) => tag.trim().toLowerCase()).filter(Boolean)));
+
+  function toggleTag(tag: string) {
+    const selecting = !selectedTags.includes(tag);
+    const nextTags = selectedTags.includes(tag)
+      ? selectedTags.filter((item) => item !== tag)
+      : [...selectedTags, tag];
+
+    props.updateActivity(props.dayIndex, props.itemIndex, {
+      tags: nextTags,
+      category: tag === "hotel" ? (selecting ? "hotel" : props.item.category === "hotel" ? undefined : props.item.category) : props.item.category,
+    });
+  }
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {activityTagChoices.map((tag) => {
+        const selected = selectedTags.includes(tag.id);
+        return (
+          <button
+            key={tag.id}
+            type="button"
+            onClick={() => toggleTag(tag.id)}
+            className={`rounded-full px-2.5 py-1 text-[11px] font-black transition ${
+              selected
+                ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
+                : "bg-slate-100 text-slate-500 hover:bg-blue-50 hover:text-blue-700"
+            }`}
+          >
+            {tag.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

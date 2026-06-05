@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CalendarDays, CircleDollarSign, MapPin, Tags, UserRound } from "lucide-react";
+import { CalendarDays, CircleDollarSign, MapPin, Star, Tags, UserRound } from "lucide-react";
 import type { SavedTripSummary } from "../../../shared/types.js";
 import { tripDisplayCity, useDestinationImage } from "../../utils/destinationImage.js";
 import { ButtonLink, Card } from "../../components/ui.js";
@@ -9,7 +9,10 @@ type Props = {
   trip: SavedTripSummary;
   actionLabel?: string;
   actionTo?: string;
+  canRate?: boolean;
   footer?: ReactNode;
+  onRate?: (rating: number) => void;
+  ratingSaving?: boolean;
   showOwner?: boolean;
   showImage?: boolean;
 };
@@ -18,7 +21,10 @@ export function TripCommunityCard({
   trip,
   actionLabel = "View trip",
   actionTo,
+  canRate = false,
   footer,
+  onRate,
+  ratingSaving = false,
   showOwner = false,
   showImage = true,
 }: Props) {
@@ -28,6 +34,9 @@ export function TripCommunityCard({
   const routeLabel = trip.cities?.length
     ? trip.cities.map((city) => city.name).join(" -> ")
     : cityName;
+  const ratingCount = trip.ratingCount || 0;
+  const ratingAverage = trip.ratingAverage || 0;
+  const ownRating = trip.ownRating || 0;
 
   return (
     <Card as="article" padding="none" className="flex h-full flex-col overflow-hidden">
@@ -99,6 +108,34 @@ export function TripCommunityCard({
             <MapPin className="h-4 w-4 shrink-0 text-blue-500" />
             <span className="truncate">{routeLabel}</span>
           </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-bold text-slate-600">
+              <Star className="h-4 w-4 fill-emerald-500 text-emerald-500" />
+              {ratingAverage.toFixed(1)} <span className="text-slate-400">({ratingCount})</span>
+            </p>
+            {canRate && (
+              <div className="flex items-center gap-0.5" aria-label="Rate this trip">
+                {[1, 2, 3, 4, 5].map((rating) => {
+                  const active = ownRating >= rating;
+
+                  return (
+                    <button
+                      key={rating}
+                      type="button"
+                      disabled={ratingSaving}
+                      onClick={() => onRate?.(rating)}
+                      className={`rounded-full p-0.5 transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                        active ? "text-emerald-500" : "text-slate-300 hover:text-emerald-500"
+                      }`}
+                      aria-label={`Rate ${rating} star${rating === 1 ? "" : "s"}`}
+                    >
+                      <Star className={`h-4 w-4 ${active ? "fill-current" : ""}`} />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <p className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 shrink-0 text-blue-500" />
             {trip.startDate}

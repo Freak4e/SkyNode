@@ -18,7 +18,7 @@ import { PlannerRail } from "../features/planner/PlannerRail";
 import { TripSetupForm } from "../features/planner/TripSetupForm";
 import { SaveTripModal } from "../features/trip-community/SaveTripModal";
 import type { PlannerTab } from "../features/planner/plannerTypes";
-import { assignDayCities, budgetLevelFromAmount, emptyDays, normalizeDays, parseTripCities } from "../features/planner/plannerUtils";
+import { assignDayCities, budgetLevelFromAmount, emptyDays, normalizeBudgetCategories, normalizeDays, parseTripCities } from "../features/planner/plannerUtils";
 import type {
   BudgetLevel,
   FlightOffer,
@@ -34,6 +34,7 @@ import type {
   TripChangeProposal,
   TripHotel,
   TripLocation,
+  TripBudgetCategory,
   TripRouteSegment,
   TripVisibility,
 } from "../../shared/types.js";
@@ -61,12 +62,14 @@ export function PlannerPage() {
   const [days, setDays] = useState(restoredDraft?.days || 3);
   const [travelers, setTravelers] = useState(restoredDraft?.travelers || 2);
   const [budgetAmount, setBudgetAmount] = useState(restoredDraft?.budgetAmount || 1800);
+  const [budgetCategories, setBudgetCategories] = useState<TripBudgetCategory[]>(() => normalizeBudgetCategories(restoredDraft?.budgetCategories, restoredDraft?.budgetAmount || 1800));
   const [tripCities, setTripCities] = useState(restoredDraft?.tripCities || "");
   const [hotelName, setHotelName] = useState(restoredDraft?.hotelName || "");
   const [tripNotes, setTripNotes] = useState(restoredDraft?.tripNotes || "");
   const [loadedHotels, setLoadedHotels] = useState<TripHotel[] | undefined>();
   const [loadedRouteSegments, setLoadedRouteSegments] = useState<TripRouteSegment[] | undefined>();
   const budget = useMemo<BudgetLevel>(() => budgetLevelFromAmount(budgetAmount), [budgetAmount]);
+  const allocatedBudgetCategories = useMemo(() => normalizeBudgetCategories(budgetCategories, budgetAmount), [budgetAmount, budgetCategories]);
   const [pace, setPace] = useState<TravelPace>(restoredDraft?.pace || "balanced");
   const [selectedInterests, setSelectedInterests] = useState<string[]>(restoredDraft?.selectedInterests || ["culture", "food", "nature"]);
   const [selectedFlights, setSelectedFlights] = useState<FlightOffer[]>(() => mergeFlights(restoredDraft?.selectedFlights || readSelectedFlightsFromSession(), flightsToAdd));
@@ -143,15 +146,10 @@ export function PlannerPage() {
       location: { name: hotelName.trim(), city: destinationName, source: "user" },
       checkIn: startDate,
     }] : undefined),
-    budgetCategories: [
-      { id: "flights", label: "Flights", amount: selectedFlights.reduce((sum, flight) => sum + (Number((flight.priceText || "").replace(/[^0-9]/g, "")) || 0), 0) },
-      { id: "hotels", label: "Hotels", amount: Math.round(budgetAmount * 0.35) },
-      { id: "activities", label: "Activities", amount: Math.round(budgetAmount * 0.25) },
-      { id: "food", label: "Food", amount: Math.round(budgetAmount * 0.2) },
-    ],
+    budgetCategories: allocatedBudgetCategories,
     notes: tripNotes.trim() || undefined,
     originCode: originCode || undefined,
-  }), [budget, budgetAmount, days, destinationCode, destinationName, hotelName, loadedHotels, loadedRouteSegments, originCode, pace, selectedFlight, selectedFlights, selectedInterests, startDate, travelers, tripCities, tripNotes]);
+  }), [allocatedBudgetCategories, budget, budgetAmount, days, destinationCode, destinationName, hotelName, loadedHotels, loadedRouteSegments, originCode, pace, selectedFlight, selectedFlights, selectedInterests, startDate, travelers, tripCities, tripNotes]);
 
   const title = tripTitle.trim() || itinerary?.destinationName || destinationName;
   const showOpeningSavedTrip = Boolean(tripIdToOpen) && openingTrip && !itinerary;
@@ -230,7 +228,8 @@ export function PlannerPage() {
         setDestinationName(trip.destinationName);
         setStartDate(trip.startDate);
         setDays(trip.days);
-        setBudgetAmount(trip.estimatedTotalCost || 1800);
+        setBudgetAmount(trip.budgetAmount || trip.estimatedTotalCost || 1800);
+        setBudgetCategories(normalizeBudgetCategories(trip.budgetCategories, trip.budgetAmount || trip.estimatedTotalCost || 1800));
         setTripCities(trip.cities?.map((city) => city.name).join(", ") || trip.destinationName);
         setHotelName(trip.hotels?.[0]?.name || "");
         setLoadedHotels(trip.hotels);
@@ -689,6 +688,7 @@ export function PlannerPage() {
   function saveDraftForFlightSearch() {
     writePlannerDraftToSession({
       budgetAmount,
+      budgetCategories: allocatedBudgetCategories,
       days,
       destinationName,
       destinationCode,
@@ -755,6 +755,7 @@ export function PlannerPage() {
               addActivity={addActivity}
               addDay={addDay}
               budgetAmount={budgetAmount}
+              budgetCategories={allocatedBudgetCategories}
               changeDays={changeDays}
               createManual={createManual}
               createWithAi={createWithAi}
@@ -777,6 +778,7 @@ export function PlannerPage() {
               likedFlightsError={likedFlightsError}
               selectedInterests={selectedInterests}
               setBudgetAmount={setBudgetAmount}
+              setBudgetCategories={setBudgetCategories}
               setDestinationName={updateDestinationName}
               setHotelName={setHotelName}
               setManual={setManual}
@@ -842,7 +844,7 @@ export function PlannerPage() {
                   updateActivity={updateActivity}
                   updateDay={updateDay}
                 />
-                <PlannerRail itinerary={itinerary} plannedBudget={budgetAmount} selectedFlights={selectedFlights} travelers={travelers} hotels={request.hotels} routeSegments={request.routeSegments} />
+                <PlannerRail itinerary={itinerary} plannedBudget={budgetAmount} budgetCategories={allocatedBudgetCategories} selectedFlights={selectedFlights} travelers={travelers} hotels={request.hotels} routeSegments={request.routeSegments} />
               </div>
             )}
             {tab === "calendar" && <CalendarView itinerary={itinerary} />}
@@ -1286,6 +1288,7 @@ function resizeDays(existingDays: ItineraryDay[], nextCount: number, cityNames: 
 
 type PlannerDraftSession = {
   budgetAmount: number;
+  budgetCategories?: TripBudgetCategory[];
   days: number;
   destinationCode?: string;
   destinationName: string;

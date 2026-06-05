@@ -252,7 +252,16 @@ export async function listPublicTrips(filters: {
   ownerId?: string;
   pace?: string;
   userId?: string;
-}): Promise<Array<{ tripId: string; memberCount: number; ownerName: string; ownerAvatar?: string; membershipStatus: TripMemberStatus | "none" }>> {
+}): Promise<Array<{
+  tripId: string;
+  memberCount: number;
+  ownerName: string;
+  ownerAvatar?: string;
+  membershipStatus: TripMemberStatus | "none";
+  ratingAverage?: number;
+  ratingCount: number;
+  ownRating?: number;
+}>> {
   await ensureSchema();
 
   const values: unknown[] = ["public"];
@@ -300,6 +309,9 @@ export async function listPublicTrips(filters: {
     owner_name: string;
     owner_avatar: string | null;
     membership_status: TripMemberStatus | null;
+    rating_average: number | null;
+    rating_count: string;
+    own_rating: number | null;
   }>(
     `
       select
@@ -311,12 +323,22 @@ export async function listPublicTrips(filters: {
         ) as member_count,
         coalesce(owner.display_name, 'Traveler') as owner_name,
         owner.avatar_url as owner_avatar,
-        viewer.status as membership_status
+        viewer.status as membership_status,
+        rating_stats.rating_average,
+        coalesce(rating_stats.rating_count, '0') as rating_count,
+        viewer_rating.rating as own_rating
       from trips t
       left join trip_members owner
         on owner.trip_id = t.id and owner.role = 'owner'
       left join trip_members viewer
         on viewer.trip_id = t.id and viewer.user_id = $${index}
+      left join lateral (
+        select avg(rating)::float8 as rating_average, count(*)::text as rating_count
+        from trip_ratings
+        where trip_id = t.id
+      ) rating_stats on true
+      left join trip_ratings viewer_rating
+        on viewer_rating.trip_id = t.id and viewer_rating.user_id = $${index}
       where ${clauses.join(" and ")}
       order by t.created_at desc
       limit 40
@@ -330,7 +352,57 @@ export async function listPublicTrips(filters: {
     ownerName: row.owner_name,
     ownerAvatar: row.owner_avatar || undefined,
     membershipStatus: row.membership_status || "none",
+    ratingAverage: row.rating_average === null ? undefined : Number(row.rating_average),
+    ratingCount: Number(row.rating_count || 0),
+    ownRating: row.own_rating || undefined,
   }));
+}
+
+export async function rateTrip(
+  tripId: string,
+  userId: string,
+  rating: number,
+): Promise<{ ratingAverage?: number; ratingCount: number; ownRating: number }> {
+  await ensureSchema();
+
+  const meta = await getTripSocialMeta(tripId);
+
+  if (!meta) {
+    throw new Error("Trip not found.");
+  }
+
+  if (meta.visibility !== "public") {
+    throw new Error("Only public community trips can be rated.");
+  }
+
+  const normalizedRating = Math.max(1, Math.min(5, Math.trunc(rating)));
+
+  await query(
+    `
+      insert into trip_ratings (trip_id, user_id, rating)
+      values ($1, $2, $3)
+      on conflict (trip_id, user_id) do update
+      set rating = excluded.rating,
+          updated_at = now()
+    `,
+    [tripId, userId, normalizedRating],
+  );
+
+  const result = await query<{ rating_average: number | null; rating_count: string }>(
+    `
+      select avg(rating)::float8 as rating_average, count(*)::text as rating_count
+      from trip_ratings
+      where trip_id = $1
+    `,
+    [tripId],
+  );
+  const row = result.rows[0];
+
+  return {
+    ratingAverage: row?.rating_average === null || row?.rating_average === undefined ? undefined : Number(row.rating_average),
+    ratingCount: Number(row?.rating_count || 0),
+    ownRating: normalizedRating,
+  };
 }
 
 export async function requestTripJoin(

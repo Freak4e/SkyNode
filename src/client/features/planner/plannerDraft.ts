@@ -1,4 +1,4 @@
-import type { ItineraryDay, TravelPace } from "../../../shared/types.js";
+import type { ItineraryDay, TravelPace, TripBudgetCategory } from "../../../shared/types.js";
 
 export type PlannerDraft = {
   tripTitle: string;
@@ -9,6 +9,7 @@ export type PlannerDraft = {
   days: number;
   travelers: number;
   budgetAmount: number;
+  budgetCategories?: TripBudgetCategory[];
   tripCities: string;
   hotelName: string;
   tripNotes: string;

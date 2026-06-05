@@ -12,6 +12,7 @@ import {
 import {
   listTripMembers,
   listTripMessages,
+  rateTrip,
   requestTripJoin,
   sendTripMessage,
   updateTripMemberStatus,
@@ -70,6 +71,25 @@ tripsRoute.get("/join/:token", optionalAuth, async (req, res) => {
     return res.status(502).json({
       trip: null,
       warnings: [error instanceof Error ? error.message : "Failed to load invite."],
+    });
+  }
+});
+
+tripsRoute.get("/public/:tripId/preview", optionalAuth, async (req, res) => {
+  try {
+    const trip = await getTripById(String(req.params.tripId), getOptionalUserId(res));
+
+    if (!trip || trip.visibility !== "public") {
+      return res.status(404).json({ trip: null, warnings: ["Public trip not found."] });
+    }
+
+    return res.json({ trip });
+  } catch (error) {
+    console.error("[route:trips] public preview failed", error);
+
+    return res.status(502).json({
+      trip: null,
+      warnings: [error instanceof Error ? error.message : "Failed to load trip preview."],
     });
   }
 });
@@ -211,6 +231,25 @@ tripsRoute.post("/:tripId/join", async (req, res) => {
 
     return res.status(400).json({
       warnings: [error instanceof Error ? error.message : "Failed to request join."],
+    });
+  }
+});
+
+tripsRoute.put("/:tripId/rating", async (req, res) => {
+  try {
+    const rating = Number(req.body?.rating);
+
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ warnings: ["Choose a rating from 1 to 5."] });
+    }
+
+    const result = await rateTrip(req.params.tripId, getAuthenticatedUserId(res), rating);
+    return res.json(result);
+  } catch (error) {
+    console.error("[route:trips] rating failed", error);
+
+    return res.status(400).json({
+      warnings: [error instanceof Error ? error.message : "Failed to rate trip."],
     });
   }
 });

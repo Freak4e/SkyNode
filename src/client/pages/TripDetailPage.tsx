@@ -42,12 +42,13 @@ import { Navbar } from "../components/Navbar";
 import { FilterDropdown } from "../components/FilterDropdown";
 import { Button, ButtonLink, Card, EmptyState, PageShell } from "../components/ui";
 import { ItineraryTimeline } from "../features/planner/ItineraryTimeline";
+import { budgetCategoryDefinitions, itineraryBudgetSpend, normalizeBudgetCategories, parseMoney } from "../features/planner/plannerUtils";
 import { CommunityItineraryView } from "../features/trip-community/CommunityItineraryView";
 import { TripRoomHero } from "../features/trip-community/TripRoomHero";
 import { TripVisibilityBadge } from "../features/trip-community/TripVisibilityBadge";
 import { supabase } from "../lib/supabaseClient";
 import { tripDisplayCity, useDestinationImage } from "../utils/destinationImage";
-import type { SavedTripDetail, SavedTripSummary, TravelMissionStats, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
+import type { FlightOffer, SavedTripDetail, SavedTripSummary, TravelMissionStats, TripMember, TripMessage, TripVisibility, UserProfileSnapshot } from "../../shared/types.js";
 
 type DetailTab = "overview" | "itinerary" | "members" | "chat";
 type OpenTravelerProfile = {
@@ -631,6 +632,7 @@ function PersonalTripOverview({ routeLabel, trip }: Readonly<{ routeLabel: strin
           <OverviewStat icon={Wallet} label="Budget" value={`${trip.budget} · $${trip.estimatedTotalCost.toLocaleString()}`} />
           <OverviewStat icon={Sparkles} label="Pace" value={trip.pace} />
         </div>
+        <TripBudgetPlan trip={trip} />
         {trip.notes && (
           <div className="mt-6 rounded-2xl bg-slate-50 p-4">
             <p className="text-xs font-black uppercase tracking-widest text-slate-400">Notes</p>
@@ -674,12 +676,73 @@ function CommunityTripOverview(props: CommunityTripOverviewProps) {
           <OverviewStat icon={Users} label="Group size" value={`${props.trip.memberCount || 1}/${props.trip.maxMembers || 8} travelers`} />
           <OverviewStat icon={Wallet} label="Estimate" value={`$${props.trip.estimatedTotalCost.toLocaleString()}`} />
         </div>
+        <TripBudgetPlan trip={props.trip} />
         <TripTagList tags={tags} tone="blue" />
         {!props.canViewItinerary && <LockedItineraryNotice />}
       </Card>
       <CommunityTripSidebar {...props} />
     </div>
   );
+}
+
+function TripBudgetPlan({ trip }: Readonly<{ trip: SavedTripDetail }>) {
+  const totalBudget = trip.budgetAmount || trip.estimatedTotalCost;
+  const categories = normalizeBudgetCategories(trip.budgetCategories, totalBudget);
+  const flightSpend = selectedFlightTotal(trip.selectedFlights || (trip.selectedFlight ? [trip.selectedFlight] : []));
+  const itinerarySpend = itineraryBudgetSpend(trip.itinerary.days);
+  const hotelSpend = (trip.hotels || []).reduce((sum, hotel) => sum + (hotel.priceEstimate || 0), 0) + itinerarySpend.hotels;
+  const spendByCategory: Record<string, number> = {
+    flights: flightSpend + itinerarySpend.flights,
+    hotels: hotelSpend,
+    activities: itinerarySpend.activities,
+    other: (trip.expenseBreakdown?.food || 0) + (trip.expenseBreakdown?.other || 0) + itinerarySpend.other,
+  };
+
+  return (
+    <div className="mt-6 rounded-3xl border border-slate-100 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-black text-slate-950">Budget plan</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">Allocated planning budget compared with known trip costs.</p>
+        </div>
+        <p className="text-sm font-black text-blue-600">${totalBudget.toLocaleString()}</p>
+      </div>
+      <div className="mt-4 space-y-3">
+        {categories.map((category, index) => {
+          const definition = budgetCategoryDefinitions[index];
+          const spent = spendByCategory[category.id] || 0;
+          const remaining = category.amount - spent;
+          const percent = totalBudget > 0 ? Math.min(100, Math.round((category.amount / totalBudget) * 100)) : 0;
+          const unusedPercent = category.amount > 0
+            ? Math.max(0, Math.min(100, Math.round(((category.amount - spent) / category.amount) * 100)))
+            : 0;
+
+          return (
+            <div key={category.id} className="rounded-2xl bg-white p-3 ring-1 ring-slate-100">
+              <div className="mb-2 flex items-center justify-between gap-3 text-xs font-black text-slate-700">
+                <span className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full ${definition.color}`} />
+                  {definition.label}
+                </span>
+                <span>${category.amount.toLocaleString()}</span>
+              </div>
+              <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                <div className={`relative h-full overflow-hidden rounded-full ${definition.softColor}`} style={{ width: `${percent}%` }}>
+                  <div className={`absolute inset-y-0 left-0 rounded-full ${definition.color}`} style={{ width: `${unusedPercent}%` }} />
+                </div>
+              </div>
+              <p className={`mt-2 text-xs font-bold ${remaining >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                {remaining >= 0 ? `$${remaining.toLocaleString()} remaining` : `$${Math.abs(remaining).toLocaleString()} over`}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+function selectedFlightTotal(flights: FlightOffer[]): number {
+  return flights.reduce((sum, flight) => sum + parseMoney(flight.priceText), 0);
 }
 
 function TripTagList({ tags, tone }: Readonly<{ tags: string[]; tone: "blue" | "slate" }>) {

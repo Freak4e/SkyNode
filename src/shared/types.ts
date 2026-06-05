@@ -426,6 +426,9 @@ export type SavedTripSummary = {
   inviteToken?: string;
   ownerName?: string;
   ownerAvatar?: string;
+  ratingAverage?: number;
+  ratingCount?: number;
+  ownRating?: number;
   access?: TripAccess;
 };
 

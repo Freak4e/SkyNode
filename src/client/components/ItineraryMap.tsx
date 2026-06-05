@@ -231,7 +231,7 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
   return (
     <>
     {expanded && <div className="fixed inset-0 z-80 bg-slate-950/45 backdrop-blur-sm" onClick={() => setExpanded(false)} />}
-    <section className={`overflow-hidden rounded-3xl bg-white shadow-xl ${
+    <section className={`skynode-itinerary-map overflow-visible rounded-3xl bg-white shadow-xl ${
       expanded
         ? "fixed left-1/2 top-1/2 z-90 w-[min(960px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2"
         : ""
@@ -260,7 +260,7 @@ export function ItineraryMap({ itinerary, hotels = [], routeSegments = [] }: Iti
         </div>
       </div>
 
-      <div className={`relative ${expanded ? "h-[min(620px,calc(100vh-220px))]" : "h-[320px]"}`}>
+      <div className={`relative overflow-visible ${expanded ? "h-[min(620px,calc(100vh-220px))]" : "h-[320px]"}`}>
         <div ref={mapElementRef} className="absolute inset-0 z-0 bg-slate-100" />
         {pins.length === 0 && (
           <div className="absolute inset-0 z-10 grid place-items-center bg-white/85 p-8 text-center text-slate-900 backdrop-blur-sm">
@@ -750,7 +750,7 @@ function buildPinPopupHtml(pin: ItineraryMapPin): string {
   `).join("");
 
   return `
-    <div style="min-width: 230px">
+    <div class="skynode-map-tooltip-content">
       <strong>${pin.markers.length} activities here</strong>
       <ul style="margin: 8px 0 0; padding-left: 18px">${items}</ul>
     </div>
@@ -759,7 +759,7 @@ function buildPinPopupHtml(pin: ItineraryMapPin): string {
 
 function buildMarkerPopupHtml(marker: ItineraryMapMarker): string {
   return `
-    <div style="min-width: 220px">
+    <div class="skynode-map-tooltip-content">
       <strong>${escapeHtml(marker.title)}</strong><br />
       <span>Day ${marker.dayNumber} - ${escapeHtml(marker.timeOfDay)}</span><br />
       <span>${escapeHtml(marker.attraction.name)}</span><br />

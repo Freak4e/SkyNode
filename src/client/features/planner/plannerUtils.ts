@@ -1,13 +1,72 @@
 import { Cloud, CloudLightning, CloudRain, CloudSun, Snowflake, Sun, Umbrella } from "lucide-react";
-import type { BudgetLevel, GeneratedItinerary, ItineraryDay } from "../../../shared/types.js";
+import type { BudgetLevel, GeneratedItinerary, ItineraryDay, ItineraryItem, TripBudgetCategory } from "../../../shared/types.js";
 import type { ForecastDay } from "./plannerTypes";
 
 export const plannerInterests = ["culture", "food", "nature", "nightlife", "museums", "shopping", "relaxing", "hidden gems"];
+
+export const budgetCategoryDefinitions = [
+  { id: "flights", label: "Flights", color: "bg-blue-500", softColor: "bg-blue-500/20" },
+  { id: "hotels", label: "Hotels", color: "bg-cyan-500", softColor: "bg-cyan-500/20" },
+  { id: "activities", label: "Activities", color: "bg-violet-500", softColor: "bg-violet-500/20" },
+  { id: "other", label: "Other", color: "bg-emerald-500", softColor: "bg-emerald-500/20" },
+] as const;
 
 export function budgetLevelFromAmount(value: number): BudgetLevel {
   if (value < 900) return "low";
   if (value > 2600) return "high";
   return "medium";
+}
+
+export function defaultBudgetCategories(totalBudget: number): TripBudgetCategory[] {
+  return budgetCategoriesFromPercentages(totalBudget, [25, 35, 20, 20]);
+}
+
+export function normalizeBudgetCategories(categories: TripBudgetCategory[] | undefined, totalBudget: number): TripBudgetCategory[] {
+  const total = Math.max(0, Math.round(totalBudget || 0));
+  const cleanCategories = budgetCategoryDefinitions.map((definition) => {
+    const existing = categories?.find((category) => category.id === definition.id);
+    return {
+      id: definition.id,
+      label: definition.label,
+      amount: Math.max(0, Math.round(existing?.amount || 0)),
+      spent: existing?.spent,
+    };
+  });
+  const existingTotal = cleanCategories.reduce((sum, category) => sum + category.amount, 0);
+
+  if (total === 0) {
+    return cleanCategories.map((category) => ({ ...category, amount: 0 }));
+  }
+
+  if (existingTotal <= 0) {
+    return defaultBudgetCategories(total);
+  }
+
+  let assigned = 0;
+  return cleanCategories.map((category, index) => {
+    const amount = index === cleanCategories.length - 1
+      ? total - assigned
+      : Math.round((category.amount / existingTotal) * total);
+    assigned += amount;
+    return { ...category, amount };
+  });
+}
+
+export function budgetCategoriesFromPercentages(totalBudget: number, percentages: number[]): TripBudgetCategory[] {
+  const total = Math.max(0, Math.round(totalBudget || 0));
+  let assigned = 0;
+
+  return budgetCategoryDefinitions.map((definition, index) => {
+    const amount = index === budgetCategoryDefinitions.length - 1
+      ? total - assigned
+      : Math.round(total * ((percentages[index] || 0) / 100));
+    assigned += amount;
+    return {
+      id: definition.id,
+      label: definition.label,
+      amount,
+    };
+  });
 }
 
 export function emptyDays(count: number): ItineraryDay[] {
@@ -58,6 +117,49 @@ export function parseMoney(text: string | undefined): number {
   return match ? Number(match[0]) : 0;
 }
 
+export function itineraryBudgetSpend(days: ItineraryDay[]): { flights: number; hotels: number; activities: number; other: number } {
+  return days.reduce((totals, day) => {
+    for (const item of day.items) {
+      const cost = Math.max(0, Number(item.estimatedCost) || 0);
+
+      if (isFlightBudgetItem(item)) {
+        totals.flights += cost;
+      } else if (isHotelBudgetItem(item)) {
+        totals.hotels += cost;
+      } else if (isOtherBudgetItem(item)) {
+        totals.other += cost;
+      } else {
+        totals.activities += cost;
+      }
+    }
+
+    return totals;
+  }, { flights: 0, hotels: 0, activities: 0, other: 0 });
+}
+
+function isFlightBudgetItem(item: ItineraryItem): boolean {
+  return /\b(flight|flights|airfare|airline|airport|plane)\b/i.test(itemBudgetText(item));
+}
+
+function isHotelBudgetItem(item: ItineraryItem): boolean {
+  return /\b(hotel|hotels|stay|stays|lodging|accommodation|accommodations)\b/i.test(itemBudgetText(item));
+}
+
+function isOtherBudgetItem(item: ItineraryItem): boolean {
+  return /\b(food|meal|meals|restaurant|restaurants|transport|transfer|transit|metro|train|bus|taxi|other)\b/i.test(itemBudgetText(item));
+}
+
+function itemBudgetText(item: ItineraryItem): string {
+  return [
+    item.category,
+    item.title,
+    item.attractionName,
+    item.location?.name,
+    item.notes,
+    ...(item.tags || []),
+  ].filter(Boolean).join(" ");
+}
+
 export function tripDate(startDate: string, dayNumber: number): Date {
   const date = new Date(`${startDate}T00:00:00`);
   date.setDate(date.getDate() + dayNumber - 1);
@@ -93,7 +195,7 @@ export function normalizeDays(days: ItineraryDay[]): ItineraryDay[] {
           ? { name: item.attractionName.trim() }
           : undefined,
         notes: item.notes?.trim() || undefined,
-        tags: item.tags?.map((tag) => tag.trim()).filter(Boolean),
+        tags: uniqueTags(item.tags),
         durationMinutes: Math.max(0, Number(item.durationMinutes) || 0) || undefined,
         estimatedCost: Math.max(0, Number(item.estimatedCost) || 0),
       }))
@@ -110,6 +212,11 @@ export function normalizeDays(days: ItineraryDay[]): ItineraryDay[] {
       items,
     };
   });
+}
+
+function uniqueTags(tags: string[] | undefined): string[] | undefined {
+  const cleanTags = Array.from(new Set((tags || []).map((tag) => tag.trim().toLowerCase()).filter(Boolean)));
+  return cleanTags.length > 0 ? cleanTags : undefined;
 }
 
 export function weatherIcon(code: number | undefined) {

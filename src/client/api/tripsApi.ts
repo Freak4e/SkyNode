@@ -134,6 +134,24 @@ export async function loadTripInvite(token: string): Promise<SavedTripDetail> {
   return body.trip;
 }
 
+export async function loadPublicTripPreview(tripId: string): Promise<SavedTripDetail> {
+  const response = await fetch(`/api/trips/public/${encodeURIComponent(tripId)}/preview`, {
+    headers: await optionalAuthHeaders(),
+    cache: "no-store",
+  });
+  const body = await readApiJson<{ trip: SavedTripDetail | null; warnings?: string[] }>(
+    response,
+    "Failed to load trip preview.",
+    { trip: null },
+  );
+
+  if (!response.ok || !body.trip) {
+    throw new Error(body.warnings?.[0] || "Failed to load trip preview.");
+  }
+
+  return body.trip;
+}
+
 export async function requestJoinTrip(tripId: string, profile: TripJoinRequest): Promise<TripMember> {
   const headers = await authHeaders({ "Content-Type": "application/json" }).catch((error) => {
     throw new Error(error instanceof Error ? error.message : "Sign in to request joining a trip.");
@@ -150,6 +168,33 @@ export async function requestJoinTrip(tripId: string, profile: TripJoinRequest):
   }
 
   return body.member;
+}
+
+export async function rateTrip(
+  tripId: string,
+  rating: number,
+): Promise<{ ratingAverage?: number; ratingCount: number; ownRating: number }> {
+  const response = await fetch(`/api/trips/${encodeURIComponent(tripId)}/rating`, {
+    method: "PUT",
+    headers: await authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ rating }),
+  });
+  const body = await readApiJson<{
+    ratingAverage?: number;
+    ratingCount?: number;
+    ownRating?: number;
+    warnings?: string[];
+  }>(response, "Failed to rate trip.");
+
+  if (!response.ok || !body.ownRating) {
+    throw new Error(body.warnings?.[0] || "Failed to rate trip.");
+  }
+
+  return {
+    ratingAverage: body.ratingAverage,
+    ratingCount: body.ratingCount || 0,
+    ownRating: body.ownRating,
+  };
 }
 
 export async function updateTripMember(

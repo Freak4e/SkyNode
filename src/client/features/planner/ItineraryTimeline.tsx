@@ -135,12 +135,22 @@ function TimelineActivity({ item }: TimelineActivityProps) {
 }
 
 function ActivityMeta({ item }: TimelineActivityProps) {
+  const displayTags = uniqueDisplayTags(item);
+
   return (
     <div className="mt-2 flex flex-wrap gap-2 text-xs font-bold">
       {(item.location?.name || item.attractionName) && <span className="text-blue-600">{item.location?.name || item.attractionName}</span>}
-      {item.category && <span className="rounded-full bg-white px-2 py-0.5 text-slate-500 ring-1 ring-slate-200">{item.category}</span>}
+      {displayTags.map((tag) => (
+        <span key={tag} className="rounded-full bg-white px-2 py-0.5 text-slate-500 ring-1 ring-slate-200">{tag}</span>
+      ))}
     </div>
   );
+}
+
+function uniqueDisplayTags(item: ItineraryItem): string[] {
+  return Array.from(new Set([item.category, ...(item.tags || [])]
+    .map((tag) => tag?.trim().toLowerCase())
+    .filter((tag): tag is string => Boolean(tag))));
 }
 
 function CitySectionTitle({ cityName }: CitySectionTitleProps) {

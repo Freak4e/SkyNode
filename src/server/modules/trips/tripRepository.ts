@@ -412,6 +412,9 @@ export async function listDiscoverableTrips(
       summary.memberCount = publicRow.memberCount;
       summary.ownerName = publicRow.ownerName;
       summary.ownerAvatar = publicRow.ownerAvatar;
+      summary.ratingAverage = publicRow.ratingAverage;
+      summary.ratingCount = publicRow.ratingCount;
+      summary.ownRating = publicRow.ownRating;
       summary.access = {
         canViewItinerary: false,
         canChat: publicRow.membershipStatus === "accepted",

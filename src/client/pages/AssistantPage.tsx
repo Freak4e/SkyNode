@@ -115,7 +115,7 @@ export function AssistantPage() {
     void loadTrips();
   }, [authLoading, user]);
 
-  const assistantMode = selectedTrip ? "Trip-aware" : "General travel";
+  const assistantMode = selectedTrip ? "Trip-aware" : "Travel planning";
   const showStartScreen = messages.length === 0 && !sending;
   const tripStats = useMemo(() => {
     if (!selectedTrip) {
@@ -196,8 +196,9 @@ export function AssistantPage() {
           <input
             value={input}
             onChange={(event) => setInput(event.target.value)}
-            placeholder={selectedTrip ? "Ask for trip tweaks, cheaper options, food spots..." : "Ask about destinations, attractions, budgets..."}
-            className="min-w-0 flex-1 bg-transparent px-4 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+            disabled={sending}
+            placeholder={selectedTrip ? "Ask for trip tweaks, cheaper options, food spots..." : "Ask about destinations, itineraries, flights, budgets..."}
+            className="min-w-0 flex-1 bg-transparent px-4 text-sm font-semibold text-slate-900 outline-none placeholder:text-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
           />
           <button
             type="submit"
@@ -251,7 +252,7 @@ export function AssistantPage() {
             className="mb-6"
             eyebrow={<><MessageCircle className="h-3.5 w-3.5" />SkyNode assistant</>}
             title="Chat with a travel assistant that understands your trips."
-            description="Ask general destination questions, or select a saved trip so the assistant can answer with itinerary context."
+            description="Ask travel-planning questions only, or select a saved trip so the assistant can answer with itinerary context."
             actions={
               <div className="rounded-2xl border border-white/10 bg-white/10 p-5 backdrop-blur">
                 <p className="text-sm text-slate-300">Assistant mode</p>
@@ -288,7 +289,7 @@ export function AssistantPage() {
               {!authLoading && !user && (
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
                   <p className="font-bold text-slate-700">Sign in to load saved trips.</p>
-                  <p className="mt-1">General assistant chat still works without an account.</p>
+                  <p className="mt-1">Travel-planning chat works without an account. Sign in to use saved-trip context.</p>
                   <Link
                     to="/auth"
                     state={{ from: "/assistant" }}
@@ -387,8 +388,9 @@ export function AssistantPage() {
                           <button
                             key={prompt}
                             type="button"
+                            disabled={sending}
                             onClick={() => submitMessage(undefined, prompt)}
-                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
+                            className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
                           >
                             {prompt}
                           </button>

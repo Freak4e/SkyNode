@@ -66,20 +66,6 @@ function validateSignup(values: SignupValues): Notice | null {
   return null;
 }
 
-function authBackTarget(state: unknown): string {
-  if (!state || typeof state !== "object" || !("from" in state)) {
-    return "/";
-  }
-
-  const target = String((state as { from?: unknown }).from || "").trim();
-
-  if (!target.startsWith("/") || target.startsWith("//") || target.startsWith("/auth") || target === "/account") {
-    return "/";
-  }
-
-  return target;
-}
-
 export function AuthPage() {
   const { user, loading: authLoading, signIn, signUp, signInWithProvider } = useAuth();
   const navigate = useNavigate();
@@ -94,7 +80,6 @@ export function AuthPage() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const searchParams = new URLSearchParams(location.search);
   const callbackMode = searchParams.get("callback") === "oauth";
-  const backTo = authBackTarget(location.state);
 
   useEffect(() => {
     const oauthError = searchParams.get("error_description") || searchParams.get("error");
@@ -225,8 +210,8 @@ export function AuthPage() {
 
           <section className="relative p-6 sm:p-8">
             <Link
-              to={backTo}
-              replace={backTo === "/"}
+              to="/"
+              replace
               className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline transition hover:text-blue-600"
             >
               <ArrowLeft className="h-4 w-4" />

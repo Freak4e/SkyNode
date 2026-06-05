@@ -9,6 +9,7 @@ import {
   Plane, Mountain, Waves, Sparkles as Aurora,
   Check, ChevronRight, User,
 } from "lucide-react";
+import { useAuth } from "../auth/AuthContext";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
 import { MultiPlacePicker } from "../components/MultiPlacePicker";
@@ -420,6 +421,7 @@ function PopularDestinationPromo() {
 
 export function HomePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [fromPlaces, setFromPlaces] = useState<Place[]>([defaultFrom]);
   const [toPlaces, setToPlaces] = useState<Place[]>([defaultTo]);
   const from = fromPlaces[0];
@@ -455,20 +457,30 @@ export function HomePage() {
   }
 
   function openPlanner() {
-    if (!from || !to) {
+    const params = new URLSearchParams();
+
+    if (from && to) {
+      params.set("from", from.code);
+      params.set("to", to.code);
+      params.set("date", date);
+      params.set("fromName", from.cityName);
+      params.set("toName", to.cityName);
+      params.set("destination", to.cityName);
+    }
+
+    const plannerPath = params.size ? `/planner?${params.toString()}` : "/planner";
+
+    if (!user) {
+      navigate("/auth", { state: { from: plannerPath } });
       return;
     }
 
-    const params = new URLSearchParams({
-      from: from.code,
-      to: to.code,
-      date,
-      fromName: from.cityName,
-      toName: to.cityName,
-      destination: to.cityName,
-    });
+    if (!from || !to) {
+      navigate("/planner");
+      return;
+    }
 
-    navigate(`/planner?${params.toString()}`);
+    navigate(plannerPath);
   }
 
   return (

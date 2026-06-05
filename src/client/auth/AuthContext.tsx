@@ -13,7 +13,6 @@ type AuthContextValue = {
     profile?: {
       firstName: string;
       lastName: string;
-      birthDate: string;
       avatarUrl?: string;
     },
   ) => Promise<"created" | "already_exists" | "confirmation_required">;
@@ -94,7 +93,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               first_name: profile.firstName,
               last_name: profile.lastName,
               full_name: fullName,
-              birth_date: profile.birthDate,
               avatar_url: profile.avatarUrl,
             }
             : undefined,

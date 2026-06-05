@@ -331,7 +331,7 @@ export function TripsPage() {
             to="/destinations"
             icon={<Globe2 className="h-4 w-4" />}
             title="Browse destinations"
-            description="Explore cities, coastlines and trails by region."
+            description="Explore cities, coastlines and trails by region, then compare route ideas before planning."
           />
         </div>
       </PageShell>

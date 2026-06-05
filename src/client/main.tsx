@@ -5,6 +5,8 @@ import { GlobalTripNotifications } from "./components/GlobalTripNotifications";
 import { AccountPage } from "./pages/AccountPage";
 import { AssistantPage } from "./pages/AssistantPage";
 import { AuthPage } from "./pages/AuthPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
+import { TermsPage } from "./pages/TermsPage";
 import { DestinationsPage } from "./pages/DestinationsPage";
 import { HomePage } from "./pages/HomePage";
 import { LiveFlightsPage } from "./pages/LiveFlightsPage";
@@ -36,6 +38,8 @@ function App() {
           <Route path="/trips" element={<TripsPage />} />
           <Route path="/explore-trips" element={<ExploreTripsPage />} />
           <Route path="/assistant" element={<AssistantPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<HomePage />} />
         </Routes>
       </BrowserRouter>

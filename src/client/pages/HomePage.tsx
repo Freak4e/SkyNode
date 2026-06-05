@@ -653,7 +653,7 @@ export function HomePage() {
           </div>
 
           <div className="relative z-10 px-6 py-12 sm:px-10 lg:ml-[30%] lg:w-[70%] lg:py-16 lg:pl-8 lg:pr-14">
-              <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-cyan-200">
+              <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-cyan-200">
                 <Globe className="h-4 w-4" /> Explore destinations
               </p>
               <h2 className="max-w-2xl text-4xl font-black leading-tight sm:text-5xl">
@@ -674,7 +674,7 @@ export function HomePage() {
       <section className="bg-slate-50 px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto grid max-w-6xl min-w-0 items-center gap-10 md:grid-cols-2 md:gap-16">
           <div className="min-w-0">
-            <p className="text-xs font-bold text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <p className="text-xs font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
               <Brain className="w-4 h-4" /> AI ITINERARY PLANNER
             </p>
             <h2 className="mb-5 text-3xl font-black leading-tight text-slate-900 sm:text-4xl md:text-5xl">
@@ -708,7 +708,7 @@ export function HomePage() {
             <div className="space-y-3">
               {itineraryDays.map((d) => (
                 <div key={d.day} className="flex min-w-0 items-center gap-3 rounded-2xl p-3 transition-colors hover:bg-slate-50 sm:gap-4 sm:p-4">
-                  <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-indigo-500 to-cyan-400 text-xs font-bold text-white shadow-lg shadow-cyan-500/20">
                     Day {d.day}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -777,7 +777,7 @@ export function HomePage() {
       <section className="bg-white px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-6xl min-w-0">
           <div className="rounded-3xl bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 px-5 py-14 text-center shadow-card-strong sm:px-8 sm:py-18 lg:px-12">
-            <p className="mb-3 flex items-center justify-center gap-2 text-xs font-bold uppercase tracking-widest text-cyan-200">
+            <p className="mb-3 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest text-cyan-200">
               <Zap className="h-4 w-4" /> Start planning
             </p>
             <h2 className="mb-4 text-4xl font-black leading-tight text-white md:text-5xl">

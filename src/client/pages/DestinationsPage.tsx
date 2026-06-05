@@ -168,15 +168,16 @@ export function DestinationsPage() {
             <TrendingDepartures value={origin} onChange={setOrigin} />
           </div>
 
-          <div className="mx-auto mt-6 grid max-w-7xl items-start gap-6 xl:grid-cols-[1fr_430px]">
+          <div className="mx-auto mt-6 grid max-w-7xl items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_430px]">
             <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-3">
                 <StatCard label={dealsStatLabel} value={dealsFoundLabel} icon={<Ticket className="h-5 w-5" />} />
                 <StatCard
                   label={fareStatLabel}
                   value={fareStatValue}
                   icon={<Plane className="h-5 w-5" />}
                 />
+                <StatCard label={mapStatLabel} value={mapReadyLabel} icon={<MapPin className="h-5 w-5" />} />
               </div>
 
               <AccentCard as="section" padding="none" className="min-h-130 hover:translate-y-0">
@@ -196,7 +197,6 @@ export function DestinationsPage() {
             </div>
 
             <aside className="space-y-6">
-              <StatCard label={mapStatLabel} value={mapReadyLabel} icon={<MapPin className="h-5 w-5" />} />
               <div className="flex min-h-130 flex-col">
                 <SectionHeader
                   eyebrow="Popular flight boards"

@@ -429,8 +429,8 @@ export function AccountPage() {
             <div className="absolute inset-0 bg-linear-to-t from-white via-white/5 to-transparent" />
           </div>
           <div className="flex flex-wrap items-end justify-between gap-5 px-6 pb-6">
-            <div className="-mt-16 flex min-w-0 flex-1 flex-wrap items-end gap-4">
-              <div className="relative">
+            <div className="flex min-w-0 flex-1 flex-wrap items-end gap-4">
+              <div className="relative -mt-16">
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -492,7 +492,6 @@ export function AccountPage() {
                 )}
               </div>
               <div className="min-w-0 flex-1 pb-1">
-                <p className="text-xs font-black uppercase tracking-widest text-sky-700">My account</p>
                 <h1 className="mt-1 break-words text-3xl font-black leading-tight text-slate-950 md:text-4xl">{displayName}</h1>
                 <p className="mt-1 break-all text-sm font-semibold text-slate-500">{user?.email}</p>
                 <p className="mt-2 text-xs font-bold text-slate-400">Member since {createdAt}</p>
@@ -511,10 +510,10 @@ export function AccountPage() {
           <div className="grid items-stretch gap-6 lg:grid-cols-[1fr_340px]">
             <Card as="form" className="p-6" onSubmit={handleSaveProfile}>
               <div className="relative flex flex-wrap items-start justify-between gap-4 pr-12">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-widest text-blue-500">Profile</p>
-                  <h2 className="mt-2 text-2xl font-black text-slate-950">Personal details</h2>
-                </div>
+                <AccountSectionHeading
+                  eyebrow="Profile"
+                  title="Personal details"
+                />
                 <button
                   type="button"
                   className="absolute right-0 top-0 grid h-12 w-12 place-items-center rounded-full border border-sky-100 bg-sky-50 text-sky-800 shadow-sm transition hover:-translate-y-0.5 hover:bg-sky-100 focus:outline-none focus:ring-4 focus:ring-sky-100"
@@ -586,11 +585,11 @@ export function AccountPage() {
 
             <aside className="grid h-full gap-6">
               <Card as="section" className="flex flex-col p-6">
-                <p className="text-xs font-black uppercase tracking-widest text-blue-500">Security</p>
-                <h2 className="mt-2 text-xl font-black text-slate-950">Password access</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Send a password reset link to your email if you forgot your password or want to change it.
-                </p>
+                <AccountSectionHeading
+                  eyebrow="Security"
+                  title="Password access"
+                  text="Send a password reset link to your email if you forgot your password or want to change it."
+                />
                 <Button
                   type="button"
                   tone="ghost"
@@ -634,11 +633,11 @@ export function AccountPage() {
 
           <Card as="section" className="p-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest text-blue-500">My trips</p>
-                <h2 className="mt-2 text-2xl font-black text-slate-950">Trips you created</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">A cleaner view of your saved itineraries and trip rooms.</p>
-              </div>
+              <AccountSectionHeading
+                eyebrow="My trips"
+                title="Trips you created"
+                text="A cleaner view of your saved itineraries and trip rooms."
+              />
               <ButtonLink to="/trip-library" tone="ghost">Open all trips</ButtonLink>
             </div>
 
@@ -710,6 +709,26 @@ function AccountTripCard({ trip }: { trip: SavedTripSummary }) {
   );
 }
 
+function AccountSectionHeading({
+  className = "",
+  eyebrow,
+  text,
+  title,
+}: {
+  className?: string;
+  eyebrow: ReactNode;
+  text?: ReactNode;
+  title: ReactNode;
+}) {
+  return (
+    <div className={className}>
+      <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-blue-500">{eyebrow}</p>
+      <h2 className="text-2xl font-black text-slate-950 md:text-3xl">{title}</h2>
+      {text && <p className="mt-2 text-base text-slate-600">{text}</p>}
+    </div>
+  );
+}
+
 function TravelMissionsCard({
   loading,
   nextCountry,
@@ -736,30 +755,26 @@ function TravelMissionsCard({
 
   return (
     <Card as="section" className="overflow-hidden p-0">
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_420px]">
-        <div className="p-6 md:p-7">
+      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_440px]">
+        <div className="p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-cyan-600">
-                <Trophy className="h-4 w-4" />
-                Travel Proof Missions
-              </p>
-              <h2 className="mt-2 text-2xl font-black text-slate-950">Unlock the world with verified travel proof</h2>
-              <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-slate-500">
-                Upload a photo with the requested gesture and a recognizable landmark. AI checks face, gesture, and location evidence before unlocking a country.
-              </p>
-            </div>
+            <AccountSectionHeading
+              eyebrow={<><Trophy className="h-4 w-4" />Travel Proof Missions</>}
+              title="Unlock the world with verified travel proof"
+              text="Upload a photo with the requested gesture and a recognizable landmark. AI checks face, gesture, and location evidence before unlocking a country."
+              className="max-w-2xl"
+            />
             <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm">
               <p className="text-2xl font-black leading-none">{unlockedCodes.size}/{missionCountries.length}</p>
               <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-white/60">Unlocked</p>
             </div>
           </div>
 
-          <div className="mt-6 h-3 overflow-hidden rounded-full bg-slate-100">
+          <div className="mt-4 h-2.5 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-linear-to-r from-cyan-400 via-sky-500 to-teal-400 transition-all" style={{ width: `${progress}%` }} />
           </div>
 
-          <div className="mt-6 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
+          <div className="mt-4 flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <input
               type="search"
@@ -773,7 +788,7 @@ function TravelMissionsCard({
             </span>
           </div>
 
-          <div className="mt-4 max-h-[28rem] overflow-y-auto pr-1">
+          <div className="mt-4 max-h-40 overflow-y-auto pr-1">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {loading && [1, 2, 3, 4, 5, 6].map((item) => <div key={item} className="h-12 animate-pulse rounded-2xl bg-slate-100" />)}
               {!loading && filteredCountries.map((country) => {
@@ -808,7 +823,7 @@ function TravelMissionsCard({
           </div>
         </div>
 
-        <div className="relative min-h-96 overflow-hidden bg-linear-to-br from-sky-50 via-white to-cyan-50 p-6 text-slate-950">
+        <div className="relative min-h-56 overflow-hidden bg-linear-to-br from-sky-50 via-white to-cyan-50 p-5 text-slate-950">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_20%,rgba(45,212,191,0.16),transparent_32%),radial-gradient(circle_at_18%_78%,rgba(56,189,248,0.14),transparent_34%)]" />
           <div className="relative flex h-full flex-col justify-between">
             <div>
@@ -829,7 +844,7 @@ function TravelMissionsCard({
               <p className="text-xs font-black uppercase tracking-widest text-cyan-700">Next mission</p>
               <h3 className="mt-2 text-2xl font-black">{nextCountry.name}</h3>
               <p className="mt-2 text-sm font-semibold leading-6 text-slate-600">Take a photo near a tourist attraction and {missionGestureFor(nextCountry)}.</p>
-              <Button type="button" size="lg" className="mt-5 w-full rounded-2xl" icon={<Sparkles className="h-4 w-4" />} onClick={() => onOpenMission(nextCountry)}>
+              <Button type="button" size="lg" className="mt-4 w-full rounded-2xl" icon={<Sparkles className="h-4 w-4" />} onClick={() => onOpenMission(nextCountry)}>
                 Start mission
               </Button>
             </div>
@@ -838,7 +853,7 @@ function TravelMissionsCard({
       </div>
 
       {unlocks.length > 0 && (
-        <div className="border-t border-slate-100 px-6 py-4">
+        <div className="border-t border-slate-100 px-5 py-3">
           <p className="text-xs font-black uppercase tracking-widest text-slate-400">Latest unlock</p>
           <p className="mt-1 text-sm font-bold text-slate-700">
             {unlocks[0].countryName} verified with {Math.round(unlocks[0].confidence * 100)}% AI confidence.
@@ -1041,10 +1056,10 @@ function WorldMissionMap({
   }
 
   return (
-    <div className={`relative overflow-hidden rounded-3xl border border-sky-100 bg-white/80 shadow-[0_24px_80px_rgba(14,165,233,0.12)] backdrop-blur ${compact ? "mb-6 aspect-[1.55] min-h-64" : "aspect-[1.8] min-h-[30rem]"}`}>
+    <div className={`relative overflow-hidden ${compact ? "-mx-5 mb-2 aspect-[1.8] min-h-60" : "rounded-3xl border border-sky-100 bg-white/80 shadow-[0_24px_80px_rgba(14,165,233,0.12)] backdrop-blur aspect-[1.8] min-h-[30rem]"}`}>
       <svg ref={svgRef} viewBox="0 0 900 500" className={`absolute inset-0 h-full w-full ${compact ? "" : "cursor-grab active:cursor-grabbing"}`} role="img" aria-label="Travel mission world map">
-        <rect width="900" height="500" rx="28" fill="rgba(240,249,255,0.85)" />
-        <path d="M0 390 C160 348 302 432 456 388 C594 349 722 358 900 314 L900 500 L0 500 Z" fill="rgba(207,250,254,0.38)" />
+        {!compact && <rect width="900" height="500" rx="28" fill="rgba(240,249,255,0.85)" />}
+        {!compact && <path d="M0 390 C160 348 302 432 456 388 C594 349 722 358 900 314 L900 500 L0 500 Z" fill="rgba(207,250,254,0.38)" />}
         <g ref={mapGroupRef}>
           {featureCountries.map(({ country, feature: mapFeature }) => {
             const d = path(mapFeature);

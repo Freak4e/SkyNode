@@ -1,36 +1,20 @@
 import { FormEvent, useEffect, useState } from "react";
-import { AlertCircle, ArrowLeft, Camera, CheckCircle2, Info, Loader2, LockKeyhole, Mail, UserRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Info, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import loginBanner from "../../../assets/login_banner.png";
 import logo from "../../../assets/logo_skynode_horizontal.png";
 
 type AuthMode = "signin" | "signup";
 type Notice = { kind: "error" | "success" | "info"; text: string };
 type SignupResult = "created" | "already_exists" | "confirmation_required";
 type SignupValues = {
-  avatarUrl: string;
-  birthDate: string;
   confirmPassword: string;
   email: string;
   firstName: string;
   lastName: string;
   password: string;
 };
-
-function ageFromBirthDate(value: string): number {
-  const birthDate = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(birthDate.getTime())) return 0;
-
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age -= 1;
-  }
-
-  return age;
-}
 
 function passwordStrength(password: string): { score: number; label: string; valid: boolean } {
   const checks = [
@@ -46,39 +30,6 @@ function passwordStrength(password: string): { score: number; label: string; val
   if (score >= 4) return { score, label: "Good password", valid: true };
   if (score >= 3) return { score, label: "Add more character types", valid: false };
   return { score, label: "Password is too weak", valid: false };
-}
-
-function resizeAvatar(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      image.src = String(reader.result || "");
-    };
-    reader.onerror = () => reject(new Error("Could not read profile image."));
-    image.onload = () => {
-      const size = 180;
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-      if (!context) {
-        reject(new Error("Could not prepare profile image."));
-        return;
-      }
-
-      canvas.width = size;
-      canvas.height = size;
-      const scale = Math.max(size / image.width, size / image.height);
-      const width = image.width * scale;
-      const height = image.height * scale;
-      const x = (size - width) / 2;
-      const y = (size - height) / 2;
-      context.drawImage(image, x, y, width, height);
-      resolve(canvas.toDataURL("image/jpeg", 0.82));
-    };
-    image.onerror = () => reject(new Error("Unsupported profile image."));
-    reader.readAsDataURL(file);
-  });
 }
 
 function authMessage(error: unknown, mode: AuthMode): string {
@@ -98,15 +49,10 @@ function authMessage(error: unknown, mode: AuthMode): string {
 }
 
 function validateSignup(values: SignupValues): Notice | null {
-  const age = ageFromBirthDate(values.birthDate);
   const strength = passwordStrength(values.password);
 
   if (!values.firstName.trim() || !values.lastName.trim()) {
     return { kind: "error", text: "Please enter your first and last name." };
-  }
-
-  if (age < 18) {
-    return { kind: "error", text: "You must be at least 18 years old to create a SkyNode account." };
   }
 
   if (!strength.valid) {
@@ -127,8 +73,6 @@ export function AuthPage() {
   const [mode, setMode] = useState<AuthMode>("signup");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [avatarUrl, setAvatarUrl] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -168,7 +112,7 @@ export function AuthPage() {
         return;
       }
 
-      const signupValues = { avatarUrl, birthDate, confirmPassword, email, firstName, lastName, password };
+      const signupValues = { confirmPassword, email, firstName, lastName, password };
       const validationNotice = validateSignup(signupValues);
 
       if (validationNotice) {
@@ -200,8 +144,6 @@ export function AuthPage() {
     return callback(values.email, values.password, {
       firstName: values.firstName.trim(),
       lastName: values.lastName.trim(),
-      birthDate: values.birthDate,
-      avatarUrl: values.avatarUrl || undefined,
     });
   }
 
@@ -221,20 +163,6 @@ export function AuthPage() {
     }
 
     navigate("/", { replace: true });
-  }
-
-  async function handleAvatarChange(file: File | undefined) {
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setNotice({ kind: "error", text: "Please choose an image file for your profile picture." });
-      return;
-    }
-
-    try {
-      setAvatarUrl(await resizeAvatar(file));
-    } catch (error) {
-      setNotice({ kind: "error", text: error instanceof Error ? error.message : "Could not prepare profile image." });
-    }
   }
 
   async function handleGoogleSignIn() {
@@ -260,12 +188,21 @@ export function AuthPage() {
     <div className="min-h-screen bg-slate-100 px-5 py-8">
       <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl items-center justify-center">
         <div className="grid w-full overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-slate-200 lg:grid-cols-[1fr_430px]">
-          <section className="hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
-            <Link to="/" className="flex items-center gap-2 no-underline">
+          <section className="relative hidden overflow-hidden bg-slate-950 p-10 text-white lg:flex lg:flex-col lg:justify-between">
+            <div className={`pointer-events-none absolute ${mode === "signin" ? "inset-0" : "-bottom-1 -left-32 right-0 h-[84%]"}`}>
+              <img
+                src={loginBanner}
+                alt=""
+                className={`h-full ${mode === "signin" ? "w-full" : "w-[118%]"} max-w-none object-cover opacity-100 ${mode === "signin" ? "object-left-bottom" : "object-left-bottom"}`}
+              />
+              <div className="absolute inset-0 bg-linear-to-b from-transparent via-slate-950/20 to-slate-950/85" />
+            </div>
+
+            <Link to="/" className="relative z-10 flex items-center gap-2 no-underline">
               <img src={logo} alt="SkyNode" className="h-16 w-auto object-contain brightness-0 invert" />
             </Link>
 
-            <div className="max-w-lg">
+            <div className="relative z-10 max-w-lg">
               <p className="mb-3 text-xs font-black uppercase tracking-widest text-cyan-200">Account required to save</p>
               <h1 className="text-5xl font-black leading-tight">Keep every trip plan under your profile.</h1>
               <p className="mt-4 text-base leading-relaxed text-slate-300">
@@ -307,7 +244,9 @@ export function AuthPage() {
                 disabled={submitting}
                 className="mb-5 flex w-full items-center justify-center gap-3 rounded-xl bg-slate-200 px-5 py-4 text-sm font-black text-slate-800 transition hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-white text-sm font-black text-blue-600">G</span>
+                <span className="grid h-5 w-5 place-items-center rounded-full bg-white">
+                  <GoogleLogo />
+                </span>
                 Continue with Google
               </button>
 
@@ -320,28 +259,6 @@ export function AuthPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === "signup" && (
                   <>
-                    <div className="flex flex-col items-center rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="relative">
-                        {avatarUrl ? (
-                          <img src={avatarUrl} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-white" />
-                        ) : (
-                          <div className="grid h-20 w-20 place-items-center rounded-full bg-white text-slate-400 ring-4 ring-white">
-                            <UserRound className="h-9 w-9" />
-                          </div>
-                        )}
-                        <label className="absolute -bottom-1 -right-1 grid h-8 w-8 cursor-pointer place-items-center rounded-full bg-blue-600 text-white shadow-lg transition hover:bg-blue-700">
-                          <Camera className="h-4 w-4" />
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={(event) => void handleAvatarChange(event.target.files?.[0])}
-                            className="sr-only"
-                          />
-                        </label>
-                      </div>
-                      <p className="mt-3 text-xs font-bold text-slate-500">Optional profile picture</p>
-                    </div>
-
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block">
                         <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-400">Name</span>
@@ -365,17 +282,6 @@ export function AuthPage() {
                       </label>
                     </div>
 
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-black uppercase tracking-wider text-slate-400">Date of birth</span>
-                      <input
-                        type="date"
-                        value={birthDate}
-                        onChange={(event) => setBirthDate(event.target.value)}
-                        required
-                        className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                      />
-                      <span className="mt-1 block text-xs font-semibold text-slate-500">You must be 18 or older to create an account.</span>
-                    </label>
                   </>
                 )}
 
@@ -453,7 +359,10 @@ export function AuthPage() {
               </form>
 
               <div className="mt-7 border-t border-slate-200 pt-5 text-xs leading-relaxed text-slate-500">
-                By continuing, your saved trips and AI itinerary updates are connected to your SkyNode account.
+                By continuing you accept the{' '}
+                <Link to="/terms" className="font-black text-slate-700 underline decoration-slate-200">Terms of Use</Link>
+                {' '}and{' '}
+                <Link to="/privacy" className="font-black text-slate-700 underline decoration-slate-200">Privacy Policy</Link>.
               </div>
             </div>
           </section>
@@ -476,6 +385,17 @@ function AuthNotice({ notice }: { notice: Notice }) {
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
       <span>{notice.text}</span>
     </div>
+  );
+}
+
+function GoogleLogo() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06L5.84 9.9C6.71 7.3 9.14 5.38 12 5.38z" />
+    </svg>
   );
 }
 

@@ -132,7 +132,7 @@ export function SectionHeader({ align = "left", className, eyebrow, icon, subtit
 
   return (
     <div className={cx(centered && "text-center", className)}>
-      <p className={cx("mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-blue-500", centered && "justify-center")}>
+      <p className={cx("mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-blue-500", centered && "justify-center")}>
         {icon}
         {eyebrow}
       </p>

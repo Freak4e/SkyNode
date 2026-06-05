@@ -501,6 +501,79 @@ function buildPairs(outboundOffers: FlightOffer[], inboundOffers: FlightOffer[],
     .flatMap((outbound) => inboundOffers.slice(0, 12).map((inbound) => ({ outbound, inbound })));
 }
 
+function dedupeFlightPairs(pairs: FlightPair[]): FlightPair[] {
+  const byKey = new Map<string, FlightPair>();
+
+  for (const pair of pairs) {
+    const key = flightPairDuplicateKey(pair);
+    const existing = byKey.get(key);
+
+    if (!existing || shouldPreferFlightPair(pair, existing)) {
+      byKey.set(key, pair);
+    }
+  }
+
+  return Array.from(byKey.values());
+}
+
+function shouldPreferFlightPair(candidate: FlightPair, current: FlightPair): boolean {
+  const priceDifference = pairPrice(candidate) - pairPrice(current);
+
+  if (priceDifference !== 0) {
+    return priceDifference < 0;
+  }
+
+  return pairSourceScore(candidate) > pairSourceScore(current);
+}
+
+function pairSourceScore(pair: FlightPair): number {
+  return [pair.outbound, pair.inbound].reduce((score, offer) => (
+    score + (offer?.bookingLink ? 2 : 0) + (offer?.source === "scrapingbee" ? 1 : 0)
+  ), 0);
+}
+
+function flightPairDuplicateKey(pair: FlightPair): string {
+  return [
+    flightOfferDuplicateKey(pair.outbound),
+    pair.inbound ? flightOfferDuplicateKey(pair.inbound) : "one-way",
+  ].join("::");
+}
+
+function flightOfferDuplicateKey(offer: FlightOffer): string {
+  const segmentKey = offer.segments?.length
+    ? offer.segments.map((segment) => [
+      normalizeFlightKeyValue(segment.originCode),
+      normalizeFlightKeyValue(segment.destinationCode),
+      normalizeFlightTime(segment.departureTime),
+      normalizeFlightTime(segment.arrivalTime),
+      normalizeFlightKeyValue(segment.carrier || offer.carrier),
+      segment.durationMinutes || "",
+    ].join("-")).join("|")
+    : "";
+
+  return [
+    normalizeFlightKeyValue(offer.carrier),
+    normalizeFlightKeyValue(offer.searchFrom || offer.segments?.[0]?.originCode),
+    normalizeFlightKeyValue(offer.searchTo || offer.segments?.[offer.segments.length - 1]?.destinationCode),
+    normalizeFlightTime(offer.departureTime),
+    normalizeFlightTime(offer.arrivalTime),
+    estimateOfferDurationMinutes(offer),
+    resolveStopsCount(offer) ?? "",
+    normalizeFlightKeyValue((offer.layovers || []).map((layover) => layover.code).join("-")),
+    segmentKey,
+  ].join("|");
+}
+
+function normalizeFlightTime(value: string | undefined): string {
+  if (!value) return "";
+
+  return formatClockTime(value).replace(/\s+/g, "").toUpperCase();
+}
+
+function normalizeFlightKeyValue(value: string | undefined): string {
+  return (value || "").toUpperCase().replace(/[^A-Z0-9]+/g, "");
+}
+
 function removeMeridiem(value: string): string {
   const trimmed = value.trim();
   const lower = trimmed.toLowerCase();
@@ -524,8 +597,7 @@ type VisibleFlightGroupsInput = Readonly<{
 }>;
 
 function visibleFlightGroups(input: VisibleFlightGroupsInput): { flightPairs: FlightPair[]; groundTransportPairs: FlightPair[]; sorted: FlightPair[] } {
-  const sortedByMode = input.pairs
-    .filter((pair) => visibleFlightPair(pair, input))
+  const sortedByMode = dedupeFlightPairs(input.pairs.filter((pair) => visibleFlightPair(pair, input)))
     .sort((first, second) => compareFlightPairs(first, second, input.sort));
   const flightPairs = sortedByMode.filter((pair) => !isGroundTransportPair(pair));
   const groundTransportPairs = sortedByMode.filter(isGroundTransportPair);

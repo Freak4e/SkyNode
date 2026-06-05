@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Building2, Plane, X } from "lucide-react";
 import { searchPlaces } from "../api/flightsApi";
 import type { Place } from "../../shared/types.js";
@@ -8,6 +10,7 @@ type MultiPlacePickerProps = {
   values: Place[];
   onChange: (places: Place[]) => void;
   placeholder?: string;
+  menuMode?: "floating" | "inline";
 };
 
 type PlaceGroup = {
@@ -106,14 +109,41 @@ function groupPlaces(places: Place[], query: string): PlaceGroup[] {
   });
 }
 
-export function MultiPlacePicker({ label, values, onChange, placeholder }: MultiPlacePickerProps) {
+export function MultiPlacePicker({ label, values, onChange, placeholder, menuMode = "floating" }: MultiPlacePickerProps) {
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<Place[]>([]);
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const visibleValues = useMemo(() => values.filter(hasVisiblePlaceValue), [values]);
   const selectedCodes = useMemo(() => new Set(visibleValues.map((place) => place.code.toUpperCase()).filter(Boolean)), [visibleValues]);
   const groupedPlaces = useMemo(() => groupPlaces(places, query), [places, query]);
+  const menuOpen = open && query.trim().length >= 2;
+  const floatingMenu = menuMode === "floating";
+
+  const updateMenuPosition = useCallback(() => {
+    const wrapper = wrapperRef.current;
+
+    if (!wrapper) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const viewportMargin = 12;
+    const availableWidth = Math.max(280, window.innerWidth - viewportMargin * 2);
+    const preferredWidth = window.innerWidth < 640 ? availableWidth : Math.max(rect.width, 384);
+    const width = Math.min(preferredWidth, availableWidth);
+    const left = Math.min(Math.max(rect.left, viewportMargin), window.innerWidth - width - viewportMargin);
+    const spaceBelow = window.innerHeight - rect.bottom - viewportMargin;
+    const maxHeight = Math.max(220, Math.min(384, spaceBelow - 8));
+    const top = rect.bottom + 8;
+
+    setMenuStyle({
+      left,
+      maxHeight,
+      top,
+      width,
+    });
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -140,7 +170,13 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(target) &&
+        !menuRef.current?.contains(target)
+      ) {
         setOpen(false);
         setQuery("");
       }
@@ -149,6 +185,19 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
+
+  useEffect(() => {
+    if (!menuOpen || !floatingMenu) return undefined;
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [floatingMenu, menuOpen, updateMenuPosition]);
 
   function addPlace(place: Place) {
     if (!selectedCodes.has(place.code.toUpperCase())) {
@@ -164,8 +213,76 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
     onChange(values.filter((place) => place.code !== code));
   }
 
+  const menu = menuOpen ? (
+    <div
+      ref={menuRef}
+      className={floatingMenu
+        ? "fixed z-[9999] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12"
+        : "absolute left-0 right-0 top-full z-[170] mt-3 max-h-96 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12 sm:min-w-96"
+      }
+      style={floatingMenu ? menuStyle : undefined}
+    >
+      {groupedPlaces.length === 0 ? (
+        <p className="px-4 py-3 text-sm font-bold text-slate-500">No cities or airports found</p>
+      ) : groupedPlaces.slice(0, 8).map((group) => {
+        const cityName = group.city?.cityName || group.city?.name || group.airports[0]?.cityName || group.airports[0]?.name || group.cityKey;
+        const countryName = group.city?.countryName || group.airports[0]?.countryName || "";
+
+        return (
+          <div key={group.cityKey} className="overflow-hidden rounded-2xl border border-slate-100 bg-white last:mb-0">
+            <div className="bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+              {cityName}{countryName ? `, ${countryName}` : ""}
+            </div>
+
+            {group.city && (
+              <button
+                type="button"
+                onClick={() => addPlace(group.city!)}
+                disabled={selectedCodes.has(group.city.code.toUpperCase())}
+                className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700">
+                  <Building2 className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-black text-slate-950">{cityName}</span>
+                  <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                    Search all airports in this city{group.airports.length > 0 ? ` - ${group.airports.length} airport${group.airports.length === 1 ? "" : "s"}` : ""}
+                  </span>
+                </span>
+                <span className="rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-black text-white">{group.city.code}</span>
+              </button>
+            )}
+
+            {group.airports.map((airport) => (
+              <button
+                key={`${group.cityKey}-${airport.code}`}
+                type="button"
+                onClick={() => addPlace(airport)}
+                disabled={selectedCodes.has(airport.code.toUpperCase())}
+                className="flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 pl-8 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
+                  <Plane className="h-3.5 w-3.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-slate-900">{airport.name}</span>
+                  <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
+                    Airport in {airport.cityName || cityName}
+                    {typeof airport.distanceKm === "number" ? ` - ${airport.distanceKm} km from center` : ""}
+                  </span>
+                </span>
+                <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{airport.code}</span>
+              </button>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  ) : null;
+
   return (
-    <div ref={wrapperRef} className="relative min-w-0">
+    <div ref={wrapperRef} className={`relative min-w-0 ${open ? "z-[150]" : "z-10"}`}>
       <div className="scrollbar-none flex min-h-11 min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pr-1">
         {label && <span className="shrink-0 text-sm font-semibold text-slate-600">{label}</span>}
         {visibleValues.map((place) => (
@@ -190,66 +307,7 @@ export function MultiPlacePicker({ label, values, onChange, placeholder }: Multi
         </label>
       </div>
 
-      {open && query.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-96 min-w-0 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl shadow-slate-900/12 sm:min-w-96">
-          {groupedPlaces.length === 0 ? (
-            <p className="px-4 py-3 text-sm font-bold text-slate-500">No cities or airports found</p>
-          ) : groupedPlaces.slice(0, 8).map((group) => {
-            const cityName = group.city?.cityName || group.city?.name || group.airports[0]?.cityName || group.airports[0]?.name || group.cityKey;
-            const countryName = group.city?.countryName || group.airports[0]?.countryName || "";
-
-            return (
-              <div key={group.cityKey} className="overflow-hidden rounded-2xl border border-slate-100 bg-white last:mb-0">
-                <div className="bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                  {cityName}{countryName ? `, ${countryName}` : ""}
-                </div>
-
-                {group.city && (
-                  <button
-                    type="button"
-                    onClick={() => addPlace(group.city!)}
-                    disabled={selectedCodes.has(group.city.code.toUpperCase())}
-                    className="flex w-full items-center gap-3 px-3 py-3 text-left transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-blue-50 text-blue-700">
-                      <Building2 className="h-4 w-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-black text-slate-950">{cityName}</span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
-                        Search all airports in this city{group.airports.length > 0 ? ` - ${group.airports.length} airport${group.airports.length === 1 ? "" : "s"}` : ""}
-                      </span>
-                    </span>
-                    <span className="rounded-xl bg-blue-600 px-2.5 py-1 text-xs font-black text-white">{group.city.code}</span>
-                  </button>
-                )}
-
-                {group.airports.map((airport) => (
-                  <button
-                    key={`${group.cityKey}-${airport.code}`}
-                    type="button"
-                    onClick={() => addPlace(airport)}
-                    disabled={selectedCodes.has(airport.code.toUpperCase())}
-                    className="flex w-full items-center gap-3 border-t border-slate-100 px-3 py-2.5 pl-8 text-left transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600">
-                      <Plane className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold text-slate-900">{airport.name}</span>
-                      <span className="mt-0.5 block truncate text-xs font-semibold text-slate-500">
-                        Airport in {airport.cityName || cityName}
-                        {typeof airport.distanceKm === "number" ? ` - ${airport.distanceKm} km from center` : ""}
-                      </span>
-                    </span>
-                    <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-700">{airport.code}</span>
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {floatingMenu && menu && typeof document !== "undefined" ? createPortal(menu, document.body) : menu}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import express from "express";
 import path from "path";
 import { accountRoute } from "./modules/account/accountRoute.js";
+import { authRoute } from "./modules/auth/authRoute.js";
 import { attractionsRoute } from "./modules/attractions/attractionsRoute.js";
 import { chatRoute } from "./modules/chat/chatRoute.js";
 import { geocodingRoute } from "./modules/geocoding/geocodingRoute.js";
@@ -40,6 +41,7 @@ export function createApp() {
   app.use("/api/trips", tripsRoute);
   app.use("/api/chat", chatRoute);
   app.use("/api/account", accountRoute);
+  app.use("/api/auth", authRoute);
   app.use("/api/notifications", notificationsRoute);
   app.use("/api/travel-missions", travelMissionsRoute);
   app.use(express.static(publicDir));

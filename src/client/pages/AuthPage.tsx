@@ -1,11 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, Info, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../auth/AuthContext";
+import { requestPasswordReset } from "../api/authApi.js";
+import { authRedirectUrl, useAuth } from "../auth/AuthContext";
 import loginBanner from "../../../assets/login_banner.png";
 import logo from "../../../assets/logo_skynode_horizontal.png";
 
-type AuthMode = "signin" | "signup";
+type AuthMode = "signin" | "signup" | "reset";
 type Notice = { kind: "error" | "success" | "info"; text: string };
 type SignupResult = "created" | "already_exists" | "confirmation_required";
 type SignupValues = {
@@ -32,7 +33,7 @@ function passwordStrength(password: string): { score: number; label: string; val
   return { score, label: "Password is too weak", valid: false };
 }
 
-function authMessage(error: unknown, mode: AuthMode): string {
+function authMessage(error: unknown, mode: AuthMode | "recovery"): string {
   const message = error instanceof Error ? error.message : "Authentication failed.";
 
   if (/invalid login credentials|invalid credentials|email not confirmed/i.test(message)) {
@@ -67,7 +68,7 @@ function validateSignup(values: SignupValues): Notice | null {
 }
 
 export function AuthPage() {
-  const { user, loading: authLoading, signIn, signUp, signInWithProvider } = useAuth();
+  const { user, loading: authLoading, signIn, signUp, signInWithProvider, updatePassword } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mode, setMode] = useState<AuthMode>("signup");
@@ -79,7 +80,9 @@ export function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const searchParams = new URLSearchParams(location.search);
-  const callbackMode = searchParams.get("callback") === "oauth";
+  const oauthCallback = searchParams.get("callback") === "oauth";
+  const recoveryCallback = searchParams.get("callback") === "recovery" || searchParams.get("type") === "recovery";
+  const activeMode: AuthMode | "recovery" = recoveryCallback ? "recovery" : mode;
 
   useEffect(() => {
     const oauthError = searchParams.get("error_description") || searchParams.get("error");
@@ -89,11 +92,11 @@ export function AuthPage() {
     }
   }, [location.search]);
 
-  if (callbackMode && authLoading) {
+  if ((oauthCallback || recoveryCallback) && authLoading) {
     return <AuthLoadingScreen text="Finishing secure sign-in..." />;
   }
 
-  if (user) {
+  if (user && !recoveryCallback) {
     return <Navigate to="/" replace />;
   }
 
@@ -103,6 +106,33 @@ export function AuthPage() {
     setNotice(null);
 
     try {
+      if (recoveryCallback) {
+        const strength = passwordStrength(password);
+
+        if (!strength.valid) {
+          setNotice({ kind: "error", text: "Use a stronger password with at least 8 characters, uppercase, lowercase, number, and symbol." });
+          return;
+        }
+
+        if (password !== confirmPassword) {
+          setNotice({ kind: "error", text: "Passwords do not match." });
+          return;
+        }
+
+        await updatePassword(password);
+        setNotice({ kind: "success", text: "Password updated. You can continue to your account." });
+        setPassword("");
+        setConfirmPassword("");
+        navigate("/account", { replace: true });
+        return;
+      }
+
+      if (mode === "reset") {
+        const result = await requestPasswordReset(email, authRedirectUrl("/auth?callback=recovery"));
+        setNotice({ kind: "success", text: result.message });
+        return;
+      }
+
       if (mode === "signin") {
         await submitSignin(signIn, email, password);
         navigate("/", { replace: true });
@@ -119,11 +149,16 @@ export function AuthPage() {
 
       handleSignupResult(await submitSignup(signUp, signupValues));
     } catch (authError) {
-      const message = authMessage(authError, mode);
+      const message = authMessage(authError, activeMode);
 
       if (mode === "signup" && /already exists/i.test(message)) {
         setNotice({ kind: "info", text: message });
         setMode("signin");
+        return;
+      }
+
+      if (mode === "reset" && /no account found/i.test(message)) {
+        setNotice({ kind: "info", text: message });
         return;
       }
 
@@ -177,9 +212,30 @@ export function AuthPage() {
   function switchMode(nextMode: AuthMode) {
     setMode(nextMode);
     setNotice(null);
+    setPassword("");
+    setConfirmPassword("");
   }
 
   const strength = passwordStrength(password);
+  const showPasswordFields = activeMode !== "reset";
+  const showNameFields = activeMode === "signup";
+  const showStrength = activeMode === "signup" || activeMode === "recovery";
+  const showEmailField = activeMode !== "recovery";
+  const showOAuth = activeMode === "signin" || activeMode === "signup";
+  const title = activeMode === "signin"
+    ? "Sign in to SkyNode"
+    : activeMode === "reset"
+    ? "Reset your password"
+    : activeMode === "recovery"
+    ? "Choose a new password"
+    : "Create a new account";
+  const submitLabel = activeMode === "signin"
+    ? "Sign in"
+    : activeMode === "reset"
+    ? "Send reset link"
+    : activeMode === "recovery"
+    ? "Update password"
+    : "Continue";
 
   return (
     <div className="min-h-screen bg-slate-100 px-5 py-8">
@@ -222,40 +278,50 @@ export function AuthPage() {
               <div className="mb-7 text-center">
                 <img src={logo} alt="SkyNode" className="mx-auto mb-4 h-16 w-auto max-w-full object-contain lg:hidden" />
                 <h2 className="text-2xl font-black text-slate-950">
-                  {mode === "signin" ? "Sign in to SkyNode" : "Create a new account"}
+                  {title}
                 </h2>
-                <p className="mt-2 text-sm text-slate-600">
-                  {mode === "signin" ? "New to SkyNode?" : "Already have an account?"}{" "}
+                {activeMode === "recovery" ? (
+                  <p className="mt-2 text-sm text-slate-600">
+                    Enter a new password for your SkyNode account.
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-600">
+                    {mode === "signin" ? "New to SkyNode?" : "Already have an account?"}{" "}
+                    <button
+                      type="button"
+                      onClick={() => switchMode(mode === "signin" ? "signup" : "signin")}
+                      className="font-black text-teal-700 underline decoration-teal-200 underline-offset-4 hover:text-teal-800"
+                    >
+                      {mode === "signin" ? "Register" : "Sign in"}
+                    </button>
+                  </p>
+                )}
+              </div>
+
+              {showOAuth && (
+                <>
                   <button
                     type="button"
-                    onClick={() => switchMode(mode === "signin" ? "signup" : "signin")}
-                    className="font-black text-teal-700 underline decoration-teal-200 underline-offset-4 hover:text-teal-800"
+                    onClick={handleGoogleSignIn}
+                    disabled={submitting}
+                    className="mb-5 flex w-full items-center justify-center gap-3 rounded-xl bg-slate-200 px-5 py-4 text-sm font-black text-slate-800 transition hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {mode === "signin" ? "Register" : "Sign in"}
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-white">
+                      <GoogleLogo />
+                    </span>
+                    Continue with Google
                   </button>
-                </p>
-              </div>
 
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={submitting}
-                className="mb-5 flex w-full items-center justify-center gap-3 rounded-xl bg-slate-200 px-5 py-4 text-sm font-black text-slate-800 transition hover:bg-slate-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span className="grid h-5 w-5 place-items-center rounded-full bg-white">
-                  <GoogleLogo />
-                </span>
-                Continue with Google
-              </button>
-
-              <div className="mb-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm text-slate-500">
-                <span className="h-px bg-slate-200" />
-                <span>or</span>
-                <span className="h-px bg-slate-200" />
-              </div>
+                  <div className="mb-5 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm text-slate-500">
+                    <span className="h-px bg-slate-200" />
+                    <span>or</span>
+                    <span className="h-px bg-slate-200" />
+                  </div>
+                </>
+              )}
 
               <form onSubmit={handleSubmit} className="space-y-4">
-                {mode === "signup" && (
+                {showNameFields && (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block">
@@ -283,38 +349,51 @@ export function AuthPage() {
                   </>
                 )}
 
-                <label className="block">
-                  <span className="sr-only">Email address</span>
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                    <Mail className="h-4 w-4 text-slate-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      required
-                      className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-                      placeholder="Enter your email address"
-                    />
-                  </div>
-                </label>
+                {showEmailField && (
+                  <label className="block">
+                    <span className="sr-only">Email address</span>
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
+                      <Mail className="h-4 w-4 text-slate-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        required
+                        className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                        placeholder="Enter your email address"
+                      />
+                    </div>
+                  </label>
+                )}
 
-                <label className="block">
-                  <span className="sr-only">Password</span>
-                  <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
-                    <LockKeyhole className="h-4 w-4 text-slate-400" />
-                    <input
-                      type="password"
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      required
-                      minLength={mode === "signup" ? 8 : 6}
-                      className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-                      placeholder="Password"
-                    />
-                  </div>
-                </label>
+                {showPasswordFields && (
+                  <label className="block">
+                    <span className="sr-only">Password</span>
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-sm focus-within:border-blue-400 focus-within:ring-4 focus-within:ring-blue-100">
+                      <LockKeyhole className="h-4 w-4 text-slate-400" />
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        required
+                        minLength={activeMode === "signin" ? 6 : 8}
+                        className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
+                        placeholder={activeMode === "recovery" ? "New password" : "Password"}
+                      />
+                    </div>
+                    {activeMode === "signin" && (
+                      <button
+                        type="button"
+                        onClick={() => switchMode("reset")}
+                        className="mt-2 text-xs font-black text-teal-700 underline decoration-teal-200 underline-offset-4 hover:text-teal-800"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </label>
+                )}
 
-                {mode === "signup" && (
+                {showStrength && (
                   <>
                     <div>
                       <div className="mb-1 flex h-2 overflow-hidden rounded-full bg-slate-100">
@@ -337,7 +416,7 @@ export function AuthPage() {
                           required
                           minLength={8}
                           className="min-w-0 flex-1 bg-transparent text-base font-semibold text-slate-900 outline-none placeholder:text-slate-400"
-                          placeholder="Repeat password"
+                          placeholder={activeMode === "recovery" ? "Repeat new password" : "Repeat password"}
                         />
                       </div>
                     </label>
@@ -352,8 +431,18 @@ export function AuthPage() {
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-100 px-5 py-4 text-sm font-black text-teal-800 transition hover:bg-teal-200 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {mode === "signin" ? "Sign in" : "Continue"}
+                  {submitLabel}
                 </button>
+
+                {mode === "reset" && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode("signin")}
+                    className="w-full text-center text-sm font-black text-slate-500 underline decoration-slate-200 underline-offset-4 hover:text-blue-700"
+                  >
+                    Back to sign in
+                  </button>
+                )}
               </form>
 
               <div className="mt-7 border-t border-slate-200 pt-5 text-xs leading-relaxed text-slate-500">

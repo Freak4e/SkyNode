@@ -46,6 +46,7 @@ import countries110mUrl from "world-atlas/countries-110m.json?url";
 
 const interestOptions = ["Culture", "Food", "Nature", "Beaches", "Nightlife", "Museums", "Hiking", "Photography", "Wellness", "Budget trips"];
 const missionGestures = ["show an open hand", "show a peace sign", "give a thumbs up"];
+const profileAvatarBucket = import.meta.env.VITE_SUPABASE_AVATAR_BUCKET || "profile-avatars";
 
 type ProfileForm = {
   firstName: string;
@@ -59,6 +60,10 @@ type ProfileForm = {
 
 function userImage(user: User | null) {
   const metadata = user?.user_metadata || {};
+  if (metadata.avatar_removed === true) {
+    return "";
+  }
+
   const direct = metadata.avatar_url || metadata.picture;
   const identityData = user?.identities?.find((identity) => identity.identity_data)?.identity_data || {};
   const identityImage = identityData.avatar_url || identityData.picture;
@@ -109,6 +114,69 @@ function profileSnapshotFromForm(form: ProfileForm, fallbackName: string) {
     bio: form.bio.trim() || undefined,
     interests: form.interests,
   };
+}
+
+async function uploadProfileAvatar(userId: string, file: File): Promise<string> {
+  if (!supabase) {
+    throw new Error("Auth is disabled: missing Supabase environment variables.");
+  }
+
+  const extension = file.type.split("/")[1]?.replace(/[^a-z0-9]/gi, "").toLowerCase() || "jpg";
+  const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`;
+  const objectPath = `${userId}/avatar-${id}.${extension}`;
+  const { error: uploadError } = await supabase.storage
+    .from(profileAvatarBucket)
+    .upload(objectPath, file, {
+      cacheControl: "3600",
+      contentType: file.type,
+    });
+
+  if (uploadError) {
+    throw new Error(`Profile photo upload failed. Check that the "${profileAvatarBucket}" Supabase Storage bucket exists and allows authenticated uploads.`);
+  }
+
+  const { data } = supabase.storage.from(profileAvatarBucket).getPublicUrl(objectPath);
+  const version = Date.now();
+
+  return `${data.publicUrl}?v=${version}`;
+}
+
+function profileAvatarPathFromUrl(avatarUrl: string): string | null {
+  if (!avatarUrl || !supabase) {
+    return null;
+  }
+
+  try {
+    const url = new URL(avatarUrl);
+    const storagePrefix = `/storage/v1/object/public/${profileAvatarBucket}/`;
+    const pathStart = url.pathname.indexOf(storagePrefix);
+
+    if (pathStart === -1) {
+      return null;
+    }
+
+    return decodeURIComponent(url.pathname.slice(pathStart + storagePrefix.length));
+  } catch {
+    return null;
+  }
+}
+
+async function deleteProfileAvatar(avatarUrl: string): Promise<void> {
+  if (!supabase) {
+    throw new Error("Auth is disabled: missing Supabase environment variables.");
+  }
+
+  const objectPath = profileAvatarPathFromUrl(avatarUrl);
+
+  if (!objectPath) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase.storage.from(profileAvatarBucket).remove([objectPath]);
+
+  if (deleteError) {
+    throw new Error("Profile photo was removed from your account, but the storage file could not be deleted.");
+  }
 }
 
 export function AccountPage() {
@@ -184,7 +252,7 @@ export function AccountPage() {
 
   const metadataName = metadataString(user, "full_name") || metadataString(user, "name");
   const displayName = displayNameFromForm(form, metadataName || user?.email?.split("@")[0] || "SkyNode traveler");
-  const avatarUrl = form.avatarUrl || userImage(user);
+  const avatarUrl = form.avatarUrl;
   const createdAt = user?.created_at ? new Date(user.created_at).toLocaleDateString() : "Unknown";
   const visibleTrips = createdTrips.slice(0, 4);
   const unlockedCodes = useMemo(() => new Set(missionUnlocks.map((unlock) => unlock.countryCode)), [missionUnlocks]);
@@ -207,7 +275,7 @@ export function AccountPage() {
     }));
   }
 
-  function handlePhotoFile(file: File | undefined) {
+  async function handlePhotoFile(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Choose an image file for your profile picture.");
@@ -218,17 +286,25 @@ export function AccountPage() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        const nextAvatarUrl = reader.result;
-        setForm((current) => ({ ...current, avatarUrl: nextAvatarUrl }));
-        setError("");
-        void saveAvatarUrl(nextAvatarUrl);
-      }
-    };
-    reader.onerror = () => setError("Could not read that image file.");
-    reader.readAsDataURL(file);
+    if (!supabase || !user) {
+      setError("Auth is disabled: missing Supabase environment variables.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const previousAvatarUrl = form.avatarUrl;
+      const nextAvatarUrl = await uploadProfileAvatar(user.id, file);
+      setForm((current) => ({ ...current, avatarUrl: nextAvatarUrl }));
+      await saveAvatarUrl(nextAvatarUrl);
+      await deleteProfileAvatar(previousAvatarUrl);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload profile photo.");
+      setSaving(false);
+    }
   }
 
   async function saveAvatarUrl(nextAvatarUrl: string) {
@@ -250,6 +326,7 @@ export function AccountPage() {
           birth_date: form.birthDate,
           home_city: form.homeCity.trim(),
           avatar_url: nextAvatarUrl,
+          avatar_removed: !nextAvatarUrl,
           bio: form.bio.trim(),
           interests: form.interests,
         },
@@ -260,6 +337,28 @@ export function AccountPage() {
       setSuccess(nextAvatarUrl ? "Profile photo updated." : "Profile photo removed.");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Failed to update profile photo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeProfilePhoto() {
+    const previousAvatarUrl = avatarUrl;
+
+    if (!previousAvatarUrl) {
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      setForm((current) => ({ ...current, avatarUrl: "" }));
+      await saveAvatarUrl("");
+      await deleteProfileAvatar(previousAvatarUrl);
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Failed to remove profile photo.");
     } finally {
       setSaving(false);
     }
@@ -286,6 +385,7 @@ export function AccountPage() {
           birth_date: form.birthDate,
           home_city: form.homeCity.trim(),
           avatar_url: form.avatarUrl.trim(),
+          avatar_removed: !form.avatarUrl.trim(),
           bio: form.bio.trim(),
           interests: form.interests,
         },
@@ -437,7 +537,7 @@ export function AccountPage() {
                   accept="image/*"
                   className="hidden"
                   onChange={(event) => {
-                    handlePhotoFile(event.target.files?.[0]);
+                    void handlePhotoFile(event.target.files?.[0]);
                     event.currentTarget.value = "";
                   }}
                 />
@@ -480,8 +580,7 @@ export function AccountPage() {
                       disabled={!avatarUrl}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                       onClick={() => {
-                        updateField("avatarUrl", "");
-                        void saveAvatarUrl("");
+                        void removeProfilePhoto();
                         setPhotoMenuOpen(false);
                       }}
                     >

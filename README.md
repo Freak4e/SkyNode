@@ -251,6 +251,7 @@ OPENROUTESERVICE_API_KEY=your_openrouteservice_key
 DATABASE_URL=your_supabase_postgres_pooler_url
 VITE_SUPABASE_URL=https://your-project-ref.supabase.co
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_SUPABASE_AVATAR_BUCKET=profile-avatars
 SUPABASE_SECRET_KEY=your_server_only_supabase_service_role_key
 
 # Public app URL
@@ -281,6 +282,32 @@ OPENSKY_TIMEOUT_MS=8500
 ```
 
 `VITE_SUPABASE_ANON_KEY` is safe for the browser. `SUPABASE_SECRET_KEY` is not safe for the browser and must never be exposed with a `VITE_` prefix.
+
+Profile pictures are stored in Supabase Storage. Create a public bucket named `profile-avatars` or set `VITE_SUPABASE_AVATAR_BUCKET` to your bucket name. Authenticated users need permission to upload and update files under their own user-id folder.
+
+Recommended Storage policies for `storage.objects`:
+
+```sql
+create policy "Public avatar read"
+on storage.objects for select
+using (bucket_id = 'profile-avatars');
+
+create policy "Users upload own avatar"
+on storage.objects for insert
+to authenticated
+with check (bucket_id = 'profile-avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "Users update own avatar"
+on storage.objects for update
+to authenticated
+using (bucket_id = 'profile-avatars' and (storage.foldername(name))[1] = auth.uid()::text)
+with check (bucket_id = 'profile-avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+
+create policy "Users delete own avatar"
+on storage.objects for delete
+to authenticated
+using (bucket_id = 'profile-avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+```
 
 For Supabase email confirmation in production, configure:
 

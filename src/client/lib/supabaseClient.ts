@@ -11,4 +11,13 @@ if (!isSupabaseConfigured) {
 
 // Important: do NOT call createClient with empty values.
 // Supabase will throw and crash the whole app, resulting in a blank page.
-export const supabase = isSupabaseConfigured ? createClient(supabaseUrl!, supabaseAnonKey!) : null;
+export const supabase = isSupabaseConfigured
+  ? createClient(supabaseUrl!, supabaseAnonKey!, {
+    auth: {
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      persistSession: true,
+      storageKey: "skynode-auth",
+    },
+  })
+  : null;

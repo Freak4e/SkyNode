@@ -84,6 +84,40 @@ jobs:
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Validate preview environment
+        run: |
+          env_file=".vercel/.env.preview.local"
+          required_vars=(
+            "VITE_SUPABASE_URL"
+            "VITE_SUPABASE_ANON_KEY"
+            "VITE_SUPABASE_AVATAR_BUCKET"
+            "DATABASE_URL"
+            "SUPABASE_SECRET_KEY"
+            "GEMINI_API_KEY"
+            "GEOAPIFY_API_KEY"
+            "OPENROUTESERVICE_API_KEY"
+          )
+
+          if [ ! -f "$env_file" ]; then
+            echo "Missing Vercel preview environment file: $env_file"
+            exit 1
+          fi
+
+          missing=()
+          for var_name in "${required_vars[@]}"; do
+            if ! grep -Eq "^${var_name}=.+" "$env_file"; then
+              missing+=("$var_name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required preview environment variables:\n'
+            printf ' - %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          echo "Preview environment validation passed."
+
       - name: Build Vercel artifacts
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
@@ -120,6 +154,40 @@ jobs:
 
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Validate production environment
+        run: |
+          env_file=".vercel/.env.production.local"
+          required_vars=(
+            "VITE_SUPABASE_URL"
+            "VITE_SUPABASE_ANON_KEY"
+            "VITE_SUPABASE_AVATAR_BUCKET"
+            "DATABASE_URL"
+            "SUPABASE_SECRET_KEY"
+            "GEMINI_API_KEY"
+            "GEOAPIFY_API_KEY"
+            "OPENROUTESERVICE_API_KEY"
+          )
+
+          if [ ! -f "$env_file" ]; then
+            echo "Missing Vercel production environment file: $env_file"
+            exit 1
+          fi
+
+          missing=()
+          for var_name in "${required_vars[@]}"; do
+            if ! grep -Eq "^${var_name}=.+" "$env_file"; then
+              missing+=("$var_name")
+            fi
+          done
+
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf 'Missing required production environment variables:\n'
+            printf ' - %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          echo "Production environment validation passed."
 
       - name: Build Vercel artifacts
         run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}

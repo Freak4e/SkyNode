@@ -33,6 +33,8 @@ export function profileFromUser(user: User | null | undefined): UserProfileSnaps
     || "Traveler";
   const avatarUrl = typeof metadata.avatar_url === "string" && metadata.avatar_url
     ? metadata.avatar_url
+    : metadata.avatar_removed === true
+    ? undefined
     : typeof identityData.avatar_url === "string" && identityData.avatar_url
     ? identityData.avatar_url
     : undefined;

@@ -20,6 +20,10 @@ type Props = { transparent?: boolean };
 
 function userImage(user: ReturnType<typeof useAuth>["user"]) {
   const metadata = user?.user_metadata || {};
+  if (metadata.avatar_removed === true) {
+    return "";
+  }
+
   const direct = metadata.avatar_url || metadata.picture;
   const identityData = user?.identities?.find((identity) => identity.identity_data)?.identity_data || {};
   const identityImage = identityData.avatar_url || identityData.picture;

@@ -118,12 +118,45 @@ jobs:
 
           echo "Preview environment validation passed."
 
-      - name: Build Vercel artifacts
+      - name: Export preview Vite environment
         run: |
           cp .vercel/.env.preview.local .env.production.local
-          set -a
-          source .vercel/.env.preview.local
-          set +a
+          node <<'NODE'
+          const fs = require("fs");
+          const envFile = ".vercel/.env.preview.local";
+          const required = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_AVATAR_BUCKET"];
+          const content = fs.readFileSync(envFile, "utf8");
+          const values = new Map();
+
+          for (const rawLine of content.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith("#")) continue;
+
+            const index = line.indexOf("=");
+            if (index === -1) continue;
+
+            const key = line.slice(0, index).trim();
+            let value = line.slice(index + 1).trim();
+
+            if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.slice(1, -1);
+            }
+
+            values.set(key, value);
+          }
+
+          const missing = required.filter((key) => !values.get(key));
+          if (missing.length) {
+            console.error("Missing Vite build variables:", missing.join(", "));
+            process.exit(1);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_ENV, required.map((key) => key + "=" + values.get(key)).join("\n") + "\n");
+          console.log("Preview Vite build variables exported.");
+          NODE
+
+      - name: Build Vercel artifacts
+        run: |
           node -e "const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_AVATAR_BUCKET']; const missing = required.filter((key) => !process.env[key]); if (missing.length) { console.error('Missing Vite build variables:', missing.join(', ')); process.exit(1); } console.log('Vite build variables are present.');"
           vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
@@ -195,12 +228,45 @@ jobs:
 
           echo "Production environment validation passed."
 
-      - name: Build Vercel artifacts
+      - name: Export production Vite environment
         run: |
           cp .vercel/.env.production.local .env.production.local
-          set -a
-          source .vercel/.env.production.local
-          set +a
+          node <<'NODE'
+          const fs = require("fs");
+          const envFile = ".vercel/.env.production.local";
+          const required = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_AVATAR_BUCKET"];
+          const content = fs.readFileSync(envFile, "utf8");
+          const values = new Map();
+
+          for (const rawLine of content.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith("#")) continue;
+
+            const index = line.indexOf("=");
+            if (index === -1) continue;
+
+            const key = line.slice(0, index).trim();
+            let value = line.slice(index + 1).trim();
+
+            if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.slice(1, -1);
+            }
+
+            values.set(key, value);
+          }
+
+          const missing = required.filter((key) => !values.get(key));
+          if (missing.length) {
+            console.error("Missing Vite build variables:", missing.join(", "));
+            process.exit(1);
+          }
+
+          fs.appendFileSync(process.env.GITHUB_ENV, required.map((key) => key + "=" + values.get(key)).join("\n") + "\n");
+          console.log("Production Vite build variables exported.");
+          NODE
+
+      - name: Build Vercel artifacts
+        run: |
           node -e "const required = ['VITE_SUPABASE_URL', 'VITE_SUPABASE_ANON_KEY', 'VITE_SUPABASE_AVATAR_BUCKET']; const missing = required.filter((key) => !process.env[key]); if (missing.length) { console.error('Missing Vite build variables:', missing.join(', ')); process.exit(1); } console.log('Vite build variables are present.');"
           vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 

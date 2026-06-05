@@ -119,7 +119,11 @@ jobs:
           echo "Preview environment validation passed."
 
       - name: Build Vercel artifacts
-        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -a
+          source .vercel/.env.preview.local
+          set +a
+          vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy preview
         id: deploy
@@ -190,7 +194,11 @@ jobs:
           echo "Production environment validation passed."
 
       - name: Build Vercel artifacts
-        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -a
+          source .vercel/.env.production.local
+          set +a
+          vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
       - name: Deploy production
         id: deploy

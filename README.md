@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo_skynode.png" alt="SkyNode logo" width="220" />
+</p>
+
 # SkyNode
 
 > AI-assisted flight discovery and trip planning for fast, affordable getaways.
@@ -16,6 +20,8 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
+- [Prerequisites](#prerequisites)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Application Flow](#application-flow)
@@ -24,12 +30,53 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - [Project Organization](#project-organization)
 - [API Surface](#api-surface)
 - [Environment Variables](#environment-variables)
-- [Install](#install)
 - [Usage](#usage)
+- [Testing](#testing)
+- [Quality Assurance](#quality-assurance)
 - [Deployment](#deployment)
 - [Known Limitations](#known-limitations)
 - [Repository Structure](#repository-structure)
-- [Project Status](#project-status)
+- [Authors](#authors)
+
+## Quick Start
+
+Install dependencies, create a local environment file, and start the development server:
+
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run dev
+```
+
+Open the Vite frontend:
+
+```text
+http://localhost:5173
+```
+
+For a production-style local run:
+
+```powershell
+npm run build
+npm start
+```
+
+Open the built application:
+
+```text
+http://localhost:3000
+```
+
+## Prerequisites
+
+- Node.js 22 LTS is recommended. Node.js 21 can require additional WebSocket handling for Supabase realtime internals.
+- npm for dependency installation and project scripts.
+- Supabase project for authentication, PostgreSQL data, and avatar storage.
+- Vercel project for production deployment.
+- Optional local PostgreSQL database for database integration tests.
+- Optional provider accounts and API keys for flight search, maps, routing, AI generation, travel mission validation, and live flight data.
+
+The application can run with partial provider configuration during development, but production features depend on the required environment variables described below.
 
 ## Features
 
@@ -193,7 +240,21 @@ Sensitive data is kept server-side. The client receives only the data needed for
 
 ## Project Organization
 
-The project work was organized with a lightweight Scrum process from **01.05.2026 to 06.06.2026**. Work was split into five sprints: the first sprint covered 01.05-10.05, and after that the project followed weekly sprints until 06.06. Progress was tracked through the repository, task/backlog notes, documentation updates, and regular Microsoft Teams calls for planning and review.
+SkyNode was organized with a lightweight Scrum workflow from **01.05.2026 to 06.06.2026**. The team worked in sprint cycles, maintained a backlog of planned work, and reviewed progress through regular communication and task tracking.
+
+### Communication
+
+Team communication was handled through a shared Discord workspace for daily collaboration, remote work, screen sharing, implementation discussions, and quick technical support. Communication with the professor and formal project review meetings were handled through Microsoft Teams.
+
+This split kept development communication fast while keeping academic supervision and milestone review in the official communication channel.
+
+### Management and Division of Work
+
+The project used Scrum-inspired planning with a Jira board for backlog management, sprint planning, task assignment, and progress tracking. Work items were organized into statuses such as **To Do**, **In Progress**, **In Review**, and **Done** so the team could clearly see what was planned, what was actively being implemented, and what had already been completed.
+
+![SkyNode Jira Scrum board](docs/screenshots/23-jira.png)
+
+The Jira board helped the team coordinate frontend, backend, provider integration, testing, deployment, and documentation tasks during the sprint cycle.
 
 | Sprint | Dates | Main focus |
 |--------|-------|------------|
@@ -206,8 +267,10 @@ The project work was organized with a lightweight Scrum process from **01.05.202
 The work process followed this rhythm:
 
 - Define and prioritize backlog items before each sprint.
+- Assign implementation tasks through Jira and keep progress visible on the board.
 - Implement features in small commits and verify them locally.
-- Review progress and blockers through Microsoft Teams calls.
+- Use Discord for daily collaboration and screen-sharing support.
+- Review progress and blockers through Microsoft Teams when formal coordination was needed.
 - Adjust the scope when external services caused deployment or timeout issues.
 - Document architecture, diagrams, limitations, and future improvements before final delivery.
 
@@ -243,6 +306,7 @@ The work process followed this rhythm:
 - `POST /api/trips/:tripId/messages`
 - `PATCH /api/trips/:tripId/itinerary`
 - `POST /api/chat`
+- `POST /api/auth/password-reset`
 - `DELETE /api/account`
 - `GET /api/notifications/unread`
 - `PATCH /api/notifications/:notificationId/read`
@@ -253,7 +317,22 @@ The work process followed this rhythm:
 
 ## Environment Variables
 
-Create a local `.env` file. Do not commit it.
+Create a local `.env` file from `.env.example`. Do not commit real secrets.
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Important environment rules:
+
+| Rule | Explanation |
+|------|-------------|
+| `VITE_*` variables are public | They are embedded into browser JavaScript during the Vite build. |
+| Server secrets must not use `VITE_` | Keys such as `SUPABASE_SECRET_KEY`, provider tokens, and database URLs must stay server-only. |
+| Vercel needs production variables | Variables used by the deployed app must exist in Vercel Project Settings or GitHub Actions secrets, depending on the deployment flow. |
+| Test database is separate | `TEST_DATABASE_URL` should point to a disposable local/test database, never production. |
+
+Core variables used by the application:
 
 ```env
 # Flight providers
@@ -344,13 +423,25 @@ For Supabase email confirmation in production, configure:
 - Site URL: `https://sky-node-three.vercel.app`
 - Redirect URLs: `https://sky-node-three.vercel.app/*`
 
-## Install
+## Usage
+
+Run the development server with Vite hot reload:
 
 ```powershell
-npm install
+npm run dev
 ```
 
-## Usage
+Open:
+
+```text
+http://localhost:5173
+```
+
+Run the web-only development server when the backend is already running separately:
+
+```powershell
+npm run dev:web
+```
 
 Build and run the production server locally:
 
@@ -365,24 +456,73 @@ Open:
 http://localhost:3000
 ```
 
-Run the development server with Vite hot reload:
-
-```powershell
-npm run dev
-npm run dev:web
-```
-
-Open:
-
-```text
-http://localhost:5173
-```
-
 If using Ollama locally, pull the configured model first:
 
 ```powershell
 ollama pull llama3:latest
 ```
+
+## Testing
+
+The repository includes unit, integration, and optional database integration tests. The test suite is designed so CI can run deterministic checks without requiring real third-party provider calls.
+
+### Unit Tests
+
+Unit tests cover backend service logic, itinerary/chat behavior, provider normalization, validation helpers, and shared parsing utilities.
+
+```powershell
+npm run test:unit
+```
+
+### Integration Tests
+
+Integration tests exercise backend API route behavior with controlled helpers and fixtures.
+
+```powershell
+npm run test:integration
+```
+
+### Database Integration Tests
+
+Database tests verify repository behavior against a real PostgreSQL database. These tests are skipped automatically when `TEST_DATABASE_URL` is not set.
+
+```powershell
+$env:TEST_DATABASE_URL="postgres://postgres:your_test_password@localhost:5432/skynode_test"
+npm run test:db
+```
+
+Database test guidance:
+
+- Use a dedicated database such as `skynode_test`.
+- Never point `TEST_DATABASE_URL` to production.
+- The tests clean and seed the data they need.
+- Run them before changing repository contracts, trip persistence, notifications, or liked-flight storage.
+
+### Production Build Check
+
+The production build validates TypeScript and Vite bundling:
+
+```powershell
+npm run build
+```
+
+## Quality Assurance
+
+SkyNode uses several quality checks before deployment:
+
+- TypeScript compilation through the production build.
+- Unit tests for backend functionality and shared utilities.
+- Integration tests for backend API route behavior.
+- Optional PostgreSQL integration tests for repositories.
+- SonarQube local code-quality review documented in [SkyNode SonarQube Report](docs/SkyNode_SonarQube_Report.docx).
+- Manual user-flow verification documented through the user manual and screenshots.
+
+Security and configuration notes:
+
+- Supabase anon key is public by design and may use the `VITE_` prefix.
+- Supabase service-role key, database URL, provider tokens, and AI keys are server-only secrets.
+- Authenticated API routes use backend middleware before reading or writing protected user data.
+- Avatar uploads are restricted with Supabase Storage policies under the signed-in user's folder.
 
 ## Deployment
 
@@ -393,7 +533,17 @@ SkyNode is configured for Vercel:
 - API function: `api/[...path].ts`
 - SPA fallback rewrite to `index.html`
 
-Required production environment variables should be added in Vercel Project Settings. Never upload `.env` to Git.
+Production deployments can be handled through GitHub Actions and the Vercel CLI. Vercel Git auto-deployment can be disabled in `vercel.json` to avoid duplicate deployments when a CI/CD workflow already deploys on push.
+
+Required production environment variables should be added in Vercel Project Settings or provided by GitHub Actions secrets before `vercel build`. Never upload `.env` to Git.
+
+Typical deployment flow:
+
+1. Push changes to GitHub.
+2. GitHub Actions installs dependencies.
+3. CI checks required public build variables.
+4. The project is built with `vercel build --prod`.
+5. The generated Vercel output is deployed with `vercel deploy --prebuilt --prod`.
 
 ### OpenSky proxy tunnel for production
 
@@ -465,9 +615,13 @@ docs/                       Architecture and sprint notes
 dist/                       Generated build output
 ```
 
-## Project Status
+## Authors
 
-SkyNode is an active bachelor-project prototype. The current focus is production polish, deployment readiness, richer travel workflows, and reliable provider behavior.
+SkyNode was developed as a final bachelor’s project by a team:
+
+- [Konstantin Mihajlov](https://github.com/kmihajlov)
+- [Anja Todorov](https://github.com/AnjaTodorov)
+- [Matej Filipov](https://github.com/Freak4e)
 
 ---
 

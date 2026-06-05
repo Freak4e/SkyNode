@@ -50,6 +50,7 @@ export const config = {
     clientId: process.env.OPENSKY_CLIENT_ID,
     clientSecret: process.env.OPENSKY_CLIENT_SECRET,
     useAuth: process.env.OPENSKY_USE_AUTH === "true",
+    proxySecret: process.env.OPENSKY_PROXY_SECRET,
     authTimeoutMs: Number(process.env.OPENSKY_AUTH_TIMEOUT_MS || 2500),
     timeoutMs: Number(process.env.OPENSKY_TIMEOUT_MS || 8500),
   },

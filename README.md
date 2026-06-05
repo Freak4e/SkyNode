@@ -21,6 +21,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - [Application Flow](#application-flow)
 - [Project Documentation](#project-documentation)
 - [Architecture](#architecture)
+- [Project Organization](#project-organization)
 - [API Surface](#api-surface)
 - [Environment Variables](#environment-variables)
 - [Install](#install)
@@ -39,7 +40,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - Trip planner with attractions, day-by-day itinerary generation, editable plans, and trip saving.
 - Saved trips, joined trips, invite links, trip visibility settings, and member/chat support.
 - Account page with profile management, travel mission progress, and trip statistics.
-- Live flights radar powered by OpenSky where available, with production-safe timeout behavior.
+- Live flights radar powered by OpenSky, with production traffic routed through a Cloudflare Tunnel proxy when Vercel cannot reach OpenSky reliably.
 - Supabase authentication with email signup, OAuth sign-in, password recovery, and server-side account deletion.
 
 ## Tech Stack
@@ -69,7 +70,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - ScrapingBee/Kayak provider path for live flight search experiments
 - Geoapify for attractions
 - OpenRouteService for route directions
-- OpenSky Network for aircraft telemetry where the network allows it
+- OpenSky Network for aircraft telemetry, optionally reached through a Cloudflare Tunnel proxy in production
 - Gemini or Ollama for AI itinerary/chat generation
 - Wikipedia/Wikimedia for destination imagery
 
@@ -113,6 +114,9 @@ The repository includes supporting project documents and diagrams for presentati
 
 - [SkyNode User Manual](docs/SkyNode_User_Manual.docx)
 - [SkyNode Technical Documentation](docs/SkyNode_Technical_Documentation.docx)
+- [SkyNode System Limitations](docs/SkyNode_System_Limitations.docx)
+- [SkyNode Future Improvements](docs/SkyNode_Future_Improvements.docx)
+- [SkyNode SonarQube Report](docs/SkyNode_SonarQube_Report.docx)
 
 ### Diagrams
 
@@ -128,11 +132,78 @@ The repository includes supporting project documents and diagrams for presentati
 
 ![SkyNode database schema diagram](docs/diagrams/03-DbSchema.png)
 
+#### Sequence Diagram
+
+![SkyNode sequence diagram](docs/diagrams/04-SequenceDiagram.png)
+
+#### Activity Diagram
+
+![SkyNode activity diagram](docs/diagrams/05-ActivityDiagram.png)
+
+#### Deployment Diagram
+
+![SkyNode deployment diagram](docs/diagrams/06-DeploymentDiagram.png)
+
 ## Architecture
 
 SkyNode is organized as a single TypeScript repository with a Vite frontend and an Express backend. The frontend talks to backend routes under `/api/*`. On Vercel, the static client is served from `dist/public`, while API requests are handled by the serverless entry in `api/[...path].ts`.
 
 The backend keeps route adapters thin and delegates feature logic into modules, providers, and infrastructure clients. Shared request and response types live in `src/shared` so the frontend and backend stay aligned.
+
+### Project Architecture
+
+The application is split into four main parts:
+
+- **Client application:** React pages, reusable UI components, API clients, authentication state, maps, forms, and trip planning screens. The client is responsible for user interaction, route navigation, rendering search results, showing destination boards, and displaying AI/trip workflows.
+- **Server API:** Express routes exposed through Vercel serverless functions. This layer validates requests, protects authenticated endpoints, coordinates provider calls, and returns JSON responses to the browser.
+- **Domain modules:** Feature-specific backend logic for trips, chat, account workflows, notifications, missions, geocoding, live flights, and itinerary generation. This keeps business logic separate from HTTP route wiring.
+- **External services:** Supabase, Gemini/Ollama, Travelpayouts, ScrapingBee/Kayak experiments, Geoapify, OpenRouteService, Wikimedia, and OpenSky. The app treats these services as replaceable providers behind internal API routes.
+
+This structure was chosen so the frontend never calls sensitive providers directly. Public browser code uses only safe keys such as the Supabase anon key, while server-only credentials stay inside Vercel environment variables.
+
+### Data Architecture
+
+SkyNode uses Supabase/PostgreSQL as the main persistent data layer. Authentication identity comes from Supabase Auth, while application data is stored through backend repositories and shared with the client through typed API responses.
+
+The main data areas are:
+
+- **Users and profiles:** Supabase Auth stores identity and sessions; profile/account workflows connect authenticated users to application features.
+- **Trips:** Saved trips contain trip metadata, generated itinerary content, visibility settings, owner information, members, join requests, invite links, and chat context.
+- **Liked flights and planning state:** Users can save flight options and reuse them in planning flows.
+- **Community data:** Public trips, joined trips, membership state, and trip messages are accessed through authenticated API routes.
+- **Provider data:** Flight offers, destination imagery, map data, attractions, directions, weather, and live aircraft positions are fetched from external providers and treated as transient data unless the user saves a trip or flight.
+
+Sensitive data is kept server-side. The client receives only the data needed for the current UI screen, and authenticated operations pass through backend middleware before reading or writing Supabase data.
+
+### Architectural Decisions
+
+- **React + Vite frontend:** Chosen for fast development, reusable component structure, and efficient production builds.
+- **TypeScript across frontend and backend:** Chosen to reduce mismatches between API responses, shared domain types, and UI state.
+- **Single repository:** Chosen because the project is a bachelor-project prototype with one deployable product. Keeping frontend, backend, shared types, docs, and scripts together makes development and review simpler.
+- **Express API wrapped by Vercel serverless routes:** Chosen so the same backend app can run locally with Node and in production through Vercel. This avoids maintaining separate local and deployed API implementations.
+- **Supabase for authentication and data:** Chosen to provide email/OAuth authentication, managed PostgreSQL storage, and a practical production-ready backend service without building a custom auth system.
+- **Server-side provider calls:** Chosen because API keys and scraping/provider credentials must not be exposed in browser JavaScript.
+- **Cloudflare Tunnel proxy for OpenSky:** Chosen because OpenSky requests from Vercel can time out or be blocked. The deployed app still exposes `/api/live-flights` on Vercel, but upstream OpenSky traffic can be routed through a controlled proxy tunnel.
+- **External AI provider abstraction:** Chosen so Gemini can be used in production while Ollama remains available for local experimentation.
+
+## Project Organization
+
+The project work was organized with a lightweight Scrum process from **01.05.2026 to 06.06.2026**. Work was split into four sprints, with progress tracked through the repository, task/backlog notes, documentation updates, and regular Microsoft Teams calls for planning and review.
+
+| Sprint | Dates | Main focus |
+|--------|-------|------------|
+| Sprint 1 | 01.05.2026 - 10.05.2026 | Requirements, feature scope, first UI structure, initial architecture, database planning |
+| Sprint 2 | 11.05.2026 - 20.05.2026 | Flight search, destination discovery, authentication, map-based pages |
+| Sprint 3 | 21.05.2026 - 31.05.2026 | AI assistant, trip planner, saved/community trips, Supabase workflows |
+| Sprint 4 | 01.06.2026 - 06.06.2026 | Vercel deployment, OpenSky proxy tunnel, testing, documentation, diagrams, final polish |
+
+The work process followed this rhythm:
+
+- Define and prioritize backlog items before each sprint.
+- Implement features in small commits and verify them locally.
+- Review progress and blockers through Microsoft Teams calls.
+- Adjust the scope when external services caused deployment or timeout issues.
+- Document architecture, diagrams, limitations, and future improvements before final delivery.
 
 ## API Surface
 
@@ -199,9 +270,13 @@ OLLAMA_MODEL=llama3:latest
 OLLAMA_TIMEOUT_MS=300000
 
 # Optional live flights
+OPENSKY_API_URL=https://opensky-network.org/api
+OPENSKY_TOKEN_URL=https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token
 OPENSKY_CLIENT_ID=your_opensky_client_id
 OPENSKY_CLIENT_SECRET=your_opensky_client_secret
 OPENSKY_USE_AUTH=false
+OPENSKY_PROXY_SECRET=only_needed_when_using_the_cloudflare_tunnel_proxy
+OPENSKY_AUTH_TIMEOUT_MS=2500
 OPENSKY_TIMEOUT_MS=8500
 ```
 
@@ -263,11 +338,49 @@ SkyNode is configured for Vercel:
 
 Required production environment variables should be added in Vercel Project Settings. Never upload `.env` to Git.
 
+### OpenSky proxy tunnel for production
+
+Live flight requests always enter the app through Vercel at `/api/live-flights`. In production, the backend can then forward the upstream OpenSky request through a small local proxy exposed with Cloudflare Tunnel. This avoids the Vercel-to-OpenSky timeout/blocking issue while keeping the public app URL unchanged.
+
+**Local development (`npm run dev`):** do not use the tunnel. Your machine talks to OpenSky directly through the default `OPENSKY_API_URL`. Set the tunnel URL only in **Vercel** for the deployed site, unless you are testing the proxy itself.
+
+1. Install [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/). If `cloudflared` is not on your PATH (common on Windows), add to `.env`:
+
+```env
+CLOUDFLARED_PATH=C:\Cloudflared\cloudflared.exe
+```
+
+2. In `.env` on the laptop, set `OPENSKY_PROXY_SECRET` to a long random string.
+3. Terminal A:
+
+```powershell
+npm run opensky:proxy
+```
+
+4. Terminal B:
+
+```powershell
+npm run opensky:tunnel
+```
+
+Copy the `https://....trycloudflare.com` URL from the tunnel output.
+
+5. In Vercel -> Environment Variables (Production):
+
+| Variable | Example |
+|----------|---------|
+| `OPENSKY_API_URL` | `https://YOUR-TUNNEL.trycloudflare.com/api` (must end with `/api`, not the tunnel root alone) |
+| `OPENSKY_TOKEN_URL` | `https://YOUR-TUNNEL.trycloudflare.com/auth/realms/opensky-network/protocol/openid-connect/token` (only if `OPENSKY_USE_AUTH=true`) |
+| `OPENSKY_PROXY_SECRET` | Same value as on the laptop |
+| `OPENSKY_CLIENT_ID` / `OPENSKY_CLIENT_SECRET` | If using authenticated OpenSky |
+
+Redeploy after changing env vars. Keep the proxy machine awake while live radar is needed. Quick Cloudflare tunnels get a new URL each run, so update `OPENSKY_API_URL` in Vercel whenever the tunnel URL changes.
+
 ## Known Limitations
 
 - SkyNode does not sell tickets or complete bookings. It helps users discover, compare, and plan.
 - Flight prices and route availability depend on third-party providers and may change.
-- OpenSky live aircraft data can be unreliable from serverless environments. The app handles timeouts gracefully, but production live radar may show an empty state if OpenSky does not respond quickly.
+- OpenSky live aircraft data can be unreliable from serverless environments. Use the laptop proxy + Cloudflare Tunnel above, or accept an empty live radar when OpenSky does not respond from Vercel.
 - AI-generated itineraries should be reviewed by the user before travel.
 
 ## Repository Structure

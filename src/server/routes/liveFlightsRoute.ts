@@ -76,7 +76,7 @@ liveFlightsRoute.get("/", async (req, res) => {
       headers.Authorization = `Bearer ${accessToken}`;
     }
 
-    const { data, warnings: requestWarnings } = await fetchOpenSkyStateGroups(urls, headers);
+    const { data, warnings: requestWarnings } = await fetchOpenSkyStateGroups(urls, openSkyUpstreamHeaders(headers));
     const allStates = data.flatMap((response) => response.states || []);
     const latestTime = data.reduce((latest, response) => Math.max(latest, response.time || 0), 0);
     const mapped = dedupeOpenSkyStates(allStates)
@@ -117,8 +117,13 @@ liveFlightsRoute.get("/", async (req, res) => {
   }
 });
 
+function openSkyApiBaseUrl(): string {
+  const base = config.openSky.apiUrl.replace(/\/$/, "");
+  return base.endsWith("/api") ? base : `${base}/api`;
+}
+
 function buildOpenSkyStatesUrl(bbox: { lamin: number; lomin: number; lamax: number; lomax: number }): URL {
-  const url = new URL(`${config.openSky.apiUrl.replace(/\/$/, "")}/states/all`);
+  const url = new URL(`${openSkyApiBaseUrl()}/states/all`);
   url.searchParams.set("lamin", String(bbox.lamin));
   url.searchParams.set("lomin", String(bbox.lomin));
   url.searchParams.set("lamax", String(bbox.lamax));
@@ -190,10 +195,10 @@ async function getOpenSkyAccessToken(): Promise<string> {
   try {
     const response = await fetch(config.openSky.tokenUrl, {
       method: "POST",
-      headers: {
+      headers: openSkyUpstreamHeaders({
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "application/json",
-      },
+      }),
       body,
       signal: controller.signal,
     });
@@ -216,6 +221,17 @@ async function getOpenSkyAccessToken(): Promise<string> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function openSkyUpstreamHeaders(headers: Record<string, string>): Record<string, string> {
+  if (!config.openSky.proxySecret) {
+    return headers;
+  }
+
+  return {
+    ...headers,
+    "x-proxy-secret": config.openSky.proxySecret,
+  };
 }
 
 function openSkyAuthWarning(error: unknown): string {
@@ -342,11 +358,13 @@ function windowlessTimeout(callback: () => void, timeoutMs: number): ReturnType<
 }
 
 export const __test = {
+  openSkyApiBaseUrl,
   buildOpenSkyStatesUrl,
   computeSampleSize,
   dedupeOpenSkyStates,
   mapOpenSkyState,
   openSkyAuthWarning,
+  openSkyUpstreamHeaders,
   parseBbox,
   parseExplicitLimit,
   parseSampleRatio,

@@ -11,7 +11,9 @@
     "test:integration": "tsc -p tsconfig.test.json && node dist/test/tests/integration/run-tests.js",
     "test:db": "tsc -p tsconfig.test.json && node dist/test/tests/integration/database/run-tests.js",
     "build": "tsc && vite build",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "opensky:proxy": "tsx scripts/opensky-proxy.ts",
+    "opensky:tunnel": "tsx scripts/opensky-tunnel.ts"
   },
   "dependencies": {
     "@lottiefiles/dotlottie-react": "^0.19.4",

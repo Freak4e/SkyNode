@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../auth/AuthContext";
 import logo from "../../../assets/logo_skynode.png";
 
-const columns = [
+const baseColumns = [
   {
     heading: "PLAN",
     links: [
@@ -23,12 +24,26 @@ const columns = [
     links: [
       { label: "My trips", to: "/trip-library" },
       { label: "Profile", to: "/account" },
-      { label: "Sign in", to: "/auth" },
     ],
   },
 ];
 
 export function Footer() {
+  const { user } = useAuth();
+  const columns = baseColumns.map((column) => (
+    column.heading === "ACCOUNT"
+      ? {
+        ...column,
+        links: [
+          ...column.links,
+          user
+            ? { label: "Travel missions", to: "/account" }
+            : { label: "Sign in", to: "/auth" },
+        ],
+      }
+      : column
+  ));
+
   return (
     <footer className="bg-slate-900 px-5 pb-8 pt-12 text-white sm:px-6 sm:pt-16">
       <div className="mx-auto max-w-6xl">
@@ -47,7 +62,7 @@ export function Footer() {
               <p className="mb-4 text-xs font-semibold tracking-widest text-slate-500">{col.heading}</p>
               <ul className="space-y-2.5">
                 {col.links.map((link) => (
-                  <li key={link.to}>
+                  <li key={`${link.label}-${link.to}`}>
                     <Link to={link.to} className="text-sm text-slate-400 no-underline transition-colors hover:text-white">
                       {link.label}
                     </Link>

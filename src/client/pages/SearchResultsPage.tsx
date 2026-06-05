@@ -312,16 +312,21 @@ function offerDisplayAmount(offer: FlightOffer, currency: CurrencyCode): number 
   return convertUsdAmount(amount, currency);
 }
 
-function formatDisplayPrice(pair: FlightPair, currency: CurrencyCode): string {
+function passengerMultiplier(passengers: number): number {
+  return Math.max(1, Math.floor(passengers || 1));
+}
+
+function formatDisplayPrice(pair: FlightPair, currency: CurrencyCode, passengers = 1): string {
   const outboundPrice = offerDisplayAmount(pair.outbound, currency);
   const inboundPrice = pair.inbound ? offerDisplayAmount(pair.inbound, currency) : 0;
-  const totalPrice = outboundPrice + inboundPrice;
 
-  if (totalPrice >= 9999) {
+  if (outboundPrice >= 9999 || inboundPrice >= 9999) {
     return pair.outbound.priceText || pair.inbound?.priceText || "--";
   }
 
-  return formatCurrencyAmount(convertUsdAmount(totalPrice, currency), currency);
+  const totalPrice = (outboundPrice + inboundPrice) * passengerMultiplier(passengers);
+
+  return formatCurrencyAmount(totalPrice, currency);
 }
 
 function formatClockTime(value: string): string {
@@ -1571,7 +1576,7 @@ export function SearchResultsPage() {
       return;
     }
 
-    const request = likedRequestForPair(pair, tripType, date, returnDate, currency);
+    const request = likedRequestForPair(pair, tripType, date, returnDate, currency, passengers);
     const fingerprint = likedFlightFingerprint(request);
     const existing = likedFlights.find((item) => item.fingerprint === fingerprint);
     setLikedFlightBusy(fingerprint);
@@ -1612,7 +1617,6 @@ export function SearchResultsPage() {
         destinationCode: sanitizeDestinationCode(outboundTo.code || draft.destinationCode, destinationName),
         destinationName,
         startDate: date || draft.startDate,
-        travelers: passengers || draft.travelers,
         manual: false,
       });
     }
@@ -1623,7 +1627,7 @@ export function SearchResultsPage() {
       tripType,
       departureDate: date,
       returnDate: tripType === "return" ? returnDate : undefined,
-      totalPriceText: formatDisplayPrice(pair, currency),
+      totalPriceText: formatDisplayPrice(pair, currency, passengers),
     });
 
     if (draft) {
@@ -1638,6 +1642,7 @@ export function SearchResultsPage() {
       fromName: outboundFrom.cityName || outboundFrom.name,
       toName: outboundTo.cityName || outboundTo.name,
       destination: outboundTo.cityName || outboundTo.name,
+      travelers: String(passengers),
     });
 
     navigate(`/planner?${plannerParams.toString()}`);
@@ -1861,7 +1866,7 @@ export function SearchResultsPage() {
                       : mode === "earliest"
                         ? "First departure"
                         : sorted[0]
-                          ? formatDisplayPrice(sorted[0], currency)
+                          ? formatDisplayPrice(sorted[0], currency, passengers)
                           : "No price"}
                   </span>
                 </button>
@@ -1935,6 +1940,7 @@ export function SearchResultsPage() {
                   onOpenDetails={setDetailsPair}
                   onOpenPlanner={openPlanner}
                   pair={pair}
+                  passengers={passengers}
                   resultFrom={resultFrom}
                   resultFromPlaces={resultFromPlaces}
                   resultTo={resultTo}
@@ -1963,6 +1969,7 @@ export function SearchResultsPage() {
                       onOpenDetails={setDetailsPair}
                       onOpenPlanner={openPlanner}
                       pair={pair}
+                      passengers={passengers}
                       resultFrom={resultFrom}
                       resultFromPlaces={resultFromPlaces}
                       resultTo={resultTo}
@@ -2007,6 +2014,7 @@ type FlightOfferCardProps = Readonly<{
   onOpenDetails: (pair: FlightPair) => void;
   onOpenPlanner: (pair: FlightPair) => void;
   pair: FlightPair;
+  passengers: number;
   resultFrom: Place;
   resultFromPlaces: Place[];
   resultTo: Place;
@@ -2017,8 +2025,8 @@ type FlightOfferCardProps = Readonly<{
 }>;
 
 function FlightOfferCard(props: FlightOfferCardProps) {
-  const displayPrice = formatDisplayPrice(props.pair, props.currency);
-  const likedRequest = likedRequestForPair(props.pair, props.tripType, props.date, props.returnDate, props.currency);
+  const displayPrice = formatDisplayPrice(props.pair, props.currency, props.passengers);
+  const likedRequest = likedRequestForPair(props.pair, props.tripType, props.date, props.returnDate, props.currency, props.passengers);
   const likedFingerprint = likedFlightFingerprint(likedRequest);
   const isLiked = props.likedFlights.some((item) => item.fingerprint === likedFingerprint);
   const outboundOrigin = resolveOfferPlace(props.resultFromPlaces, props.pair.outbound.searchFrom, props.resultFrom);
@@ -2056,7 +2064,8 @@ function FlightOfferCard(props: FlightOfferCardProps) {
         )}
         <p className="text-3xl font-black text-slate-950">{displayPrice}</p>
         <p className="mt-1 text-xs text-slate-500">
-          {props.tripType === "return" ? "Return total estimate" : "One-way estimate"}
+          {props.tripType === "return" ? "Return total estimate" : "One-way total estimate"}
+          {props.passengers > 1 ? ` for ${props.passengers} passengers` : ""}
         </p>
 
         <button
@@ -2071,14 +2080,14 @@ function FlightOfferCard(props: FlightOfferCardProps) {
   );
 }
 
-function likedRequestForPair(pair: FlightPair, tripType: TripType, date: string, returnDate: string, currency: CurrencyCode): SaveLikedFlightRequest {
+function likedRequestForPair(pair: FlightPair, tripType: TripType, date: string, returnDate: string, currency: CurrencyCode, passengers = 1): SaveLikedFlightRequest {
   return {
     outbound: pair.outbound,
     inbound: pair.inbound,
     tripType,
     departureDate: date,
     returnDate: tripType === "return" ? returnDate : undefined,
-    totalPriceText: formatDisplayPrice(pair, currency),
+    totalPriceText: formatDisplayPrice(pair, currency, passengers),
   };
 }
 

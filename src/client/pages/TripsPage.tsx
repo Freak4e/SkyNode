@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, BookOpen, Building2, Compass, CopyPlus, Globe2, Lock, MapPin, Mountain, Plus, Search, Sparkles, Star, Tent, Users, Utensils, Waves, X } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { listSavedTrips } from "../api/assistantApi";
 import { saveTrip } from "../api/plannerApi";
-import { listJoinedTrips, profileFromUser } from "../api/tripsApi";
+import { profileFromUser } from "../api/tripsApi";
 import { useAuth } from "../auth/AuthContext";
 import { Footer } from "../components/Footer";
 import { Navbar } from "../components/Navbar";
@@ -32,7 +31,6 @@ export function TripsPage() {
   const [selectedTrip, setSelectedTrip] = useState<DemoTripTemplate | null>(null);
   const [savingId, setSavingId] = useState("");
   const [error, setError] = useState("");
-  const [hasLibraryTrips, setHasLibraryTrips] = useState(false);
 
   const filteredTrips = useMemo(() => {
     const cleanQuery = query.trim().toLowerCase();
@@ -68,32 +66,6 @@ export function TripsPage() {
     if (trip) {
       void cloneTrip(trip);
     }
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadTripLibraryState() {
-      if (authLoading) return;
-
-      if (!user) {
-        setHasLibraryTrips(false);
-        return;
-      }
-
-      try {
-        const [createdTrips, joinedTrips] = await Promise.all([listSavedTrips(), listJoinedTrips()]);
-        if (!cancelled) setHasLibraryTrips(createdTrips.length + joinedTrips.length > 0);
-      } catch {
-        if (!cancelled) setHasLibraryTrips(false);
-      }
-    }
-
-    void loadTripLibraryState();
-
-    return () => {
-      cancelled = true;
-    };
   }, [authLoading, user]);
 
   async function cloneTrip(trip: DemoTripTemplate) {
@@ -164,15 +136,13 @@ export function TripsPage() {
               </label>
 
               {!authLoading && user && (
-                <div className={`grid gap-2 ${hasLibraryTrips ? "sm:grid-cols-2" : ""}`}>
+                <div className="grid gap-2 sm:grid-cols-2">
                   <ButtonLink to="/planner" tone="primary" size="md" icon={<Plus className="h-4 w-4" />} className="w-full">
                     New trip
                   </ButtonLink>
-                  {hasLibraryTrips && (
-                    <ButtonLink to="/trip-library" tone="ghost" size="md" icon={<BookOpen className="h-4 w-4" />} className="w-full">
-                      Your trips
-                    </ButtonLink>
-                  )}
+                  <ButtonLink to="/trip-library" tone="ghost" size="md" icon={<BookOpen className="h-4 w-4" />} className="w-full">
+                    Your trips
+                  </ButtonLink>
                 </div>
               )}
             </div>

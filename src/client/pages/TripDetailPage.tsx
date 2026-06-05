@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
+  ArrowLeft,
   CalendarDays,
   Check,
   Copy,
@@ -405,6 +406,17 @@ export function TripDetailPage() {
       <Navbar />
 
       <PageShell>
+        <div className="mb-5">
+          <button
+            type="button"
+            onClick={() => navigate(isPersonalSavedTrip ? "/trip-library" : "/explore-trips")}
+            className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 no-underline hover:text-blue-600"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            {isPersonalSavedTrip ? "Back to trip library" : "Back to community"}
+          </button>
+        </div>
+
         {refreshing && (
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white px-3 py-1.5 text-xs font-black text-sky-700 shadow-sm">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -992,7 +1004,7 @@ function TripSettingsModal(props: TripSettingsModalProps) {
             <textarea value={props.description} onChange={(event) => props.onDescriptionChange(event.target.value)} rows={3} className="form-field min-h-[96px]" />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-bold text-slate-600">Max travelers</span>
+            <span className="mb-1 block text-sm font-bold text-slate-600">Community capacity</span>
             <input type="number" min={2} max={20} value={props.maxMembers} onChange={(event) => props.onMaxMembersChange(Number(event.target.value) || 2)} className="form-field" />
           </label>
         </div>

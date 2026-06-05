@@ -120,9 +120,9 @@ export function TripsPage() {
 
       <PageShell>
         <HeroPanel
-          eyebrow={<><Sparkles className="h-3.5 w-3.5" />Explore community trips</>}
+          eyebrow={<><Sparkles className="h-3.5 w-3.5" />Explore trending trips</>}
           title="Find a trip you love. Make it your own."
-          description="Browse itineraries shared by real travelers, or hand the brief to our AI planner and get a custom day-by-day plan in seconds."
+          description="Search curated itineraries by destination, style, budget, or interest. Guests can preview trips, while signed-in travelers can save templates, create AI plans, and open the community workspace."
           actions={
             <div className="grid w-full min-w-0 gap-3 lg:w-96">
               <label className="relative block w-full min-w-0">
@@ -130,7 +130,7 @@ export function TripsPage() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search destination or trip style"
+                  placeholder="Search Lisbon, food, beaches, relaxed..."
                   className="w-full rounded-2xl border border-white/15 bg-white/10 py-4 pl-11 pr-4 text-sm font-bold text-white outline-none placeholder:text-slate-300 transition focus:border-cyan-200 focus:bg-white/15"
                 />
               </label>
@@ -286,16 +286,22 @@ export function TripsPage() {
 
         <div className="mt-5 grid gap-5 md:grid-cols-3">
           <CtaActionCard
-            to="/planner"
+            to={user ? "/planner" : "/auth"}
+            state={user ? undefined : { from: "/planner" }}
+            locked={!authLoading && !user}
             icon={<Sparkles className="h-4 w-4" />}
             title="Make a new trip"
-            description="Start the 4-step wizard and let AI draft your itinerary."
+            description={user ? "Start the 4-step wizard and let AI draft your itinerary." : "Register or sign in to start the wizard and save the AI itinerary to your account."}
+            actionLabel={user ? "Open" : "Start planning"}
           />
           <CtaActionCard
-            to="/explore-trips"
+            to={user ? "/explore-trips" : "/auth"}
+            state={user ? undefined : { from: "/explore-trips" }}
+            locked={!authLoading && !user}
             icon={<Users className="h-4 w-4" />}
             title="View community"
-            description="See trips travelers are planning and remixing this week."
+            description={user ? "See trips travelers are planning and remixing this week." : "Register or sign in to open community trips and collaborate with other travelers."}
+            actionLabel={user ? "Open" : "Open community"}
           />
           <CtaActionCard
             to="/destinations"
@@ -310,6 +316,7 @@ export function TripsPage() {
         <TripPreviewModal
           trip={selectedTrip}
           saving={savingId === selectedTrip.id}
+          signedIn={Boolean(user)}
           onClose={() => setSelectedTrip(null)}
           onClone={() => cloneTrip(selectedTrip)}
         />
@@ -376,13 +383,19 @@ function CtaStat({ label, value }: { label: string; value: string }) {
 }
 
 function CtaActionCard({
+  actionLabel = "Open",
   description,
   icon,
+  locked = false,
+  state,
   title,
   to,
 }: {
+  actionLabel?: string;
   description: string;
   icon: ReactNode;
+  locked?: boolean;
+  state?: unknown;
   title: string;
   to: string;
 }) {
@@ -391,10 +404,18 @@ function CtaActionCard({
       <span className="relative mb-5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-cyan-400 text-white shadow-lg shadow-cyan-500/20 transition group-hover:rotate-3 group-hover:scale-105 [&_svg]:h-5 [&_svg]:w-5">
         {icon}
       </span>
-      <span className="relative mb-2 block font-black leading-tight text-slate-950">{title}</span>
+      <span className="relative mb-2 flex items-center gap-2 font-black leading-tight text-slate-950">
+        {title}
+        {locked && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-700 ring-1 ring-amber-100">
+            <Lock className="h-3 w-3" />
+            Account
+          </span>
+        )}
+      </span>
       <span className="relative block max-w-72 text-sm leading-6 text-slate-500">{description}</span>
-      <Link to={to} className="relative mt-auto self-end inline-flex items-center gap-2 pt-5 text-sm font-black text-blue-700 no-underline transition hover:text-cyan-600">
-        Open
+      <Link to={to} state={state} className="relative mt-auto self-end inline-flex items-center gap-2 pt-5 text-sm font-black text-blue-700 no-underline transition hover:text-cyan-600">
+        {actionLabel}
         <ArrowRight className="h-4 w-4" />
       </Link>
     </AccentCard>
@@ -405,11 +426,13 @@ function TripPreviewModal({
   onClone,
   onClose,
   saving,
+  signedIn,
   trip,
 }: {
   onClone: () => void;
   onClose: () => void;
   saving: boolean;
+  signedIn: boolean;
   trip: DemoTripTemplate;
 }) {
   const imageUrl = useDestinationImage(trip.imageCity || trip.city, trip.country);
@@ -506,7 +529,7 @@ function TripPreviewModal({
                 <article className="rounded-2xl border border-dashed border-blue-200 bg-blue-50 p-4 text-center sm:p-5">
                   <p className="mx-auto flex max-w-md items-center justify-center gap-2 text-sm font-black leading-6 text-blue-700">
                     <Lock className="h-4 w-4 shrink-0" />
-                    Preview of {previewDays.length} of {trip.itinerary.days.length} days — clone to unlock the full itinerary
+                    Preview of {previewDays.length} of {trip.itinerary.days.length} days - {signedIn ? "clone to unlock the full itinerary" : "sign in to save and unlock the full itinerary"}
                   </p>
                 </article>
               </div>
@@ -516,10 +539,12 @@ function TripPreviewModal({
         <footer className="shrink-0 border-t border-slate-200 bg-white/95 p-4 shadow-2xl backdrop-blur sm:px-7">
           <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-bold leading-6 text-slate-500">
-              Save a private copy, then edit days, budget, pace, and activities in your planner.
+              {signedIn
+                ? "Save a private copy, then edit days, budget, pace, and activities in your planner."
+                : "Create an account to save this template, unlock the full itinerary, and edit it in your planner."}
             </p>
-            <Button type="button" icon={<CopyPlus className="h-4 w-4" />} disabled={saving} onClick={onClone} size="lg" className="w-full shrink-0 sm:w-auto">
-              {saving ? "Saving..." : "Take as your own"}
+            <Button type="button" icon={signedIn ? <CopyPlus className="h-4 w-4" /> : <Lock className="h-4 w-4" />} disabled={saving} onClick={onClone} size="lg" className="w-full shrink-0 sm:w-auto">
+              {saving ? "Saving..." : signedIn ? "Take as your own" : "Sign in to save trip"}
             </Button>
           </div>
         </footer>

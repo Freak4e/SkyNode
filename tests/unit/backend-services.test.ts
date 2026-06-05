@@ -9,6 +9,8 @@ import type { FlightOffer, FlightSearchResponse } from "../../src/shared/types.j
 test("flight search service normalizes inputs and supported options", () => {
   assert.deepEqual(flightSearch.normalizeCodes(" skp, jfk,SKP "), ["SKP", "JFK"]);
   assert.deepEqual(flightSearch.normalizeCodes(["skp", " jfk ", "skp"]), ["SKP", "JFK"]);
+  assert.ok(flightSearch.expandOriginCodes(["ANY"]).length > 1);
+  assert.deepEqual(flightSearch.expandOriginCodes(["ANY", "BER"]), ["BER"]);
   assert.equal(flightSearch.normalizeProvider("auto"), "auto");
   assert.equal(flightSearch.normalizeProvider("unknown" as never), "scrapingbee");
   assert.equal(flightSearch.normalizeCurrency("EUR"), "EUR");

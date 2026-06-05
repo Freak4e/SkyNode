@@ -73,7 +73,7 @@ function authBackTarget(state: unknown): string {
 
   const target = String((state as { from?: unknown }).from || "").trim();
 
-  if (!target.startsWith("/") || target.startsWith("//") || target.startsWith("/auth")) {
+  if (!target.startsWith("/") || target.startsWith("//") || target.startsWith("/auth") || target === "/account") {
     return "/";
   }
 

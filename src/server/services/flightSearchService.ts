@@ -1,9 +1,10 @@
+import { expandOriginCodes } from "../../shared/flightSearchConstants.js";
 import { searchKayakWithScrapingBee } from "../providers/scrapingBeeProvider.js";
 import { searchTravelpayoutsCachedData } from "../providers/travelpayoutsDataProvider.js";
 import type { CurrencyCode, FlightSearchInput, FlightSearchResponse, NormalizedFlightSearchInput, ProviderId } from "../../shared/types.js";
 
 export async function searchFlights(input: FlightSearchInput): Promise<FlightSearchResponse> {
-  const fromCodes = normalizeCodes(input.from);
+  const fromCodes = expandOriginCodes(normalizeCodes(input.from));
   const toCodes = normalizeCodes(input.to);
 
   if (fromCodes.length > 1 || toCodes.length > 1) {
@@ -188,6 +189,7 @@ function normalizeCurrency(currency: CurrencyCode | undefined): CurrencyCode {
 
 export const __test = {
   dedupeOffers,
+  expandOriginCodes,
   normalizeCodes,
   normalizeCurrency,
   normalizeInput,

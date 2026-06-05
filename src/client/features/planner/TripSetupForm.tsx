@@ -23,6 +23,7 @@ import { searchPlaces } from "../../api/flightsApi";
 import { searchCities, type CitySearchResult } from "../../api/geocodeApi";
 import { HeroPanel } from "../../components/ui";
 import type { FlightOffer, ItineraryDay, ItineraryItem, LikedFlight, Place, TravelPace, TripBudgetCategory } from "../../../shared/types.js";
+import { tripReturnDate } from "./plannerDraft";
 import { budgetCategoriesFromPercentages, budgetCategoryDefinitions, normalizeBudgetCategories, plannerInterests } from "./plannerUtils";
 
 type TripSetupFormProps = Readonly<{
@@ -109,9 +110,11 @@ export function TripSetupForm(props: TripSetupFormProps) {
   const budgetPerDay = Math.round(props.budgetAmount / Math.max(props.days, 1));
   const flightSearchUrl = buildFlightSearchUrl({
     date: props.startDate,
+    days: props.days,
     destinationCode: props.destinationCode,
     destinationName: props.destinationName,
     originCode: props.originCode,
+    travelers: props.travelers,
   });
   const summaryRows = useMemo(() => ([
     ["Destination", props.destinationName || "-"],
@@ -877,10 +880,14 @@ function handlePositiveNumber(rawValue: string, min: number, max: number, onChan
   onChange(Math.min(max, Math.max(min, Math.round(value))));
 }
 
-function buildFlightSearchUrl(input: { date: string; destinationCode: string; destinationName: string; originCode: string }): string {
+function buildFlightSearchUrl(input: { date: string; days: number; destinationCode: string; destinationName: string; originCode: string; travelers: number }): string {
   const params = new URLSearchParams({
     date: input.date,
+    days: String(input.days),
+    passengers: String(input.travelers),
+    returnDate: tripReturnDate(input.date, input.days),
     toName: input.destinationName,
+    tripType: "return",
     source: "planner",
   });
 

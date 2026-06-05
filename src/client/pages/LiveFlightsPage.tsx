@@ -110,7 +110,7 @@ export function LiveFlightsPage() {
   const [flightStatus, setFlightStatus] = useState<"loading" | "ready" | "error">("loading");
   const [updatedAt, setUpdatedAt] = useState<string | undefined>();
   const [expandedMap, setExpandedMap] = useState(false);
-  const [selectedRegionId, setSelectedRegionId] = useState("europe");
+  const [selectedRegionId, setSelectedRegionId] = useState("world");
   const [selectedFlightId, setSelectedFlightId] = useState<string | null>(null);
   const [feedQuery, setFeedQuery] = useState("");
   const feedListRef = useRef<HTMLDivElement>(null);

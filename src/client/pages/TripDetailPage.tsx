@@ -44,6 +44,14 @@ import { FilterDropdown } from "../components/FilterDropdown";
 import { Button, ButtonLink, Card, EmptyState, PageShell } from "../components/ui";
 import { ItineraryTimeline } from "../features/planner/ItineraryTimeline";
 import { budgetCategoryDefinitions, itineraryBudgetSpend, normalizeBudgetCategories, parseMoney } from "../features/planner/plannerUtils";
+import {
+  BUDGET_STYLE_LABEL,
+  formatItineraryCostText,
+  formatTripUsd,
+  hasPlannedTripBudget,
+  PLANNED_BUDGET_LABEL,
+  tripBudgetPlanCopy,
+} from "../utils/tripCostLabels.js";
 import { CommunityItineraryView } from "../features/trip-community/CommunityItineraryView";
 import { TripRoomHero } from "../features/trip-community/TripRoomHero";
 import { TripVisibilityBadge } from "../features/trip-community/TripVisibilityBadge";
@@ -534,7 +542,7 @@ export function TripDetailPage() {
 
 function heroDescription(trip: SavedTripDetail, isPersonalSavedTrip: boolean, routeLabel: string, spotsLeft: number): string {
   if (isPersonalSavedTrip) {
-    return `${trip.days} days from ${formatTripDate(trip.startDate)} · ${routeLabel} · $${trip.estimatedTotalCost.toLocaleString()} estimate`;
+    return `${trip.days} days from ${formatTripDate(trip.startDate)} · ${routeLabel} · ${formatItineraryCostText(trip.estimatedTotalCost)}`;
   }
 
   return `${trip.days} days from ${formatTripDate(trip.startDate)} · ${spotsLeft} spots left · Hosted by ${trip.ownerName || "Traveler"}`;
@@ -641,7 +649,10 @@ function PersonalTripOverview({ routeLabel, trip }: Readonly<{ routeLabel: strin
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <OverviewStat icon={MapPin} label="Destination" value={routeLabel} />
           <OverviewStat icon={CalendarDays} label="Dates" value={`${formatTripDate(trip.startDate)} · ${trip.days} days`} />
-          <OverviewStat icon={Wallet} label="Budget" value={`${trip.budget} · $${trip.estimatedTotalCost.toLocaleString()}`} />
+          <OverviewStat icon={Wallet} label={BUDGET_STYLE_LABEL} value={trip.budget} />
+          {hasPlannedTripBudget(trip) && (
+            <OverviewStat icon={Wallet} label={PLANNED_BUDGET_LABEL} value={formatTripUsd(trip.budgetAmount!)} />
+          )}
           <OverviewStat icon={Sparkles} label="Pace" value={trip.pace} />
         </div>
         <TripBudgetPlan trip={trip} />
@@ -682,11 +693,14 @@ function CommunityTripOverview(props: CommunityTripOverviewProps) {
         <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-600">
           {props.trip.description || `A ${props.trip.pace} ${props.trip.days}-day trip around ${props.cityName} with a ${props.trip.budget} budget focus.`}
         </p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <OverviewStat icon={MapPin} label="Destination" value={props.cityName} />
           <OverviewStat icon={CalendarDays} label="Starts" value={formatTripDate(props.trip.startDate)} />
           <OverviewStat icon={Users} label="Group size" value={`${props.trip.memberCount || 1}/${props.trip.maxMembers || 8} travelers`} />
-          <OverviewStat icon={Wallet} label="Estimate" value={`$${props.trip.estimatedTotalCost.toLocaleString()}`} />
+          {hasPlannedTripBudget(props.trip) && (
+            <OverviewStat icon={Wallet} label={PLANNED_BUDGET_LABEL} value={formatTripUsd(props.trip.budgetAmount!)} />
+          )}
+          <OverviewStat icon={Wallet} label={BUDGET_STYLE_LABEL} value={props.trip.budget} />
         </div>
         <TripBudgetPlan trip={props.trip} />
         <TripTagList tags={tags} tone="blue" />
@@ -698,7 +712,9 @@ function CommunityTripOverview(props: CommunityTripOverviewProps) {
 }
 
 function TripBudgetPlan({ trip }: Readonly<{ trip: SavedTripDetail }>) {
-  const totalBudget = trip.budgetAmount || trip.estimatedTotalCost;
+  const usesPlannedBudget = hasPlannedTripBudget(trip);
+  const totalBudget = usesPlannedBudget ? trip.budgetAmount! : trip.estimatedTotalCost;
+  const planCopy = tripBudgetPlanCopy(trip);
   const categories = normalizeBudgetCategories(trip.budgetCategories, totalBudget);
   const flightSpend = selectedFlightTotal(trip.selectedFlights || (trip.selectedFlight ? [trip.selectedFlight] : []));
   const itinerarySpend = itineraryBudgetSpend(trip.itinerary.days);
@@ -714,10 +730,10 @@ function TripBudgetPlan({ trip }: Readonly<{ trip: SavedTripDetail }>) {
     <div className="mt-6 rounded-3xl border border-slate-100 bg-slate-50 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-sm font-black text-slate-950">Budget plan</p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">Allocated planning budget compared with known trip costs.</p>
+          <p className="text-sm font-black text-slate-950">{planCopy.title}</p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">{planCopy.description}</p>
         </div>
-        <p className="text-sm font-black text-blue-600">${totalBudget.toLocaleString()}</p>
+        <p className="text-sm font-black text-blue-600">{planCopy.totalLabel}</p>
       </div>
       <div className="mt-4 space-y-3">
         {categories.map((category, index) => {

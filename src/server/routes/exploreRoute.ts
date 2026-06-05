@@ -29,11 +29,14 @@ exploreRoute.get("/", async (req, res) => {
 
     const uniqueDestinations = Array.from(new Set(deals.map((deal) => deal.destination))).slice(0, 60);
     const placesByCode = new Map<string, Place>();
+    const cityPlaceLookups = new Map<string, Promise<Place[]>>();
 
     await Promise.all(uniqueDestinations.map(async (code) => {
       const results = await searchPlaces(code);
       const best = results.find((place) => place.code === code) || results[0];
-      if (best) placesByCode.set(code, best);
+      if (!best) return;
+
+      placesByCode.set(code, await withCityCoordinates(best, results, cityPlaceLookups));
     }));
 
     const enriched = deals.map((deal) => ({
@@ -53,3 +56,34 @@ exploreRoute.get("/", async (req, res) => {
   }
 });
 
+async function withCityCoordinates(place: Place, knownPlaces: Place[], cityPlaceLookups: Map<string, Promise<Place[]>>): Promise<Place> {
+  if (place.type === "city" || !place.cityName) {
+    return place;
+  }
+
+  const citySearchKey = place.cityName.trim().toLowerCase();
+  if (!cityPlaceLookups.has(citySearchKey)) {
+    cityPlaceLookups.set(citySearchKey, searchPlaces(place.cityName));
+  }
+
+  const city = findMatchingCityPlace(place, knownPlaces) || findMatchingCityPlace(place, await cityPlaceLookups.get(citySearchKey)!);
+  if (!city?.coordinates) {
+    return place;
+  }
+
+  return {
+    ...place,
+    coordinates: city.coordinates,
+  };
+}
+
+function findMatchingCityPlace(place: Place, candidates: Place[]): Place | undefined {
+  const cityName = place.cityName.trim().toLowerCase();
+  const cityCode = place.cityCode?.trim().toUpperCase();
+
+  return candidates.find((candidate) => {
+    if (candidate.type !== "city" || !candidate.coordinates) return false;
+    if (cityCode && candidate.code.toUpperCase() === cityCode) return true;
+    return candidate.cityName.trim().toLowerCase() === cityName || candidate.name.trim().toLowerCase() === cityName;
+  });
+}

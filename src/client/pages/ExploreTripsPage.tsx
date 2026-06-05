@@ -10,6 +10,7 @@ import { Navbar } from "../components/Navbar";
 import { Button, ButtonLink, EmptyState, HeroPanel, PageShell } from "../components/ui";
 import { TripCommunityCard } from "../features/trip-community/TripCommunityCard";
 import { tripDisplayCity, useDestinationImage } from "../utils/destinationImage";
+import { formatTripUsd, ITINERARY_COST_LABEL } from "../utils/tripCostLabels.js";
 import type { SavedTripDetail, SavedTripSummary } from "../../shared/types.js";
 
 const budgetOptions = [
@@ -418,7 +419,7 @@ function CommunityTripPreviewModal({
           <aside className="grid content-start gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <div className="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-1">
               <PreviewInfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Duration" value={`${trip.days} days`} />
-              <PreviewInfoRow icon={<CircleDollarSign className="h-3.5 w-3.5" />} label="Budget" value={`$${trip.estimatedTotalCost.toLocaleString()}`} />
+              <PreviewInfoRow icon={<CircleDollarSign className="h-3.5 w-3.5" />} label={ITINERARY_COST_LABEL} value={formatTripUsd(trip.estimatedTotalCost)} />
               <PreviewInfoRow icon={<Users className="h-3.5 w-3.5" />} label="Pace" value={trip.pace} />
               <PreviewInfoRow icon={<Star className="h-3.5 w-3.5 fill-emerald-500 text-emerald-500" />} label="Rating" value={ratingCount ? `${ratingAverage.toFixed(1)} (${ratingCount})` : "No ratings"} />
             </div>

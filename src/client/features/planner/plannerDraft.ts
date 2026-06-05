@@ -63,13 +63,29 @@ export function sanitizeDestinationCode(code: string, destinationName: string): 
 }
 
 export function tripReturnDate(startDate: string, days: number): string {
-  const start = new Date(`${startDate}T00:00:00`);
+  const start = parseDateOnly(startDate);
   if (Number.isNaN(start.getTime())) {
     return startDate;
   }
 
   start.setDate(start.getDate() + Math.max(days - 1, 0));
-  return start.toISOString().slice(0, 10);
+  return formatDateOnly(start);
+}
+
+function parseDateOnly(value: string): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return new Date(Number.NaN);
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function formatDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function createEmptyPlannerDraft(overrides: Partial<PlannerDraft> = {}): PlannerDraft {

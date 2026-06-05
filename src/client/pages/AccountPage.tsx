@@ -259,7 +259,12 @@ export function AccountPage() {
   const nextLockedCountry = missionCountries.find((country) => !unlockedCodes.has(country.code)) || missionCountries[0];
 
   if (!loading && !user) {
-    return <Navigate to="/auth" replace state={{ from: "/account" }} />;
+    return <Navigate to="/auth" replace state={{ from: "/" }} />;
+  }
+
+  async function handleSignOut() {
+    await signOut();
+    navigate("/auth", { replace: true, state: { from: "/" } });
   }
 
   function updateField(field: keyof ProfileForm, value: string) {
@@ -528,7 +533,7 @@ export function AccountPage() {
             />
             <div className="absolute inset-0 bg-linear-to-t from-white via-white/5 to-transparent" />
           </div>
-          <div className="flex flex-wrap items-end justify-between gap-5 px-6 pb-6">
+          <div className="flex flex-wrap items-end justify-between gap-5 px-4 pb-5 sm:px-6 sm:pb-6">
             <div className="flex min-w-0 flex-1 flex-wrap items-end gap-4">
               <div className="relative -mt-16">
                 <input
@@ -551,10 +556,10 @@ export function AccountPage() {
                     <img
                       src={avatarUrl}
                       alt=""
-                      className="h-28 w-28 rounded-3xl border-4 border-white bg-white object-contain shadow-md transition group-hover:brightness-95"
+                      className="h-24 w-24 rounded-3xl border-4 border-white bg-white object-contain shadow-md transition group-hover:brightness-95 sm:h-28 sm:w-28"
                     />
                   ) : (
-                    <div className="grid h-28 w-28 place-items-center rounded-3xl border-4 border-white bg-slate-900 text-white shadow-md transition group-hover:bg-slate-800">
+                    <div className="grid h-24 w-24 place-items-center rounded-3xl border-4 border-white bg-slate-900 text-white shadow-md transition group-hover:bg-slate-800 sm:h-28 sm:w-28">
                       <UserRound className="h-9 w-9" />
                     </div>
                   )}
@@ -596,7 +601,7 @@ export function AccountPage() {
                 <p className="mt-2 text-xs font-bold text-slate-400">Member since {createdAt}</p>
               </div>
             </div>
-            <Button type="button" tone="ghost" onClick={() => void signOut()} icon={<LogOut className="h-4 w-4" />}>
+            <Button type="button" tone="ghost" className="w-full sm:w-auto" onClick={() => void handleSignOut()} icon={<LogOut className="h-4 w-4" />}>
               Sign out
             </Button>
           </div>
@@ -607,7 +612,7 @@ export function AccountPage() {
 
         <section className="space-y-6">
           <div className="grid items-stretch gap-6 lg:grid-cols-[1fr_340px]">
-            <Card as="form" className="p-6" onSubmit={handleSaveProfile}>
+            <Card as="form" className="p-4 sm:p-6" onSubmit={handleSaveProfile}>
               <div className="relative flex flex-wrap items-start justify-between gap-4 pr-12">
                 <AccountSectionHeading
                   eyebrow="Profile"
@@ -675,7 +680,7 @@ export function AccountPage() {
 
               {editing && (
                 <div className="mt-6 flex justify-end">
-                  <Button type="submit" disabled={saving} icon={saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}>
+                  <Button type="submit" className="w-full sm:w-auto" disabled={saving} icon={saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}>
                     {saving ? "Saving..." : "Save profile"}
                   </Button>
                 </div>
@@ -737,7 +742,7 @@ export function AccountPage() {
                 title="Trips you created"
                 text="A cleaner view of your saved itineraries and trip rooms."
               />
-              <ButtonLink to="/trip-library" tone="ghost">Open all trips</ButtonLink>
+              <ButtonLink to="/trip-library" tone="ghost" className="w-full sm:w-auto">Open all trips</ButtonLink>
             </div>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -855,7 +860,7 @@ function TravelMissionsCard({
   return (
     <Card as="section" className="overflow-hidden p-0">
       <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_440px]">
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <AccountSectionHeading
               eyebrow={<><Trophy className="h-4 w-4" />Travel Proof Missions</>}
@@ -863,7 +868,7 @@ function TravelMissionsCard({
               text="Upload a photo with the requested gesture and a recognizable landmark. AI checks face, gesture, and location evidence before unlocking a country."
               className="max-w-2xl"
             />
-            <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm">
+            <div className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-sm sm:w-auto">
               <p className="text-2xl font-black leading-none">{unlockedCodes.size}/{missionCountries.length}</p>
               <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-white/60">Unlocked</p>
             </div>
@@ -922,7 +927,7 @@ function TravelMissionsCard({
           </div>
         </div>
 
-        <div className="relative min-h-56 overflow-hidden bg-linear-to-br from-sky-50 via-white to-cyan-50 p-5 text-slate-950">
+        <div className="relative min-h-56 overflow-hidden bg-linear-to-br from-sky-50 via-white to-cyan-50 p-4 text-slate-950 sm:p-5">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_20%,rgba(45,212,191,0.16),transparent_32%),radial-gradient(circle_at_18%_78%,rgba(56,189,248,0.14),transparent_34%)]" />
           <div className="relative flex h-full flex-col justify-between">
             <div>
@@ -931,7 +936,7 @@ function TravelMissionsCard({
                 <button
                   type="button"
                   onClick={() => setMapExpanded(true)}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:text-sky-700 hover:ring-sky-200"
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-black text-slate-700 shadow-sm ring-1 ring-slate-200 transition hover:-translate-y-0.5 hover:text-sky-700 hover:ring-sky-200"
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                   Expand
@@ -997,18 +1002,18 @@ function TravelMissionModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/55 p-4 backdrop-blur-sm sm:items-center">
       <button type="button" className="absolute inset-0" aria-label="Close travel mission" onClick={onClose} />
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+      <div className="relative flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-cyan-600">Verify {country.name}</p>
-            <h2 className="mt-1 text-2xl font-black text-slate-950">Travel proof mission</h2>
+            <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">Travel proof mission</h2>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 hover:text-slate-900" aria-label="Close">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="grid gap-5 p-6 md:grid-cols-[1fr_220px]">
+        <div className="grid min-h-0 gap-5 overflow-y-auto p-4 sm:p-6 md:grid-cols-[1fr_220px]">
           <div>
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-sm font-black text-slate-950">Required photo</p>
@@ -1155,7 +1160,7 @@ function WorldMissionMap({
   }
 
   return (
-    <div className={`relative overflow-hidden ${compact ? "-mx-5 mb-2 aspect-[1.8] min-h-60" : "rounded-3xl border border-sky-100 bg-white/80 shadow-[0_24px_80px_rgba(14,165,233,0.12)] backdrop-blur aspect-[1.8] min-h-[30rem]"}`}>
+      <div className={`relative overflow-hidden ${compact ? "-mx-4 mb-2 aspect-[1.8] min-h-44 sm:-mx-5 sm:min-h-60" : "rounded-3xl border border-sky-100 bg-white/80 shadow-[0_24px_80px_rgba(14,165,233,0.12)] backdrop-blur aspect-[1.8] min-h-72 sm:min-h-[30rem]"}`}>
       <svg ref={svgRef} viewBox="0 0 900 500" className={`absolute inset-0 h-full w-full ${compact ? "" : "cursor-grab active:cursor-grabbing"}`} role="img" aria-label="Travel mission world map">
         {!compact && <rect width="900" height="500" rx="28" fill="rgba(240,249,255,0.85)" />}
         {!compact && <path d="M0 390 C160 348 302 432 456 388 C594 349 722 358 900 314 L900 500 L0 500 Z" fill="rgba(207,250,254,0.38)" />}
@@ -1241,13 +1246,13 @@ function TravelMissionMapModal({
   unlockedCodes: Set<string>;
 }) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <button type="button" className="absolute inset-0" aria-label="Close world map" onClick={onClose} />
-      <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+      <div className="relative flex max-h-[94dvh] w-full max-w-6xl flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl sm:max-h-[92vh] sm:rounded-3xl">
+        <div className="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5">
           <div>
             <p className="text-xs font-black uppercase tracking-widest text-cyan-600">World mission map</p>
-            <h2 className="mt-1 text-2xl font-black text-slate-950">Locked and unlocked countries</h2>
+            <h2 className="mt-1 text-xl font-black text-slate-950 sm:text-2xl">Locked and unlocked countries</h2>
             <p className="mt-1 text-sm font-semibold text-slate-500">Click a country to start its travel proof mission.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-slate-100 text-slate-500 hover:text-slate-900" aria-label="Close">

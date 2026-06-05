@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { CalendarDays, CircleDollarSign, MapPin, Star, Tags, UserRound } from "lucide-react";
 import type { SavedTripSummary } from "../../../shared/types.js";
 import { tripDisplayCity, useDestinationImage } from "../../utils/destinationImage.js";
+import { formatItineraryCostText } from "../../utils/tripCostLabels.js";
 import { ButtonLink, Card } from "../../components/ui.js";
 import { TripVisibilityBadge } from "./TripVisibilityBadge.js";
 
@@ -142,7 +143,7 @@ export function TripCommunityCard({
           </p>
           <p className="flex items-center gap-2">
             <CircleDollarSign className="h-4 w-4 shrink-0 text-blue-500" />
-            ${trip.estimatedTotalCost.toLocaleString()} estimate
+            {formatItineraryCostText(trip.estimatedTotalCost)}
           </p>
         </div>
 

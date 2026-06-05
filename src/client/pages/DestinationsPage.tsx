@@ -25,6 +25,7 @@ import { Link } from "react-router-dom";
 import { Navbar } from "../components/Navbar";
 import { Footer } from "../components/Footer";
 import { AccentCard, HeroPanel, SectionHeader } from "../components/ui";
+import { ANY_ORIGIN_CODE, ANY_ORIGIN_HUBS, expandOriginCodes } from "../../shared/flightSearchConstants.js";
 import type { CurrencyCode, ExploreDeal, Place } from "../../shared/types.js";
 import { fetchExploreDeals } from "../api/exploreApi";
 import { searchPlaces } from "../api/flightsApi";
@@ -191,7 +192,7 @@ export function DestinationsPage() {
                     <Expand className="h-4 w-4" />
                     Expand map
                   </button>
-                  <ExploreMap deals={mappableDeals} />
+                  <ExploreMap deals={mappableDeals} departure={origin} currency={currency} />
                 </div>
               </AccentCard>
             </div>
@@ -213,7 +214,7 @@ export function DestinationsPage() {
                     No destination deals were returned for this route, so sample offers remain visible. Try a larger origin city like Vienna, Zagreb, Belgrade, London, or Paris.
                   </p>
                 )}
-                <DealCarousel deals={visibleDeals} />
+                <DealCarousel deals={visibleDeals} departure={origin} currency={currency} />
               </div>
             </aside>
           </div>
@@ -230,7 +231,7 @@ export function DestinationsPage() {
             >
               <X className="h-5 w-5" />
             </button>
-            <ExploreMap deals={mappableDeals} expanded />
+            <ExploreMap deals={mappableDeals} departure={origin} currency={currency} expanded />
           </div>
         </div>
       )}
@@ -614,7 +615,7 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
   );
 }
 
-function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
+function DealCarousel({ deals, departure, currency }: { deals: ExploreDeal[]; departure: Place | null; currency: CurrencyCode }) {
   const [sortMode, setSortMode] = useState<DealSortMode>("cheap");
   const [activeIndex, setActiveIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -648,7 +649,7 @@ function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
   return (
     <div className="mt-5 flex flex-1 flex-col">
       <div className="flex flex-1" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
-        {activeDeal && <DealBoard key={`${activeDeal.origin}-${activeDeal.destination}-${activeDeal.price}-${activeDeal.departDate}`} deal={activeDeal} />}
+        {activeDeal && <DealBoard key={`${activeDeal.origin}-${activeDeal.destination}-${activeDeal.price}-${activeDeal.departDate}`} deal={activeDeal} departure={departure} currency={currency} />}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
@@ -706,13 +707,13 @@ function DealCarousel({ deals }: { deals: ExploreDeal[] }) {
   );
 }
 
-function DealBoard({ deal }: { deal: ExploreDeal }) {
+function DealBoard({ deal, departure, currency }: { deal: ExploreDeal; departure: Place | null; currency: CurrencyCode }) {
   const rawName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || "";
   const name = normalizeDestinationName(rawName, deal.destination);
   const country = deal.destinationPlace?.countryName || "";
   const coordinates = deal.destinationPlace?.coordinates;
   const airportName = deal.destinationPlace?.mainAirportName || deal.destinationPlace?.name || "";
-  const searchLink = buildInternalSearchLink(deal);
+  const searchLink = buildInternalSearchLink(deal, departure, currency);
 
   return (
     <Link
@@ -934,7 +935,7 @@ function EmptyMapState() {
   );
 }
 
-function ExploreMap({ deals, expanded = false }: { deals: ExploreDeal[]; expanded?: boolean }) {
+function ExploreMap({ deals, departure, currency, expanded = false }: { deals: ExploreDeal[]; departure: Place | null; currency: CurrencyCode; expanded?: boolean }) {
   const mapElementRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -994,13 +995,13 @@ function ExploreMap({ deals, expanded = false }: { deals: ExploreDeal[]; expande
         icon: L.divIcon({
           className: "",
           html: dealMarkerHtml(deal.destination, city, price),
-          iconSize: [160, 56],
-          iconAnchor: [80, 56],
+          iconSize: [160, 64],
+          iconAnchor: [80, 64],
         }),
       });
 
       marker.on("click", () => {
-        window.location.assign(buildInternalSearchLink(deal));
+        window.location.assign(buildInternalSearchLink(deal, departure, currency));
       });
 
       clusterGroup.addLayer(marker);
@@ -1009,7 +1010,7 @@ function ExploreMap({ deals, expanded = false }: { deals: ExploreDeal[]; expande
     if (bounds.isValid()) {
       map.fitBounds(bounds.pad(0.25), { maxZoom: 5 });
     }
-  }, [deals]);
+  }, [currency, deals, departure]);
 
   return (
     <>
@@ -1061,7 +1062,7 @@ function createDealClusterGroup(): L.MarkerClusterGroup {
 
 function dealMarkerHtml(code: string, city: string, price: string): string {
   return `
-    <div class="group relative -translate-x-1/2 -translate-y-full">
+    <div class="group flex w-[160px] flex-col items-center">
       <div class="whitespace-nowrap rounded-3xl border border-white bg-white/95 px-3.5 py-2.5 text-left shadow-xl shadow-slate-900/15 ring-1 ring-stone-200 backdrop-blur">
         <div class="flex items-center gap-2">
           <span class="flex h-7 w-7 items-center justify-center rounded-2xl bg-sky-50 text-[10px] font-black text-sky-700">${code}</span>
@@ -1102,16 +1103,27 @@ function formatMoney(value: number, currency: CurrencyCode): string {
   }).format(value);
 }
 
-function buildInternalSearchLink(deal: ExploreDeal): string {
+function buildInternalSearchLink(deal: ExploreDeal, departure: Place | null, currency: CurrencyCode): string {
   const cityName = deal.destinationPlace?.cityName || deal.destinationPlace?.name || deal.destination;
+  const usesAnyOrigin = deal.origin.toUpperCase() === ANY_ORIGIN_CODE;
+  const selectedDepartureCode = departure?.code?.trim().toUpperCase() || "";
+  const fromCodes = usesAnyOrigin
+    ? expandOriginCodes(selectedDepartureCode && selectedDepartureCode !== ANY_ORIGIN_CODE ? [selectedDepartureCode] : [ANY_ORIGIN_CODE])
+    : [deal.origin.trim().toUpperCase()];
+  const fromLabel = usesAnyOrigin && fromCodes.length > 1
+    ? "Anywhere"
+    : (departure?.cityName || departure?.name || deal.origin);
   const params = new URLSearchParams({
-    from: deal.origin,
+    from: usesAnyOrigin && fromCodes.length > 1 ? ANY_ORIGIN_CODE : fromCodes[0],
     to: deal.destination,
+    fromAll: fromCodes.join(","),
+    toAll: deal.destination,
     date: deal.departDate || new Date().toISOString().slice(0, 10),
-    fromName: deal.origin,
+    fromName: fromLabel,
     toName: cityName,
     tripType: "one-way",
     passengers: "1",
+    currency,
   });
 
   return `/search?${params.toString()}`;

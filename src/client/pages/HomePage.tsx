@@ -1,4 +1,6 @@
-import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router-dom";
 import { geoGraticule10, geoOrthographic, geoPath } from "d3-geo";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
@@ -166,7 +168,7 @@ function SearchDropdown({
   const ref = useOutsideClose<HTMLDivElement>(() => setOpen(false));
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className={`relative ${open ? "z-[140]" : "z-20"}`}>
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -178,7 +180,7 @@ function SearchDropdown({
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-60 mt-2 max-h-56 w-48 overflow-y-auto rounded-2xl border border-white/70 bg-white p-1 shadow-2xl shadow-slate-900/15">
+        <div className="absolute left-0 top-full z-[160] mt-2 max-h-56 w-48 overflow-y-auto rounded-2xl border border-white/70 bg-white p-1 shadow-2xl shadow-slate-900/15">
           {children(() => setOpen(false))}
         </div>
       )}
@@ -250,8 +252,11 @@ function HomeDatePicker({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const [visibleMonth, setVisibleMonth] = useState(() => parseLocalDate(value));
-  const ref = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const calendarRef = useRef<HTMLDivElement>(null);
+  const calendarOpen = open && !disabled;
   const minDate = min ? parseLocalDate(min) : null;
   const year = visibleMonth.getFullYear();
   const month = visibleMonth.getMonth();
@@ -263,6 +268,56 @@ function HomeDatePicker({
     ...Array.from({ length: daysInMonth }, (_, index) => new Date(year, month, index + 1)),
   ];
 
+  const updateCalendarPosition = useCallback(() => {
+    const wrapper = wrapperRef.current;
+
+    if (!wrapper) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const viewportMargin = 12;
+    const availableWidth = Math.max(280, window.innerWidth - viewportMargin * 2);
+    const width = window.innerWidth < 640 ? availableWidth : 256;
+    const left = Math.min(Math.max(rect.right - width, viewportMargin), window.innerWidth - width - viewportMargin);
+    const spaceBelow = window.innerHeight - rect.bottom - viewportMargin;
+
+    setMenuStyle({
+      left,
+      maxHeight: Math.max(260, Math.min(420, spaceBelow - 12)),
+      top: rect.bottom + 12,
+      width,
+    });
+  }, []);
+
+  useEffect(() => {
+    function handleClick(event: MouseEvent) {
+      const target = event.target as Node;
+
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(target) &&
+        !calendarRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  useEffect(() => {
+    if (!calendarOpen) return undefined;
+
+    updateCalendarPosition();
+    window.addEventListener("resize", updateCalendarPosition);
+    window.addEventListener("scroll", updateCalendarPosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updateCalendarPosition);
+      window.removeEventListener("scroll", updateCalendarPosition, true);
+    };
+  }, [calendarOpen, updateCalendarPosition]);
+
   function moveMonth(step: number) {
     setVisibleMonth(new Date(year, month + step, 1));
   }
@@ -272,8 +327,59 @@ function HomeDatePicker({
     setOpen(false);
   }
 
+  const calendar = calendarOpen ? (
+    <div
+      ref={calendarRef}
+      className="fixed z-[9999] overflow-y-auto rounded-2xl border border-white/70 bg-white p-3 shadow-2xl shadow-slate-900/15"
+      style={menuStyle}
+    >
+      <div className="mb-4 flex items-center justify-between">
+        <button type="button" onClick={() => moveMonth(-1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
+          ‹
+        </button>
+        <p className="text-sm font-black text-slate-950">
+          {new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(visibleMonth)}
+        </p>
+        <button type="button" onClick={() => moveMonth(1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
+          ›
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
+        {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className="mt-2 grid grid-cols-7 gap-1">
+        {cells.map((date, index) => {
+          if (!date) return <span key={`empty-${index}`} />;
+
+          const dateValue = toDateValue(date);
+          const isSelected = dateValue === value;
+          const isDisabled = Boolean(minDate && date < minDate);
+
+          return (
+            <button
+              key={dateValue}
+              type="button"
+              onClick={() => pickDate(date)}
+              disabled={isDisabled}
+              className={`h-8 rounded-lg text-sm font-black transition ${
+                isSelected
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
+                  : isDisabled
+                  ? "cursor-not-allowed text-slate-300"
+                  : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
+              }`}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  ) : null;
+
   return (
-    <div ref={ref} className="relative min-h-14 rounded-2xl border border-white/60 bg-white/75 px-4 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50">
+    <div ref={wrapperRef} className={`relative min-h-14 rounded-2xl border border-white/60 bg-white/75 px-4 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50 ${open ? "z-[140]" : "z-20"}`}>
       <p className="text-xs text-slate-400 font-medium mb-1">{label}</p>
       {disabled ? (
         <p className="text-slate-400 text-sm font-medium">{disabledText || "Disabled"}</p>
@@ -291,52 +397,7 @@ function HomeDatePicker({
         </button>
       )}
 
-      {open && !disabled && (
-        <div className="absolute right-0 top-full z-60 mt-3 w-64 rounded-2xl border border-white/70 bg-white p-3 shadow-2xl shadow-slate-900/15 max-[640px]:right-auto max-[640px]:left-0 max-[640px]:w-[calc(100vw-2rem)]">
-          <div className="mb-4 flex items-center justify-between">
-            <button type="button" onClick={() => moveMonth(-1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
-              ‹
-            </button>
-            <p className="text-sm font-black text-slate-950">
-              {new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(visibleMonth)}
-            </p>
-            <button type="button" onClick={() => moveMonth(1)} className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 hover:bg-slate-200">
-              ›
-            </button>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-black uppercase tracking-wider text-slate-400">
-            {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => <span key={day}>{day}</span>)}
-          </div>
-          <div className="mt-2 grid grid-cols-7 gap-1">
-            {cells.map((date, index) => {
-              if (!date) return <span key={`empty-${index}`} />;
-
-              const dateValue = toDateValue(date);
-              const isSelected = dateValue === value;
-              const isDisabled = Boolean(minDate && date < minDate);
-
-              return (
-                <button
-                  key={dateValue}
-                  type="button"
-                  onClick={() => pickDate(date)}
-                  disabled={isDisabled}
-                  className={`h-8 rounded-lg text-sm font-black transition ${
-                    isSelected
-                      ? "bg-blue-600 text-white shadow-md shadow-blue-500/20"
-                      : isDisabled
-                      ? "cursor-not-allowed text-slate-300"
-                      : "text-slate-700 hover:bg-blue-50 hover:text-blue-700"
-                  }`}
-                >
-                  {date.getDate()}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {calendar && typeof document !== "undefined" ? createPortal(calendar, document.body) : calendar}
     </div>
   );
 }
@@ -488,7 +549,7 @@ export function HomePage() {
       <Navbar transparent />
 
       {/* ── HERO ── */}
-      <section className="relative flex min-h-screen max-w-full flex-col items-center justify-start overflow-x-hidden overflow-y-visible px-3 pb-12 pt-28 sm:justify-center sm:pt-24">
+      <section className="relative isolate flex min-h-screen max-w-full flex-col items-center justify-start overflow-x-hidden overflow-y-visible px-3 pb-12 pt-28 sm:justify-center sm:pt-24">
         {/* Hero image */}
         <img
           src={heroBanner}
@@ -535,19 +596,19 @@ export function HomePage() {
         {/* Search box */}
         <form
           onSubmit={handleSearch}
-          className="relative z-10 mx-auto w-full max-w-5xl min-w-0 px-0 sm:px-4"
+          className="relative z-[80] mx-auto w-full max-w-5xl min-w-0 px-0 sm:px-4"
         >
-          <div className="min-w-0 rounded-2xl border border-white/45 bg-white/70 p-3 shadow-2xl shadow-slate-900/20 backdrop-blur-xl">
+          <div className="relative z-[90] min-w-0 overflow-visible rounded-2xl border border-white/45 bg-white/70 p-3 shadow-2xl shadow-slate-900/20 backdrop-blur-xl">
             {/* Top options row */}
-            <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-slate-200/60 px-1 pb-3">
+            <div className="relative z-[120] mb-3 flex flex-wrap items-center gap-1 border-b border-slate-200/60 px-1 pb-3">
               <TripTypeDropdown value={tripType} onChange={setTripType} />
               <PassengerDropdown value={passengers} onChange={setPassengers} />
             </div>
 
             {/* Main search row */}
-            <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)] lg:grid-cols-[minmax(150px,0.6fr)_44px_minmax(150px,0.6fr)_170px_170px_auto]">
+            <div className="relative z-[110] grid min-w-0 items-start gap-2 overflow-visible sm:grid-cols-[minmax(0,1fr)_44px_minmax(0,1fr)] lg:grid-cols-[minmax(150px,0.6fr)_44px_minmax(150px,0.6fr)_170px_170px_auto]">
               {/* FROM */}
-              <div className="min-w-0 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50 sm:col-span-1">
+              <div className="relative z-30 min-w-0 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm transition focus-within:z-[150] focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50 sm:col-span-1">
                 <MultiPlacePicker
                   label="From"
                   values={fromPlaces}
@@ -572,7 +633,7 @@ export function HomePage() {
               </button>
 
               {/* TO */}
-              <div className="min-w-0 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm transition focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50 sm:col-span-1">
+              <div className="relative z-30 min-w-0 rounded-2xl border border-white/60 bg-white/75 px-3 py-2 shadow-sm transition focus-within:z-[150] focus-within:border-blue-300 focus-within:ring-4 focus-within:ring-blue-50 sm:col-span-1">
                 <MultiPlacePicker
                   label="To"
                   values={toPlaces}
@@ -582,7 +643,7 @@ export function HomePage() {
               </div>
 
               {/* DEPARTURE */}
-              <div className="sm:col-span-3 lg:col-span-1">
+              <div className="relative z-20 sm:col-span-3 lg:col-span-1">
                 <HomeDatePicker
                   label="Departure"
                   value={date}
@@ -596,7 +657,7 @@ export function HomePage() {
               </div>
 
               {/* RETURN */}
-              <div className="sm:col-span-3 lg:col-span-1">
+              <div className="relative z-20 sm:col-span-3 lg:col-span-1">
                 <HomeDatePicker
                   label="Return"
                   value={returnDate}

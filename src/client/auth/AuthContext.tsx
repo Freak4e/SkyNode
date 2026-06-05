@@ -18,6 +18,7 @@ type AuthContextValue = {
   ) => Promise<"created" | "already_exists" | "confirmation_required">;
   signInWithProvider: (provider: Provider, redirectTo: string) => Promise<void>;
   signOut: () => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -129,6 +130,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signOut() {
       if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
       const { error } = await supabase.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
+    },
+    async updatePassword(password: string) {
+      if (!supabase) throw new Error("Auth is disabled: missing Supabase environment variables.");
+      const { error } = await supabase.auth.updateUser({ password });
 
       if (error) {
         throw error;

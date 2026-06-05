@@ -1,64 +1,58 @@
 # Sprint Plan
 
-The project is planned as five short Scrum-style iterations.
+SkyNode was organized as five Scrum-style iterations from 01.05.2026 to 06.06.2026. The first sprint covered 01.05-10.05, and the remaining work followed weekly sprint cycles until final delivery. Planning, review, and blocker discussions were handled through repository updates, backlog notes, and Microsoft Teams calls.
 
-## Sprint 1: Flight Search + Architecture
+## Sprint 1: 01.05.2026 - 10.05.2026
 
-Expected result: the user searches for flights and sees normalized results.
+Expected result: define the scope, establish the base architecture, and prepare the first user-facing structure.
 
-- Flight search UI.
-- Airport/city autocomplete.
-- REST endpoint for flight search.
-- Provider layer for Travelpayouts and ScrapingBee.
-- Initial filtering/sorting structure.
-- Initial data model notes.
-- Unit/integration test structure.
+- Requirements and feature scope.
+- Initial React/Vite frontend structure.
+- Initial Express/API architecture.
+- Database planning and data-model notes.
+- First flight search and place-autocomplete direction.
+- Initial documentation and repository organization.
 
-## Sprint 2: Itinerary + Attractions
+## Sprint 2: 11.05.2026 - 17.05.2026
 
-Expected result: the user generates a daily itinerary from a selected destination/flight context.
+Expected result: the user can search for flights and start exploring destinations.
 
-- Status: Sprint 2 MVP implemented.
-- Geoapify Places integration for destination attractions.
-- Local Ollama itinerary generator.
-- Structured JSON itinerary response.
-- Planner UI with day-by-day itinerary display.
-- Save trip draft to Supabase PostgreSQL.
-- Database schema auto-created for saved trips, attractions, itinerary days, and itinerary items.
+- Flight search UI and API integration.
+- City and airport autocomplete.
+- Provider layer for Travelpayouts and ScrapingBee/Kayak experiments.
+- Normalized flight result cards.
+- Destination discovery concepts and map-based route ideas.
+- Early filtering, sorting, loading, and empty states.
 
-Remaining hardening:
+## Sprint 3: 18.05.2026 - 24.05.2026
 
-- Add saved trip read endpoint.
-- Improve prompt quality and response validation for Ollama-generated itineraries.
-- Add unit/integration tests for attractions, itinerary generation, and trip saving.
-- Add more polished error states for failed database saves.
+Expected result: authentication, persistence, and itinerary planning become usable.
 
-## Sprint 3: Editing + Chat + Sharing
+- Supabase authentication and session handling.
+- Supabase PostgreSQL persistence for saved trips.
+- Trip planner flow with destination, dates, travelers, budget, pace, and interests.
+- Geoapify attractions and geocoding support.
+- AI itinerary generation with Gemini/Ollama provider boundary.
+- Account/profile workflows.
 
-Expected result: the generated itinerary can be adjusted and shared.
+## Sprint 4: 25.05.2026 - 31.05.2026
 
-- Chat interface for itinerary modifications.
-- Manual day editing.
-- Regenerate one itinerary day.
-- Approximate cost overview.
-- Public share link.
+Expected result: saved trips become collaborative and AI assistance becomes more complete.
 
-## Sprint 4: Visualization + Reliability
+- General and trip-context AI assistant.
+- Saved trip library and joined trip access.
+- Community trips, public previews, ratings, and join requests.
+- Trip room with itinerary, calendar, members, settings, and chat.
+- Persistent notifications for trip/member events.
+- Travel proof missions and profile statistics.
 
-Expected result: improved reliability and route/location visualization.
+## Sprint 5: 01.06.2026 - 06.06.2026
 
-- Leaflet route and POI map.
-- Optional OpenSky general flight traffic layer.
-- Redis caching.
-- Integration tests with mocked provider responses.
-- Better error and empty states.
+Expected result: deployed demo version, production fixes, testing, and final documentation.
 
-## Sprint 5: Polish + Deployment + Presentation
-
-Expected result: stable demo version ready for presentation.
-
-- Vercel frontend deployment.
-- Render/Railway backend deployment.
-- UI/UX polish and mobile responsiveness.
-- Demo scenario.
-- Final README and presentation support.
+- Vercel deployment and serverless routing fixes.
+- OpenSky live-flight radar hardening and Cloudflare Tunnel proxy workaround.
+- Passenger-aware flight total pricing and traveler/capacity wording cleanup.
+- Community and trip-library UX polish.
+- README, Word reports, diagrams, screenshots, and presentation documentation.
+- SonarQube review, tests, and production build verification.

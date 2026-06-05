@@ -3,4 +3,5 @@ dist/
 debug/
 .env
 .scannerwork/
+.vercel/
 

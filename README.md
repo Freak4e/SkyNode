@@ -21,6 +21,7 @@ Live app: [https://sky-node-three.vercel.app/](https://sky-node-three.vercel.app
 - [Application Flow](#application-flow)
 - [Project Documentation](#project-documentation)
 - [Architecture](#architecture)
+- [Project Organization](#project-organization)
 - [API Surface](#api-surface)
 - [Environment Variables](#environment-variables)
 - [Install](#install)
@@ -148,6 +149,61 @@ The repository includes supporting project documents and diagrams for presentati
 SkyNode is organized as a single TypeScript repository with a Vite frontend and an Express backend. The frontend talks to backend routes under `/api/*`. On Vercel, the static client is served from `dist/public`, while API requests are handled by the serverless entry in `api/[...path].ts`.
 
 The backend keeps route adapters thin and delegates feature logic into modules, providers, and infrastructure clients. Shared request and response types live in `src/shared` so the frontend and backend stay aligned.
+
+### Project Architecture
+
+The application is split into four main parts:
+
+- **Client application:** React pages, reusable UI components, API clients, authentication state, maps, forms, and trip planning screens. The client is responsible for user interaction, route navigation, rendering search results, showing destination boards, and displaying AI/trip workflows.
+- **Server API:** Express routes exposed through Vercel serverless functions. This layer validates requests, protects authenticated endpoints, coordinates provider calls, and returns JSON responses to the browser.
+- **Domain modules:** Feature-specific backend logic for trips, chat, account workflows, notifications, missions, geocoding, live flights, and itinerary generation. This keeps business logic separate from HTTP route wiring.
+- **External services:** Supabase, Gemini/Ollama, Travelpayouts, ScrapingBee/Kayak experiments, Geoapify, OpenRouteService, Wikimedia, and OpenSky. The app treats these services as replaceable providers behind internal API routes.
+
+This structure was chosen so the frontend never calls sensitive providers directly. Public browser code uses only safe keys such as the Supabase anon key, while server-only credentials stay inside Vercel environment variables.
+
+### Data Architecture
+
+SkyNode uses Supabase/PostgreSQL as the main persistent data layer. Authentication identity comes from Supabase Auth, while application data is stored through backend repositories and shared with the client through typed API responses.
+
+The main data areas are:
+
+- **Users and profiles:** Supabase Auth stores identity and sessions; profile/account workflows connect authenticated users to application features.
+- **Trips:** Saved trips contain trip metadata, generated itinerary content, visibility settings, owner information, members, join requests, invite links, and chat context.
+- **Liked flights and planning state:** Users can save flight options and reuse them in planning flows.
+- **Community data:** Public trips, joined trips, membership state, and trip messages are accessed through authenticated API routes.
+- **Provider data:** Flight offers, destination imagery, map data, attractions, directions, weather, and live aircraft positions are fetched from external providers and treated as transient data unless the user saves a trip or flight.
+
+Sensitive data is kept server-side. The client receives only the data needed for the current UI screen, and authenticated operations pass through backend middleware before reading or writing Supabase data.
+
+### Architectural Decisions
+
+- **React + Vite frontend:** Chosen for fast development, reusable component structure, and efficient production builds.
+- **TypeScript across frontend and backend:** Chosen to reduce mismatches between API responses, shared domain types, and UI state.
+- **Single repository:** Chosen because the project is a bachelor-project prototype with one deployable product. Keeping frontend, backend, shared types, docs, and scripts together makes development and review simpler.
+- **Express API wrapped by Vercel serverless routes:** Chosen so the same backend app can run locally with Node and in production through Vercel. This avoids maintaining separate local and deployed API implementations.
+- **Supabase for authentication and data:** Chosen to provide email/OAuth authentication, managed PostgreSQL storage, and a practical production-ready backend service without building a custom auth system.
+- **Server-side provider calls:** Chosen because API keys and scraping/provider credentials must not be exposed in browser JavaScript.
+- **Cloudflare Tunnel proxy for OpenSky:** Chosen because OpenSky requests from Vercel can time out or be blocked. The deployed app still exposes `/api/live-flights` on Vercel, but upstream OpenSky traffic can be routed through a controlled proxy tunnel.
+- **External AI provider abstraction:** Chosen so Gemini can be used in production while Ollama remains available for local experimentation.
+
+## Project Organization
+
+The project work was organized with a lightweight Scrum process from **01.05.2026 to 06.06.2026**. Work was split into four sprints, with progress tracked through the repository, task/backlog notes, documentation updates, and regular Microsoft Teams calls for planning and review.
+
+| Sprint | Dates | Main focus |
+|--------|-------|------------|
+| Sprint 1 | 01.05.2026 - 10.05.2026 | Requirements, feature scope, first UI structure, initial architecture, database planning |
+| Sprint 2 | 11.05.2026 - 20.05.2026 | Flight search, destination discovery, authentication, map-based pages |
+| Sprint 3 | 21.05.2026 - 31.05.2026 | AI assistant, trip planner, saved/community trips, Supabase workflows |
+| Sprint 4 | 01.06.2026 - 06.06.2026 | Vercel deployment, OpenSky proxy tunnel, testing, documentation, diagrams, final polish |
+
+The work process followed this rhythm:
+
+- Define and prioritize backlog items before each sprint.
+- Implement features in small commits and verify them locally.
+- Review progress and blockers through Microsoft Teams calls.
+- Adjust the scope when external services caused deployment or timeout issues.
+- Document architecture, diagrams, limitations, and future improvements before final delivery.
 
 ## API Surface
 
